@@ -19,6 +19,7 @@ async function initUserTable() {
             city VARCHAR(100),
             barangay VARCHAR(100),
             postal_code VARCHAR(20),
+            isActive BOOLEAN DEFAULT TRUE,
             is_verified BOOLEAN DEFAULT FALSE,
             verification_token TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -150,18 +151,22 @@ async function resetPassword(userId, newPassword) {
   return result.rows[0]
 }
 
-// List users by role (e.g., 'customer')
+/* -------- NEW: user listing helpers (data layer only) -------- */
 async function listUsersByRole(role) {
   const result = await pool.query(
-    `SELECT id, username, firstname, lastname, contact, created_at
-     FROM users
-     WHERE role = $1
-     ORDER BY created_at DESC`,
+    'SELECT * FROM users WHERE role = $1 ORDER BY id DESC',
     [role]
   )
   return result.rows
 }
 
+async function listAllUsers() {
+  const result = await pool.query('SELECT * FROM users ORDER BY id DESC')
+  return result.rows
+}
+/* ------------------------------------------------------------- */
+
+// Export
 module.exports = {
   initUserTable,
   findUserById,
@@ -174,4 +179,5 @@ module.exports = {
   verifyUser,
   resetPassword,
   listUsersByRole,
+  listAllUsers, // added
 }
