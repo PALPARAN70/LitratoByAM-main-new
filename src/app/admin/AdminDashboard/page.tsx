@@ -569,7 +569,9 @@ function Th({
   className?: string
 }) {
   return (
-    <th className={`px-3 py-2 text-sm font-bold ${className}`}>{children}</th>
+    <th className={`px-3 py-2 text-sm font-semibold ${className}`}>
+      {children}
+    </th>
   )
 }
 function Td({ children }: { children: React.ReactNode }) {
