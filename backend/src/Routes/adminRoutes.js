@@ -18,12 +18,12 @@ router.post(
   adminController.manageUsers
 )
 
-// List customers (admin only) — moved from customerRoutes
+// List users by role (?role=customer|employee|admin)
 router.get(
   '/list',
   authMiddleware,
   roleMiddleware('admin'),
-  adminController.listCustomers
+  adminController.listUsers
 )
 
 module.exports = router
