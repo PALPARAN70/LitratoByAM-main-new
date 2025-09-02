@@ -33,7 +33,7 @@ export default function HomePage() {
             <LitratoNavbar />
             <button
               onClick={handleLogin}
-              className="absolute top-[60] hover:scale-110 duration-500 right-60 bg-black text-white text-center font-semibold h-[45px] py-1 px-4 text-[20px] rounded border-2 border-white hover:cursor-pointer shadow-md shadow-litratoblack"
+              className="absolute top-[61] hover:scale-110 duration-500 right-60 bg-black text-white text-center font-semibold h-[45px] py-1 px-4 text-[20px] rounded hover:cursor-pointer shadow-md shadow-litratoblack"
             >
               LOGIN
             </button>

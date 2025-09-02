@@ -130,7 +130,7 @@ export default function DashboardPage() {
             <h5 className="text-base sm:text-lg md:text-xl font-medium mb-3">
               Quick Actions
             </h5>
-            <div className="grid w-[80%] grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+            <div className="grid w-[90%] grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
               {QuickActions.map((action, i) => (
                 <div
                   key={i}
