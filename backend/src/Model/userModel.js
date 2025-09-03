@@ -19,10 +19,11 @@ async function initUserTable() {
             city VARCHAR(100),
             barangay VARCHAR(100),
             postal_code VARCHAR(20),
-            isActive BOOLEAN DEFAULT TRUE,
             is_verified BOOLEAN DEFAULT FALSE,
             verification_token TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            isactive BOOLEAN DEFAULT TRUE
         )
     `)
 }
@@ -141,6 +142,22 @@ async function verifyUser(userId) {
 }
 //end of confirmation email//
 
+//Unblocks User
+async function isActive(userId) {
+  const result = await pool.query(
+    'UPDATE users SET isactive = TRUE WHERE id = $1 RETURNING *',
+    [userId]
+  )
+  return result.rows[0]
+}
+//Blocks User
+async function isInActive(userId) {
+  const result = await pool.query(
+    'UPDATE users SET isactive = FALSE WHERE id = $1 RETURNING *',
+    [userId]
+  )
+  return result.rows[0]
+}
 //reset password
 async function resetPassword(userId, newPassword) {
   const hashedPassword = await bcrypt.hash(newPassword, 10)
@@ -180,4 +197,6 @@ module.exports = {
   resetPassword,
   listUsersByRole,
   listAllUsers, // added
+  isInActive,
+  isActive,
 }

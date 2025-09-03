@@ -36,28 +36,36 @@ exports.listUsers = async (req, res) => {
   }
 }
 
-//Block/Unblock Users(Admin can't be block tho)
-exports.blockUnblockUser = async (req, res) => {
+exports.blockUser = async (req, res) => {
   try {
     const { id } = req.params
-    const user = await userModel.getUserById(id)
+    const user = await userModel.findUserById(id)
 
-    if (!user) {
-      return res.status(404).json({ message: 'User not found' })
-    }
-
-    if (user.role === 'admin') {
+    if (!user) return res.status(404).json({ message: 'User not found' })
+    if (user.role === 'admin')
       return res.status(403).json({ message: 'Admin users cannot be blocked' })
-    }
 
-    const isBlocked = user.status === 'blocked'
-    await userModel.updateUserStatus(id, isBlocked ? 'active' : 'blocked')
+    await userModel.isInActive(id)
 
-    res.json({
-      message: `User ${isBlocked ? 'unblocked' : 'blocked'} successfully`,
-    })
+    return res.json({ message: 'User blocked', is_verified: false })
   } catch (e) {
-    console.error('Block/Unblock User Error:', e)
-    res.status(500).json({ message: 'Internal server error' })
+    console.error('Block User Error:', e)
+    return res.status(500).json({ message: 'Internal server error' })
+  }
+}
+
+exports.unblockUser = async (req, res) => {
+  try {
+    const { id } = req.params
+    const user = await userModel.findUserById(id)
+
+    if (!user) return res.status(404).json({ message: 'User not found' })
+
+    await userModel.isActive(id)
+
+    return res.json({ message: 'User unblocked', is_verified: true })
+  } catch (e) {
+    console.error('Unblock User Error:', e)
+    return res.status(500).json({ message: 'Internal server error' })
   }
 }
