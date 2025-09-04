@@ -14,6 +14,7 @@ type Customer = {
   id: string;
   firstname: string;
   lastname: string;
+  password: any;
   email: string;
   contact: string;
 };
@@ -291,6 +292,7 @@ function CreateUserPanel() {
       firstname: "Juan",
       lastname: "Dela Cruz",
       email: "juan@example.com",
+      password: "kirby0201",
       contact: "09123456789",
     },
   ]);
@@ -299,6 +301,7 @@ function CreateUserPanel() {
     firstname: "",
     lastname: "",
     email: "",
+    password: "",
     contact: "",
   });
 
@@ -308,13 +311,20 @@ function CreateUserPanel() {
       firstname: c.firstname,
       lastname: c.lastname,
       email: c.email,
+      password: c.password,
       contact: c.contact,
     });
   };
 
   const reset = () => {
     setEditingId(null);
-    setForm({ firstname: "", lastname: "", email: "", contact: "" });
+    setForm({
+      firstname: "",
+      lastname: "",
+      password: "",
+      email: "",
+      contact: "",
+    });
   };
 
   const save = () => {
@@ -357,6 +367,12 @@ function CreateUserPanel() {
             type="email"
             value={form.email}
             onChange={(v) => setForm((s) => ({ ...s, email: v }))}
+          />
+          <Input
+            label="Password"
+            type="password"
+            value={form.password}
+            onChange={(v) => setForm((s) => ({ ...s, password: v }))}
           />
           <Input
             label="Contact"
