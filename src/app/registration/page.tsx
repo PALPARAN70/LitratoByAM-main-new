@@ -1,52 +1,53 @@
-"use client";
-import Image from "next/image";
-import LitratoBranding from "../../../Litratocomponents/Branding";
-import LitratoFooter from "../../../Litratocomponents/Footer";
-import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { toast } from "sonner";
-export default function RegistrationPage() {
-  const router = useRouter();
-  const [form, setForm] = useState({
-    firstname: "",
-    lastname: "",
-    birthdate: "",
-    sex: "",
-    username: "",
-    password: "",
-    confirmPassword: "",
-    region: "",
-    province: "",
-    city: "",
-    barangay: "",
-    postalCode: "",
-    contact: "",
-  });
+'use client'
+import Image from 'next/image'
+import LitratoBranding from '../../../Litratocomponents/Branding'
+import LitratoFooter from '../../../Litratocomponents/Footer'
+import { useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { toast } from 'sonner'
 
-  const [error, setError] = useState<string | null>(null);
+export default function RegistrationPage() {
+  const router = useRouter()
+  const [form, setForm] = useState({
+    firstname: '',
+    lastname: '',
+    birthdate: '',
+    sex: '',
+    username: '',
+    password: '',
+    confirmPassword: '',
+    region: '',
+    province: '',
+    city: '',
+    barangay: '',
+    postalCode: '',
+    contact: '',
+  })
+
+  const [error, setError] = useState<string | null>(null)
 
   const handleBack = () => {
-    router.push("/home");
-  };
+    router.push('/home')
+  }
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setForm((prev) => ({ ...prev, [name]: value }));
-  };
+    const { name, value } = e.target
+    setForm((prev) => ({ ...prev, [name]: value }))
+  }
 
   const handleRegistered = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
+    e.preventDefault()
+    setError(null)
 
     if (form.password !== form.confirmPassword) {
-      setError("Passwords do not match");
-      return;
+      setError('Passwords do not match')
+      return
     }
 
     try {
-      const res = await fetch("http://localhost:5000/api/auth/register", {
-        method: "POST",
-        headers: { "Content-type": "application/json" },
+      const res = await fetch('http://localhost:5000/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-type': 'application/json' },
         body: JSON.stringify({
           username: form.username,
           password: form.password,
@@ -61,139 +62,139 @@ export default function RegistrationPage() {
           postal_code: form.postalCode,
           contact: form.contact,
         }),
-      });
-      const data = await res.json();
+      })
+      const data = await res.json()
       if (res.ok) {
-        router.push("/login");
-        toast.success("Registration successful! Please verify your email.");
+        router.push('/login')
+        toast.success('Registration successful! Please verify your email.')
       } else {
-        setError(data.message || "Registration failed");
+        setError(data.message || 'Registration failed')
       }
     } catch (err) {
-      setError("An error occurred");
+      setError('An error occurred')
     }
-  };
+  }
 
   const fieldRows = [
     [
       {
-        name: "firstname",
-        label: "Firstname:",
-        placeholder: "Juan",
-        type: "text",
-        className: "w-70 px-2 text-xl border-none outline-none bg-transparent",
-        containerClass: "bg-[#D9D9D9] p-2 rounded-lg shadow-md w-96",
+        name: 'firstname',
+        label: 'Firstname:',
+        placeholder: 'Juan',
+        type: 'text',
+        className: 'w-70 px-2 text-xl border-none outline-none bg-transparent',
+        containerClass: 'bg-[#D9D9D9] p-2 rounded-lg shadow-md w-96',
       },
       {
-        name: "lastname",
-        label: "Lastname:",
-        placeholder: "Dela Cruz",
-        type: "text",
-        className: "w-70 px-2 text-xl border-none outline-none bg-transparent",
-        containerClass: "bg-[#D9D9D9] p-2 rounded-lg shadow-md w-96",
+        name: 'lastname',
+        label: 'Lastname:',
+        placeholder: 'Dela Cruz',
+        type: 'text',
+        className: 'w-70 px-2 text-xl border-none outline-none bg-transparent',
+        containerClass: 'bg-[#D9D9D9] p-2 rounded-lg shadow-md w-96',
       },
     ],
     [
       {
-        name: "birthdate",
-        label: "Birthdate:",
-        placeholder: "MM/DD/YYYY",
-        type: "date",
-        className: "w-70 px-2 text-xl border-none outline-none bg-transparent",
-        containerClass: "bg-[#D9D9D9] p-2 rounded-lg shadow-md w-96",
+        name: 'birthdate',
+        label: 'Birthdate:',
+        placeholder: 'MM/DD/YYYY',
+        type: 'date',
+        className: 'w-70 px-2 text-xl border-none outline-none bg-transparent',
+        containerClass: 'bg-[#D9D9D9] p-2 rounded-lg shadow-md w-96',
       },
       {
-        name: "sex",
-        label: "Sex:",
-        placeholder: "Male/Female",
-        type: "text",
-        className: "w-70 px-2 text-xl border-none outline-none bg-transparent",
-        containerClass: "bg-[#D9D9D9] p-2 rounded-lg shadow-md w-96",
+        name: 'sex',
+        label: 'Sex:',
+        placeholder: 'Male/Female',
+        type: 'text',
+        className: 'w-70 px-2 text-xl border-none outline-none bg-transparent',
+        containerClass: 'bg-[#D9D9D9] p-2 rounded-lg shadow-md w-96',
       },
     ],
-  ];
+  ]
 
   const singleFields = [
     {
-      name: "username",
-      label: "Username:",
-      placeholder: "example@gmail.com",
-      type: "text",
-      className: "w-170 px-2 text-xl border-none outline-none bg-transparent",
-      containerClass: "bg-[#D9D9D9] p-2 rounded-lg shadow-md w-200",
+      name: 'username',
+      label: 'Username:',
+      placeholder: 'example@gmail.com',
+      type: 'text',
+      className: 'w-170 px-2 text-xl border-none outline-none bg-transparent',
+      containerClass: 'bg-[#D9D9D9] p-2 rounded-lg shadow-md w-200',
     },
     {
-      name: "password",
-      label: "Password:",
-      placeholder: "Example1234",
-      type: "password",
-      className: "w-170 px-2 text-xl border-none outline-none bg-transparent",
-      containerClass: "bg-[#D9D9D9] p-2 rounded-lg shadow-md w-200",
+      name: 'password',
+      label: 'Password:',
+      placeholder: 'Example1234',
+      type: 'password',
+      className: 'w-170 px-2 text-xl border-none outline-none bg-transparent',
+      containerClass: 'bg-[#D9D9D9] p-2 rounded-lg shadow-md w-200',
     },
     {
-      name: "confirmPassword",
-      label: "Confirm Password:",
-      placeholder: "Example1234",
-      type: "password",
-      className: "w-160 px-2 text-xl border-none outline-none bg-transparent",
-      containerClass: "bg-[#D9D9D9] p-2 rounded-lg shadow-md w-200",
+      name: 'confirmPassword',
+      label: 'Confirm Password:',
+      placeholder: 'Example1234',
+      type: 'password',
+      className: 'w-160 px-2 text-xl border-none outline-none bg-transparent',
+      containerClass: 'bg-[#D9D9D9] p-2 rounded-lg shadow-md w-200',
     },
-  ];
+  ]
 
   const regionProvinceFields = [
     {
-      name: "region",
-      label: "Region:",
-      placeholder: "Region XI",
-      type: "text",
-      className: "w-60 px-2 text-xl border-none outline-none bg-transparent",
-      containerClass: "bg-[#D9D9D9] p-2 rounded-lg shadow-md w-94",
+      name: 'region',
+      label: 'Region:',
+      placeholder: 'Region XI',
+      type: 'text',
+      className: 'w-60 px-2 text-xl border-none outline-none bg-transparent',
+      containerClass: 'bg-[#D9D9D9] p-2 rounded-lg shadow-md w-94',
     },
     {
-      name: "province",
-      label: "Province:",
-      placeholder: "Davao del Sur",
-      type: "text",
-      className: "w-60 px-2 text-xl border-none outline-none bg-transparent",
-      containerClass: "bg-[#D9D9D9] p-2 rounded-lg shadow-md w-94",
+      name: 'province',
+      label: 'Province:',
+      placeholder: 'Davao del Sur',
+      type: 'text',
+      className: 'w-60 px-2 text-xl border-none outline-none bg-transparent',
+      containerClass: 'bg-[#D9D9D9] p-2 rounded-lg shadow-md w-94',
     },
-  ];
+  ]
 
   const cityFields = [
     {
-      name: "city",
-      label: "City/Town:",
-      placeholder: "Davao City",
-      type: "text",
-      className: "w-30 px-2 text-xl border-none outline-none bg-transparent",
-      containerClass: "bg-[#D9D9D9] p-2 rounded-lg shadow-md w-60",
+      name: 'city',
+      label: 'City/Town:',
+      placeholder: 'Davao City',
+      type: 'text',
+      className: 'w-30 px-2 text-xl border-none outline-none bg-transparent',
+      containerClass: 'bg-[#D9D9D9] p-2 rounded-lg shadow-md w-60',
     },
     {
-      name: "barangay",
-      label: "Barangay:",
-      placeholder: "33-D",
-      type: "text",
-      className: "w-30 px-2 text-xl border-none outline-none bg-transparent",
-      containerClass: "bg-[#D9D9D9] p-2 rounded-lg shadow-md w-60",
+      name: 'barangay',
+      label: 'Barangay:',
+      placeholder: '33-D',
+      type: 'text',
+      className: 'w-30 px-2 text-xl border-none outline-none bg-transparent',
+      containerClass: 'bg-[#D9D9D9] p-2 rounded-lg shadow-md w-60',
     },
     {
-      name: "postalCode",
-      label: "Postal Code:",
-      placeholder: "8000",
-      type: "text",
-      className: "w-30 px-2 text-xl border-none outline-none bg-transparent",
-      containerClass: "bg-[#D9D9D9] p-2 rounded-lg shadow-md w-60",
+      name: 'postalCode',
+      label: 'Postal Code:',
+      placeholder: '8000',
+      type: 'text',
+      className: 'w-30 px-2 text-xl border-none outline-none bg-transparent',
+      containerClass: 'bg-[#D9D9D9] p-2 rounded-lg shadow-md w-60',
     },
-  ];
+  ]
 
   const contactField = {
-    name: "contact",
-    label: "Contact Number:",
-    placeholder: "09******123",
-    type: "text",
-    className: "w-150 px-2 text-xl border-none outline-none bg-transparent",
-    containerClass: "bg-[#D9D9D9] p-2 rounded-lg shadow-md w-200",
-  };
+    name: 'contact',
+    label: 'Contact Number:',
+    placeholder: '09******123',
+    type: 'text',
+    className: 'w-150 px-2 text-xl border-none outline-none bg-transparent',
+    containerClass: 'bg-[#D9D9D9] p-2 rounded-lg shadow-md w-200',
+  }
 
   return (
     <div>
@@ -316,5 +317,5 @@ export default function RegistrationPage() {
       </form>
       <LitratoFooter />
     </div>
-  );
+  )
 }
