@@ -64,6 +64,14 @@ exports.blockUser = async (req, res) => {
 
     await userModel.isInActive(id);
 
+    // For customers, use error toast type on blocking; otherwise keep success.
+    if (user.role === "customer") {
+      return res.json({
+        toast: { type: "error", message: "Customer blocked" },
+        isactive: false,
+      });
+    }
+
     return res.json({
       toast: { type: "success", message: "User blocked" },
       isactive: false,
@@ -87,6 +95,14 @@ exports.unblockUser = async (req, res) => {
         .json({ toast: { type: "error", message: "User not found" } });
 
     await userModel.isActive(id);
+
+    // For customers, explicitly return success toast message for unblocking.
+    if (user.role === "customer") {
+      return res.json({
+        toast: { type: "success", message: "Customer unblocked" },
+        isactive: true,
+      });
+    }
 
     return res.json({
       toast: { type: "success", message: "User unblocked" },
