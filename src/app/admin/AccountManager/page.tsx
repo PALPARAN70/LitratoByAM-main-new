@@ -1,29 +1,49 @@
-'use client'
-import { useEffect, useState } from 'react'
-import { toast } from 'sonner'
-import { type createUserData } from '../../../../schemas/schema/requestvalidation'
+"use client";
+import { useEffect, useState } from "react";
+import { toast } from "sonner";
+import { type createUserData } from "../../../../schemas/schema/requestvalidation";
+import { FilterIcon, SearchIcon } from "lucide-react";
 
 type User = {
-  id: string
-  firstname: string
-  lastname: string
-  email: string
-  contact: string
-  isactive: boolean
-  role?: string
-}
+  id: string;
+  firstname: string;
+  lastname: string;
+  email: string;
+  contact: string;
+  isactive: boolean;
+  role?: string;
+};
 type Customer = {
-  id: string
-  firstname: string
-  lastname: string
-  password: any
-  email: string
-  contact: string
-}
-type TabKey = 'createusers' | 'customers' | 'staff' | 'admin'
+  id: string;
+  firstname: string;
+  lastname: string;
+  password: any;
+  email: string;
+  contact: string;
+};
+type TabKey = "createusers" | "customers" | "staff" | "admin";
 
 export default function AdminAccountManagementPage() {
-  const [active, setActive] = useState<TabKey>('customers')
+  const [active, setActive] = useState<TabKey>("customers");
+  // controlled search input and applied search term
+  const [searchInput, setSearchInput] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
+
+  // Debounce: when user types, wait 500ms after last keystroke to apply searchTerm
+  useEffect(() => {
+    const trimmed = searchInput.trim();
+    // If input equals applied term, do nothing
+    if (trimmed === searchTerm) return;
+    const id = setTimeout(() => {
+      setSearchTerm(trimmed);
+    }, 500);
+    return () => clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchInput]); // intentionally only depends on searchInput
+
+  // Manual immediate search (icon click)
+
+  // Clear search input & applied search
 
   return (
     <div className="p-4">
@@ -33,46 +53,76 @@ export default function AdminAccountManagementPage() {
 
       <nav className="flex gap-2 mb-6">
         <TabButton
-          active={active === 'createusers'}
-          onClick={() => setActive('createusers')}
+          active={active === "createusers"}
+          onClick={() => setActive("createusers")}
         >
           Create User
         </TabButton>
-
         <TabButton
-          active={active === 'customers'}
-          onClick={() => setActive('customers')}
+          active={active === "customers"}
+          onClick={() => setActive("customers")}
         >
           Customers
         </TabButton>
         <TabButton
-          active={active === 'staff'}
-          onClick={() => setActive('staff')}
+          active={active === "staff"}
+          onClick={() => setActive("staff")}
         >
           Staff
         </TabButton>
         <TabButton
-          active={active === 'admin'}
-          onClick={() => setActive('admin')}
+          active={active === "admin"}
+          onClick={() => setActive("admin")}
         >
           Admin
         </TabButton>
+        <div className="flex-grow flex">
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              setSearchTerm(searchInput.trim());
+            }}
+            className="w-1/4 bg-gray-200 rounded-full items-center flex px-1 py-1"
+          >
+            <input
+              type="text"
+              placeholder="Search User..."
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              className="bg-transparent outline-none w-full px-2"
+            />
+            <div className="rounded-full bg-gray-300 p-2 ml-2 items-center flex cursor-pointer">
+              <FilterIcon className="w-4 h-4 text-black" />
+            </div>
+          </form>
+        </div>
       </nav>
-
-      <section className="bg-white rounded-xl shadow p-4">
-        {active === 'createusers' && <CreateUserPanel />}
-        {active === 'customers' && (
-          <UserListPanel role="customer" title="Customer Accounts" />
+      <section className="bg-white h-120  rounded-xl shadow p-4">
+        {active === "createusers" && <CreateUserPanel />}
+        {active === "customers" && (
+          <UserListPanel
+            role="customer"
+            title="Customer Accounts"
+            searchTerm={searchTerm}
+          />
         )}
-        {active === 'staff' && (
-          <UserListPanel role="employee" title="Staff (Employee) Accounts" />
+        {active === "staff" && (
+          <UserListPanel
+            role="employee"
+            title="Staff (Employee) Accounts"
+            searchTerm={searchTerm}
+          />
         )}
-        {active === 'admin' && (
-          <UserListPanel role="admin" title="Admin Accounts" />
+        {active === "admin" && (
+          <UserListPanel
+            role="admin"
+            title="Admin Accounts"
+            searchTerm={searchTerm}
+          />
         )}
       </section>
     </div>
-  )
+  );
 }
 
 function TabButton({
@@ -80,9 +130,9 @@ function TabButton({
   onClick,
   children,
 }: {
-  active: boolean
-  onClick: () => void
-  children: React.ReactNode
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
 }) {
   return (
     <div
@@ -90,197 +140,295 @@ function TabButton({
       className={`px-4 py-2 rounded-full cursor-pointer border font-semibold transition
         ${
           active
-            ? 'bg-litratoblack text-white border-litratoblack'
-            : 'bg-white text-litratoblack border-gray-300 hover:bg-gray-100'
+            ? "bg-litratoblack text-white border-litratoblack"
+            : "bg-white text-litratoblack border-gray-300 hover:bg-gray-100"
         }`}
     >
       {children}
     </div>
-  )
+  );
 }
 
 /* Unified User List Panel */
 function UserListPanel({
   role,
   title,
+  // added: incoming search term to filter by last name (server-side query)
+  searchTerm,
 }: {
-  role: 'customer' | 'employee' | 'admin'
-  title: string
+  role: "customer" | "employee" | "admin";
+  title: string;
+  searchTerm?: string;
 }) {
-  const [users, setUsers] = useState<User[]>([])
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [users, setUsers] = useState<User[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  // animateIn toggles opacity for a smooth load transition
+  const [animateIn, setAnimateIn] = useState(false);
+
+  // minimum spinner/skeleton time to avoid flicker when backend is very fast
+  const MIN_LOADING_MS = 240;
+  const sleep = (ms: number) => new Promise((res) => setTimeout(res, ms));
 
   useEffect(() => {
-    let cancelled = false
+    let cancelled = false;
     const fetchUsers = async () => {
-      setLoading(true)
-      setError(null)
+      // start loading, keep skeleton visible and prepare to animate new rows in
+      const start = Date.now();
+      setLoading(true);
+      setAnimateIn(false);
+      setError(null);
       try {
         const raw =
-          typeof window !== 'undefined'
-            ? localStorage.getItem('access_token')
-            : null
+          typeof window !== "undefined"
+            ? localStorage.getItem("access_token")
+            : null;
         const authHeader =
-          raw && raw.startsWith('Bearer ') ? raw : raw ? `Bearer ${raw}` : ''
-        const res = await fetch(
-          `http://localhost:5000/api/admin/list?role=${role}`,
-          {
-            headers: {
-              'Content-Type': 'application/json',
-              ...(authHeader ? { Authorization: authHeader } : {}),
-            },
-          }
-        )
+          raw && raw.startsWith("Bearer ") ? raw : raw ? `Bearer ${raw}` : "";
+        // include lastname query when searchTerm is present
+        const url =
+          `http://localhost:5000/api/admin/list?role=${role}` +
+          (searchTerm ? `&lastname=${encodeURIComponent(searchTerm)}` : "");
+        const res = await fetch(url, {
+          headers: {
+            "Content-Type": "application/json",
+            ...(authHeader ? { Authorization: authHeader } : {}),
+          },
+        });
         if (res.status === 401)
-          throw new Error('Unauthorized. Please log in again.')
+          throw new Error("Unauthorized. Please log in again.");
         if (res.status === 403)
-          throw new Error('Forbidden: Admin role required.')
+          throw new Error("Forbidden: Admin role required.");
         if (!res.ok) {
-          const msg = await res.text()
-          throw new Error(msg || `Failed to load ${role} list (${res.status})`)
+          const msg = await res.text();
+          throw new Error(msg || `Failed to load ${role} list (${res.status})`);
         }
-        const data = await res.json()
-        if (!cancelled) setUsers(Array.isArray(data.users) ? data.users : [])
+        const data = await res.json();
+        // ensure a minimum loading time to avoid flicker
+        const elapsed = Date.now() - start;
+        if (elapsed < MIN_LOADING_MS) await sleep(MIN_LOADING_MS - elapsed);
+        if (!cancelled) {
+          setUsers(Array.isArray(data.users) ? data.users : []);
+          // tiny delay to allow DOM update, then fade-in the new rows
+          setTimeout(() => {
+            if (!cancelled) setAnimateIn(true);
+          }, 20);
+        }
       } catch (e: any) {
-        if (!cancelled) setError(e?.message || 'Failed to load users')
+        if (!cancelled) setError(e?.message || "Failed to load users");
       } finally {
-        if (!cancelled) setLoading(false)
+        if (!cancelled) setLoading(false);
       }
-    }
-    fetchUsers()
+    };
+    fetchUsers();
     return () => {
-      cancelled = true
-    }
-  }, [role])
+      cancelled = true;
+    };
+  }, [role, searchTerm]); // re-run when searchTerm changes
 
   // Helper to normalize Authorization header
   const getAuthHeader = () => {
     const raw =
-      typeof window !== 'undefined'
-        ? localStorage.getItem('access_token')
-        : null
-    return raw ? (raw.startsWith('Bearer ') ? raw : `Bearer ${raw}`) : ''
-  }
+      typeof window !== "undefined"
+        ? localStorage.getItem("access_token")
+        : null;
+    return raw ? (raw.startsWith("Bearer ") ? raw : `Bearer ${raw}`) : "";
+  };
 
   // Re-fetch list after an action
   const refreshUsers = async () => {
+    // similar controlled refresh: show skeletons, ensure min loading time, then animate in
+    const start = Date.now();
     try {
-      setLoading(true)
-      setError(null)
-      const authHeader = getAuthHeader()
-      const res = await fetch(
-        `http://localhost:5000/api/admin/list?role=${role}`,
-        {
-          headers: {
-            'Content-Type': 'application/json',
-            ...(authHeader ? { Authorization: authHeader } : {}),
-          },
-        }
-      )
-      if (!res.ok) throw new Error(await res.text())
-      const data = await res.json()
-      setUsers(Array.isArray(data.users) ? data.users : [])
+      setLoading(true);
+      setAnimateIn(false);
+      setError(null);
+      const authHeader = getAuthHeader();
+      const url =
+        `http://localhost:5000/api/admin/list?role=${role}` +
+        (searchTerm ? `&lastname=${encodeURIComponent(searchTerm)}` : "");
+      const res = await fetch(url, {
+        headers: {
+          "Content-Type": "application/json",
+          ...(authHeader ? { Authorization: authHeader } : {}),
+        },
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json();
+      const elapsed = Date.now() - start;
+      if (elapsed < MIN_LOADING_MS) await sleep(MIN_LOADING_MS - elapsed);
+      setUsers(Array.isArray(data.users) ? data.users : []);
+      setTimeout(() => setAnimateIn(true), 20);
     } catch (e: any) {
-      setError(e?.message || 'Failed to refresh users')
+      setError(e?.message || "Failed to refresh users");
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   // Connect to backend block/unblock
-  const callAdminAction = async (id: string, action: 'block' | 'unblock') => {
+  const callAdminAction = async (id: string, action: "block" | "unblock") => {
     try {
-      const authHeader = getAuthHeader()
+      const authHeader = getAuthHeader();
       const res = await fetch(
         `http://localhost:5000/api/admin/user/${id}/${action}`,
         {
-          method: 'PATCH',
+          method: "PATCH",
           headers: {
-            'Content-Type': 'application/json',
+            "Content-Type": "application/json",
             ...(authHeader ? { Authorization: authHeader } : {}),
           },
           body: JSON.stringify({}),
         }
-      )
-      const data = await res.json()
+      );
+      const data = await res.json();
+
       if (!res.ok) {
-        const msg = data?.toast?.message || data?.message
-        throw new Error(msg || `Failed to ${action} user`)
+        // Prefer backend toast message when available
+        const msg =
+          data?.toast?.message || data?.message || `Failed to ${action} user`;
+        if (data?.toast?.type === "error") {
+        } else {
+          toast.error(msg);
+        }
+        throw new Error(msg);
       }
+
+      // Show backend toast (success / error) if present, fallback to generic
+      if (data?.toast?.message) {
+        if (data.toast.type === "success") toast.success(data.toast.message);
+        else toast.error(data.toast.message);
+      } else {
+        toast.success(
+          `User ${action === "block" ? "blocked" : "unblocked"} successfully`
+        );
+      }
+
       // Use the backend response to update the toggled user's status
       setUsers((prev) =>
         prev.map((u) => (u.id === id ? { ...u, isactive: !!data.isactive } : u))
-      )
+      );
       // No need to refresh; the UI already reflects the new state
     } catch (e: any) {
-      alert(e?.message || `Failed to ${action} user`)
+      // Use sonner toast for errors instead of alert
+      toast.error(e?.message || `Failed to ${action} user`);
     }
-  }
+  };
 
-  const block = (id: string) => callAdminAction(id, 'block')
-  const unblock = (id: string) => callAdminAction(id, 'unblock')
+  const block = (id: string) => callAdminAction(id, "block");
+  const unblock = (id: string) => callAdminAction(id, "unblock");
+
+  // Client-side fallback filter so matched users always display in the table
+  const normalizedSearch = (searchTerm || "").trim().toLowerCase();
+  const displayedUsers = users.filter((u) =>
+    normalizedSearch
+      ? u.firstname.toLowerCase().includes(normalizedSearch) ||
+        u.lastname.toLowerCase().includes(normalizedSearch) ||
+        u.email.toLowerCase().includes(normalizedSearch) ||
+        u.contact.toLowerCase().includes(normalizedSearch)
+      : true
+  );
 
   return (
     <div>
-      Search Bar Filter Dropdown Update Role Button
       <h2 className="text-xl font-semibold mb-3">{title}</h2>
       {loading && <p className="text-gray-500 mb-2">Loading…</p>}
       {error && <p className="text-red-600 mb-2">{error}</p>}
-      <div className="overflow-auto">
+      <div className="overflow-auto ">
         <table className="w-full text-left border border-gray-200 rounded-lg overflow-hidden">
           <thead className="bg-gray-200">
             <tr>
-              <Th>First</Th>
-              <Th>Last</Th>
+              <Th>First Name</Th>
+              <Th>Last Name</Th>
               <Th>Email</Th>
               <Th>Contact</Th>
               <Th>Status</Th>
+              <Th>Last Logged In</Th>
+              <Th>Last Udpated</Th>
               <Th>Actions</Th>
             </tr>
           </thead>
-          <tbody>
-            {users.map((u) => (
-              <tr key={u.id} className="border-t">
-                <Td>{u.firstname}</Td>
-                <Td>{u.lastname}</Td>
-                <Td>{u.email}</Td>
-                <Td>{u.contact}</Td>
+          <tbody
+            // skeletons remain visible while loading; when not loading fade real rows in
+            className={`transition-opacity duration-300 ease-out ${
+              loading ? "opacity-100" : animateIn ? "opacity-100" : "opacity-0"
+            }`}
+          >
+            {loading
+              ? // show skeleton rows while loading for smooth UX
+                Array.from({ length: 5 }).map((_, i) => (
+                  <tr key={`skeleton-${i}`} className="border-t">
+                    <Td>
+                      <div className="h-4 bg-gray-200 rounded animate-pulse w-24" />
+                    </Td>
+                    <Td>
+                      <div className="h-4 bg-gray-200 rounded animate-pulse w-24" />
+                    </Td>
+                    <Td>
+                      <div className="h-4 bg-gray-200 rounded animate-pulse w-36" />
+                    </Td>
+                    <Td>
+                      <div className="h-4 bg-gray-200 rounded animate-pulse w-20" />
+                    </Td>
+                    <Td>
+                      <div className="h-4 bg-gray-200 rounded animate-pulse w-12" />
+                    </Td>
+                    <Td>
+                      <div className="h-4 bg-gray-200 rounded animate-pulse w-20" />
+                    </Td>
+                    <Td>
+                      <div className="h-4 bg-gray-200 rounded animate-pulse w-20" />
+                    </Td>
+                    <Td>
+                      <div className="h-8 bg-gray-200 rounded animate-pulse w-32" />
+                    </Td>
+                  </tr>
+                ))
+              : displayedUsers.map((u) => (
+                  <tr
+                    key={u.id}
+                    className="border-t transition-opacity duration-300"
+                  >
+                    <Td>{u.firstname}</Td>
+                    <Td>{u.lastname}</Td>
+                    <Td>{u.email}</Td>
+                    <Td>{u.contact}</Td>
 
-                <Td>
-                  <div className="flex w-20">
-                    {u.isactive ? 'Active' : 'Inactive'}
-                  </div>
-                </Td>
-
-                <Td>
-                  <div className="flex w-40 gap-2">
-                    {u.isactive ? (
-                      <div
-                        onClick={() => block(u.id)}
-                        className="px-3 py-1 rounded-full bg-red-500 text-white hover:bg-red-600  cursor-pointer"
-                      >
-                        Block
+                    <Td>
+                      <div className="flex w-20">
+                        {u.isactive ? "Active" : "Inactive"}
                       </div>
-                    ) : (
-                      <div
-                        onClick={() => unblock(u.id)}
-                        className="px-3 py-1 rounded-full bg-green-500 text-white hover:bg-green-600  cursor-pointer"
-                      >
-                        Unblock
+                    </Td>
+                    <Td>04/02/25</Td>
+                    <Td>08/02/25</Td>
+                    <Td>
+                      <div className="flex w-52 gap-2">
+                        {u.isactive ? (
+                          <div
+                            onClick={() => block(u.id)}
+                            className="px-3 py-1 rounded-full bg-red-500 text-white hover:bg-red-600  cursor-pointer"
+                          >
+                            Block
+                          </div>
+                        ) : (
+                          <div
+                            onClick={() => unblock(u.id)}
+                            className="px-3 py-1 rounded-full bg-green-500 text-white hover:bg-green-600  cursor-pointer"
+                          >
+                            Unblock
+                          </div>
+                        )}
+                        <div className="px-3 py-1 rounded-full bg-gray-200 text-black cursor-pointer hover:bg-gray-300">
+                          Change Role
+                        </div>
                       </div>
-                    )}
-                    <div className="px-3 py-1 rounded-full bg-gray-200 text-black cursor-pointer hover:bg-gray-300">
-                      Edit
-                    </div>
-                  </div>
-                </Td>
-              </tr>
-            ))}
-            {users.length === 0 && !loading && (
+                    </Td>
+                  </tr>
+                ))}
+            {displayedUsers.length === 0 && !loading && (
               <tr>
-                <td colSpan={6} className="text-center py-6 text-gray-500">
-                  No {role}s found
+                <td colSpan={8} className="text-center py-6 text-gray-500">
+                  {searchTerm ? "No available users" : `No ${role}s found`}
                 </td>
               </tr>
             )}
@@ -288,42 +436,43 @@ function UserListPanel({
         </table>
       </div>
     </div>
-  )
+  );
 }
+
 // Create User Panel (local state only)
 function CreateUserPanel() {
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null);
 
   const [formData, setFormData] = useState<
-    Omit<Customer, 'id'> | createUserData
+    Omit<Customer, "id"> | createUserData
   >({
-    firstname: '',
-    lastname: '',
-    email: '',
-    password: '',
-    contact: '',
-  })
+    firstname: "",
+    lastname: "",
+    email: "",
+    password: "",
+    contact: "",
+  });
 
   const reset = () => {
     setFormData({
-      firstname: '',
-      lastname: '',
-      email: '',
-      password: '',
-      contact: '',
-    })
-  }
+      firstname: "",
+      lastname: "",
+      email: "",
+      password: "",
+      contact: "",
+    });
+  };
 
   const [formErrors, _setFormErrors] = useState<
     Partial<Record<keyof createUserData, string>>
-  >({})
+  >({});
 
   const save = async () => {
-    if (!formData.firstname || !formData.lastname || !formData.email) return
+    if (!formData.firstname || !formData.lastname || !formData.email) return;
     try {
-      const res = await fetch('http://localhost:5000/api/auth/register', {
-        method: 'POST',
-        headers: { 'Content-type': 'application/json' },
+      const res = await fetch("http://localhost:5000/api/auth/register", {
+        method: "POST",
+        headers: { "Content-type": "application/json" },
         body: JSON.stringify({
           username: formData.email,
           password: formData.password,
@@ -338,18 +487,18 @@ function CreateUserPanel() {
           postal_code: null,
           contact: formData.contact,
         }),
-      })
-      const data = await res.json()
+      });
+      const data = await res.json();
       if (res.ok) {
-        toast.success('User Creation successful! Please verify your email.')
+        toast.success("User Creation successful! Please verify your email.");
       } else {
-        setError(data.message || 'User creation failed')
+        setError(data.message || "User creation failed");
       }
     } catch (err) {
-      setError('An error occurred')
+      setError("An error occurred");
     }
-    reset()
-  }
+    reset();
+  };
 
   return (
     <div className="grid gap-6 md:grid-cols-2">
@@ -357,8 +506,8 @@ function CreateUserPanel() {
         <h2 className="text-xl font-semibold mb-3"></h2>
         <form
           onSubmit={(e) => {
-            e.preventDefault()
-            save()
+            e.preventDefault();
+            save();
           }}
           className="grid gap-3"
         >
@@ -415,18 +564,18 @@ function CreateUserPanel() {
         </form>
       </div>
     </div>
-  )
+  );
 }
 function Input({
   label,
   value,
   onChange,
-  type = 'text',
+  type = "text",
 }: {
-  label: string
-  value: string
-  onChange: (v: string) => void
-  type?: string
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  type?: string;
 }) {
   return (
     <label className="block">
@@ -438,28 +587,28 @@ function Input({
         className="w-full border rounded-lg px-3 py-2 outline-none"
       />
     </label>
-  )
+  );
 }
 /* UI table helpers (pruned unused components) */
 function Th({
   children,
-  className = '',
+  className = "",
 }: {
-  children: React.ReactNode
-  className?: string
+  children: React.ReactNode;
+  className?: string;
 }) {
   return (
     <th className={`px-3 py-2 text-sm font-semibold ${className}`}>
       {children}
     </th>
-  )
+  );
 }
 function Td({
   children,
-  className = '',
+  className = "",
 }: {
-  children: React.ReactNode
-  className?: string
+  children: React.ReactNode;
+  className?: string;
 }) {
-  return <td className={`px-3 py-2 text-sm ${className}`}>{children}</td>
+  return <td className={`px-3 py-2 text-sm ${className}`}>{children}</td>;
 }
