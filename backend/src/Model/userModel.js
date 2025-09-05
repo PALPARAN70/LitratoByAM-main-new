@@ -1,5 +1,5 @@
-const { pool } = require("../Config/db");
-const bcrypt = require("bcrypt");
+const { pool } = require('../Config/db')
+const bcrypt = require('bcrypt')
 
 // Create the table if it doesn't exist
 async function initUserTable() {
@@ -25,21 +25,21 @@ async function initUserTable() {
             last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             isactive BOOLEAN DEFAULT TRUE
         )
-    `);
+    `)
 }
 
 // Find user by ID
 async function findUserById(id) {
-  const result = await pool.query("SELECT * FROM users WHERE id = $1", [id]);
-  return result.rows[0];
+  const result = await pool.query('SELECT * FROM users WHERE id = $1', [id])
+  return result.rows[0]
 }
 
 // Find user by username
 async function findUserByUsername(username) {
-  const result = await pool.query("SELECT * FROM users WHERE username = $1", [
+  const result = await pool.query('SELECT * FROM users WHERE username = $1', [
     username,
-  ]);
-  return result.rows[0];
+  ])
+  return result.rows[0]
 }
 // Create user
 async function createUser(
@@ -76,110 +76,111 @@ async function createUser(
       barangay,
       postal_code,
     ]
-  );
-  return result.rows[0];
+  )
+  return result.rows[0]
 }
 
 //Edit Profile
 async function updateUserProfile(id, fields) {
   const allowed = [
-    "firstname",
-    "lastname",
-    "birthdate",
-    "sex",
-    "contact",
-    "region",
-    "province",
-    "city",
-    "barangay",
-    "postal_code",
-  ];
-
-  const keys = Object.keys(fields).filter((k) => allowed.includes(k));
+    'role',
+    'firstname',
+    'lastname',
+    'birthdate',
+    'sex',
+    'contact',
+    'region',
+    'province',
+    'city',
+    'barangay',
+    'postal_code',
+  ]
+  // Check for empty fields
+  const keys = Object.keys(fields).filter((k) => allowed.includes(k))
   if (keys.length === 0) {
-    const res = await pool.query("SELECT * FROM users WHERE id = $1", [id]);
-    return res.rows[0];
+    const res = await pool.query('SELECT * FROM users WHERE id = $1', [id])
+    return res.rows[0]
   }
-
-  const setClauses = keys.map((k, idx) => `${k} = $${idx + 2}`); // start from $2, $1=id
-  const values = [id, ...keys.map((k) => fields[k])];
-
+  // Dynamically build the SET clause
+  const setClauses = keys.map((k, idx) => `${k} = $${idx + 2}`) // start from $2, $1=id
+  const values = [id, ...keys.map((k) => fields[k])]
+  // Execute the update
   const result = await pool.query(
-    `UPDATE users SET ${setClauses.join(", ")} WHERE id = $1 RETURNING *`,
+    `UPDATE users SET ${setClauses.join(', ')} WHERE id = $1 RETURNING *`,
     values
-  );
-  return result.rows[0];
+  )
+  return result.rows[0]
 }
 //Change Password
 async function updateUserPassword(id, newPassword) {
   const result = await pool.query(
-    "UPDATE users SET password = $1 WHERE id = $2 RETURNING *",
+    'UPDATE users SET password = $1 WHERE id = $2 RETURNING *',
     [newPassword, id]
-  );
-  return result.rows[0];
+  )
+  return result.rows[0]
 }
 
-//Confirmation Email
+//------Confirmation Email------//
 async function setVerificationToken(userId, token) {
-  await pool.query("UPDATE users SET verification_token = $1 WHERE id = $2", [
+  await pool.query('UPDATE users SET verification_token = $1 WHERE id = $2', [
     token,
     userId,
-  ]);
+  ])
 }
 async function findUserByToken(token) {
   const result = await pool.query(
-    "SELECT * FROM users WHERE verification_token = $1",
+    'SELECT * FROM users WHERE verification_token = $1',
     [token]
-  );
-  return result.rows[0];
+  )
+  return result.rows[0]
 }
 async function verifyUser(userId) {
   const result = await pool.query(
-    "UPDATE users SET is_verified = TRUE, verification_token = NULL WHERE id = $1 RETURNING *",
+    'UPDATE users SET is_verified = TRUE, verification_token = NULL WHERE id = $1 RETURNING *',
     [userId]
-  );
-  return result.rows[0];
+  )
+  return result.rows[0]
 }
-//end of confirmation email//
+//------end of confirmation email-----//
 
 //Unblocks User
 async function isActive(userId) {
   const result = await pool.query(
-    "UPDATE users SET isactive = TRUE WHERE id = $1 RETURNING *",
+    'UPDATE users SET isactive = TRUE WHERE id = $1 RETURNING *',
     [userId]
-  );
-  return result.rows[0];
+  )
+  return result.rows[0]
 }
 //Blocks User
 async function isInActive(userId) {
   const result = await pool.query(
-    "UPDATE users SET isactive = FALSE WHERE id = $1 RETURNING *",
+    'UPDATE users SET isactive = FALSE WHERE id = $1 RETURNING *',
     [userId]
-  );
-  return result.rows[0];
+  )
+  return result.rows[0]
 }
 //reset password
 async function resetPassword(userId, newPassword) {
-  const hashedPassword = await bcrypt.hash(newPassword, 10);
+  const hashedPassword = await bcrypt.hash(newPassword, 10)
   const result = await pool.query(
-    "UPDATE users SET password = $1 WHERE id = $2 RETURNING *",
+    'UPDATE users SET password = $1 WHERE id = $2 RETURNING *',
     [hashedPassword, userId]
-  );
-  return result.rows[0];
+  )
+  return result.rows[0]
 }
 
 /* -------- NEW: user listing helpers (data layer only) -------- */
 async function listUsersByRole(role) {
   const result = await pool.query(
-    "SELECT * FROM users WHERE role = $1 ORDER BY id DESC",
+    'SELECT * FROM users WHERE role = $1 ORDER BY id DESC',
     [role]
-  );
-  return result.rows;
+  )
+  return result.rows
 }
 
 async function listAllUsers() {
-  const result = await pool.query("SELECT * FROM users ORDER BY id DESC");
-  return result.rows;
+  const result = await pool.query('SELECT * FROM users ORDER BY id DESC')
+  return result.rows
 }
 /* ------------------------------------------------------------- */
 
@@ -196,7 +197,7 @@ module.exports = {
   verifyUser,
   resetPassword,
   listUsersByRole,
-  listAllUsers, // added
+  listAllUsers,
   isInActive,
   isActive,
-};
+}
