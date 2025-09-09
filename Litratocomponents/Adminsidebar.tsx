@@ -45,7 +45,7 @@ const NAV_ITEMS: NavItem[] = [
     path: "/admin/TicketManagement",
   },
   { label: "Booking", Icon: FiCalendar, path: "/admin/BookingManagement" },
-  { label: "Manage Account", Icon: FiUser, path: "/admin/AccountManager" },
+  { label: "Manage Users", Icon: FiUser, path: "/admin/AccountManager" },
 ];
 
 export default function LitratoSidebar({
@@ -175,7 +175,7 @@ export default function LitratoSidebar({
               onKeyDown={getNavKeyDown(item.path)}
               className={cx(
                 "flex items-center py-2 font-bold rounded-lg cursor-pointer transition-all duration-300 ease-in-out relative group",
-                isOpen ? "gap-3 pl-[18px]" : "gap-0 pl-[17.5px]",
+                isOpen ? "gap-2 pl-[18px]" : "gap-0 pl-[17.5px]",
                 active
                   ? "bg-litratored text-white"
                   : "text-litratoblack hover:bg-gray-200 hover:text-litratored"
