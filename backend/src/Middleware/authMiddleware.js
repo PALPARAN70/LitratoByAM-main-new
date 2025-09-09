@@ -10,8 +10,27 @@ function authMiddleware(req, res, next) {
   }
 
   jwt.verify(token, process.env.JWT_SECRET, async (err, decoded) => {
-    if (err)
+    if (err) {
+      // If token is expired, verify signature ignoring expiration and record last_login
+      if (err.name === 'TokenExpiredError') {
+        try {
+          const decodedIgnoreExp = jwt.verify(token, process.env.JWT_SECRET, {
+            ignoreExpiration: true,
+          })
+          if (decodedIgnoreExp?.id) {
+            try {
+              await userModel.updateLastLogin(decodedIgnoreExp.id)
+            } catch (e) {
+              console.error('Failed to update last_login on token expiry:', e)
+            }
+          }
+        } catch (e) {
+          // ignore if signature invalid or any error occurs
+        }
+        return res.status(401).json({ message: 'Token expired' })
+      }
       return res.status(401).json({ message: 'Failed to authenticate token' })
+    }
     try {
       const user = await userModel.findUserById(decoded.id)
       if (!user || user.isactive === false) {

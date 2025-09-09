@@ -137,10 +137,9 @@ exports.login = async (req, res) => {
     const token = jwt.sign(
       { id: user.id, role: user.role },
       process.env.JWT_SECRET,
-      { expiresIn: '2h' }
+      { expiresIn: '1h' }
     )
 
-    // Optionally update last_login to now (login time)
     try {
       await userModel.updateLastLogin(user.id)
     } catch {}
@@ -165,18 +164,6 @@ exports.logout = async (req, res) => {
     console.error('Failed to update last_login on logout:', e)
   }
   res.json({ message: 'Logout successful' })
-}
-
-// record last activity endpoint for tab close / beforeunload beacons
-exports.recordLastActivity = async (req, res) => {
-  try {
-    await userModel.updateLastLogin(req.user.id)
-    // keep payload minimal for beacons
-    res.status(204).end()
-  } catch (e) {
-    console.error('recordLastActivity error:', e)
-    res.status(200).json({ ok: true }) // be forgiving to not block unload
-  }
 }
 
 //get Profile function

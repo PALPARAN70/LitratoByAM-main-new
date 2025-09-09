@@ -18,6 +18,7 @@ type User = {
   contact: string
   isactive: boolean
   last_updated: string | null
+  last_login?: string | null
   role?: string
 }
 type Customer = {
@@ -504,9 +505,16 @@ function UserListPanel({
                         {u.isactive ? 'Active' : 'Inactive'}
                       </div>
                     </Td>
-                    <Td>08/24/25</Td>
-                    {/* To be fetched from backend last_updated attribute */}
-                    <Td>02/01/04</Td>
+                    <Td>
+                      {u.last_login
+                        ? new Date(u.last_login).toLocaleString()
+                        : '—'}
+                    </Td>
+                    <Td>
+                      {u.last_updated
+                        ? new Date(u.last_updated).toLocaleString()
+                        : '—'}
+                    </Td>
                     <Td>
                       <Popover>
                         <PopoverTrigger>

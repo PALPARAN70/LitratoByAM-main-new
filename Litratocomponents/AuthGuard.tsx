@@ -1,6 +1,7 @@
 'use client'
 import { useRouter } from 'next/navigation'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { jwtDecode } from 'jwt-decode'
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:5000'
 
@@ -74,41 +75,51 @@ export default function AuthGuard({
     }
   }, [router, requiredRole])
 
-  // Record last activity when the tab closes or goes to background
+  // Proactively detect token expiry and redirect without needing a reload
   useEffect(() => {
     if (!authorized) return
 
-    const sendLastActivity = () => {
+    const token =
+      typeof window !== 'undefined'
+        ? localStorage.getItem('access_token')
+        : null
+    if (!token) return
+
+    type Decoded = { exp?: number }
+    let expMs = 0
+    try {
+      const decoded = jwtDecode<Decoded>(token)
+      if (decoded?.exp) expMs = decoded.exp * 1000
+    } catch {
+      // malformed token -> force immediate redirect
+      expMs = Date.now()
+    }
+
+    let timedOut = false
+    const handleExpired = async () => {
+      if (timedOut) return
+      timedOut = true
       try {
-        const token = localStorage.getItem('access_token')
-        if (!token) return
-        // Use fetch with keepalive so it can complete during page unload
-        fetch(`${API_BASE}/api/auth/last-activity`, {
-          method: 'POST',
-          keepalive: true,
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-          body: '{}',
+        // Ping a protected endpoint so middleware updates last_login on expired token
+        await fetch(`${API_BASE}/api/auth/getProfile`, {
+          headers: { Authorization: `Bearer ${token}` },
         }).catch(() => {})
       } catch {}
+      try {
+        localStorage.removeItem('access_token')
+      } catch {}
+      router.replace('/login')
     }
 
-    const onBeforeUnload = () => {
-      sendLastActivity()
+    const now = Date.now()
+    const delay = expMs - now
+    if (!expMs || delay <= 0) {
+      handleExpired()
+      return
     }
-    const onVisibilityChange = () => {
-      if (document.visibilityState === 'hidden') sendLastActivity()
-    }
-
-    window.addEventListener('beforeunload', onBeforeUnload)
-    document.addEventListener('visibilitychange', onVisibilityChange)
-    return () => {
-      window.removeEventListener('beforeunload', onBeforeUnload)
-      document.removeEventListener('visibilitychange', onVisibilityChange)
-    }
-  }, [authorized])
+    const id = window.setTimeout(handleExpired, delay)
+    return () => window.clearTimeout(id)
+  }, [authorized, router])
 
   // While checking or not authorized, avoid flashing protected UI
   if (checking || !authorized) return null
