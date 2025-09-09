@@ -5,7 +5,9 @@ const authMiddleware = require('../Middleware/authMiddleware')
 
 router.post('/register', authController.register)
 router.post('/login', authController.login)
-router.post('/logout', authController.logout)
+router.post('/logout', authMiddleware, authController.logout)
+// record last activity (e.g., beforeunload beacon)
+router.post('/last-activity', authMiddleware, authController.recordLastActivity)
 // email verification
 router.get('/verify', authController.verifyEmail)
 router.get('/getProfile', authMiddleware, authController.getProfile)

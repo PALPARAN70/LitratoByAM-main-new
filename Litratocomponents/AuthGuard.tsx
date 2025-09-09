@@ -74,6 +74,42 @@ export default function AuthGuard({
     }
   }, [router, requiredRole])
 
+  // Record last activity when the tab closes or goes to background
+  useEffect(() => {
+    if (!authorized) return
+
+    const sendLastActivity = () => {
+      try {
+        const token = localStorage.getItem('access_token')
+        if (!token) return
+        // Use fetch with keepalive so it can complete during page unload
+        fetch(`${API_BASE}/api/auth/last-activity`, {
+          method: 'POST',
+          keepalive: true,
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: '{}',
+        }).catch(() => {})
+      } catch {}
+    }
+
+    const onBeforeUnload = () => {
+      sendLastActivity()
+    }
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') sendLastActivity()
+    }
+
+    window.addEventListener('beforeunload', onBeforeUnload)
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    return () => {
+      window.removeEventListener('beforeunload', onBeforeUnload)
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+    }
+  }, [authorized])
+
   // While checking or not authorized, avoid flashing protected UI
   if (checking || !authorized) return null
   return <>{children}</>

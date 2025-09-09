@@ -140,6 +140,11 @@ exports.login = async (req, res) => {
       { expiresIn: '2h' }
     )
 
+    // Optionally update last_login to now (login time)
+    try {
+      await userModel.updateLastLogin(user.id)
+    } catch {}
+
     res.json({
       message: 'Login successful',
       token: `Bearer ${token}`,
@@ -152,8 +157,26 @@ exports.login = async (req, res) => {
 }
 
 //logout function
-exports.logout = (req, res) => {
+exports.logout = async (req, res) => {
+  try {
+    await userModel.updateLastLogin(req.user.id)
+  } catch (e) {
+    // don't fail logout if logging last_login fails
+    console.error('Failed to update last_login on logout:', e)
+  }
   res.json({ message: 'Logout successful' })
+}
+
+// record last activity endpoint for tab close / beforeunload beacons
+exports.recordLastActivity = async (req, res) => {
+  try {
+    await userModel.updateLastLogin(req.user.id)
+    // keep payload minimal for beacons
+    res.status(204).end()
+  } catch (e) {
+    console.error('recordLastActivity error:', e)
+    res.status(200).json({ ok: true }) // be forgiving to not block unload
+  }
 }
 
 //get Profile function
