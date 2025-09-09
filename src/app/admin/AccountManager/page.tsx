@@ -2,8 +2,14 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { type createUserData } from "../../../../schemas/schema/requestvalidation";
-import { FilterIcon, SearchIcon } from "lucide-react";
-
+import { FilterIcon } from "lucide-react";
+import { Ellipsis } from "lucide-react";
+import {
+  Popover,
+  PopoverTrigger,
+  PopoverContent,
+  PopoverAnchor,
+} from "@/components/ui/popover";
 type User = {
   id: string;
   firstname: string;
@@ -11,6 +17,7 @@ type User = {
   email: string;
   contact: string;
   isactive: boolean;
+  last_updated: string | null;
   role?: string;
 };
 type Customer = {
@@ -41,9 +48,13 @@ export default function AdminAccountManagementPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchInput]); // intentionally only depends on searchInput
 
-  // Manual immediate search (icon click)
-
-  // Clear search input & applied search
+  const filterOptions = [
+    { label: "firstname", value: "all" },
+    { label: "lastname", value: "active" },
+    { label: "last updated", value: "inactive" },
+    { label: "last logged in", value: "inactive" },
+    { label: "contact", value: "inactive" },
+  ];
 
   return (
     <div className="p-4">
@@ -91,13 +102,28 @@ export default function AdminAccountManagementPage() {
               onChange={(e) => setSearchInput(e.target.value)}
               className="bg-transparent outline-none w-full px-2"
             />
-            <div className="rounded-full bg-gray-300 p-2 ml-2 items-center flex cursor-pointer">
-              <FilterIcon className="w-4 h-4 text-black" />
-            </div>
+            <Popover>
+              <PopoverTrigger>
+                <div className="rounded-full bg-gray-300 p-2 ml-2 items-center flex cursor-pointer">
+                  <FilterIcon className="w-4 h-4 text-black" />
+                </div>
+              </PopoverTrigger>
+              <PopoverContent>
+                <p className="font-semibold">Filter Options...</p>
+                {filterOptions.map((option) => (
+                  <div
+                    key={option.value + option.label}
+                    className="p-2 rounded hover:bg-gray-100 cursor-pointer"
+                  >
+                    {option.label}
+                  </div>
+                ))}
+              </PopoverContent>
+            </Popover>
           </form>
         </div>
       </nav>
-      <section className="bg-white h-120  rounded-xl shadow p-4">
+      <section className="bg-white h-125 rounded-xl shadow p-4">
         {active === "createusers" && <CreateUserPanel />}
         {active === "customers" && (
           <UserListPanel
@@ -318,6 +344,79 @@ function UserListPanel({
   const block = (id: string) => callAdminAction(id, "block");
   const unblock = (id: string) => callAdminAction(id, "unblock");
 
+  // --- NEW: compute available role change choices based on current panel role
+  const roleChoices: {
+    label: string;
+    value: "customer" | "employee" | "admin";
+  }[] = (() => {
+    if (role === "customer")
+      return [
+        { label: "Staff", value: "employee" },
+        { label: "Admin", value: "admin" },
+      ];
+    if (role === "employee")
+      return [
+        { label: "Customer", value: "customer" },
+        { label: "Admin", value: "admin" },
+      ];
+    // role === "admin"
+    return [
+      { label: "Customer", value: "customer" },
+      { label: "Staff", value: "employee" },
+    ];
+  })();
+
+  // --- NEW: arrow function to change a user's role
+  const changeRole = async (
+    id: string,
+    newRole: "customer" | "employee" | "admin"
+  ) => {
+    try {
+      const authHeader = getAuthHeader();
+      const res = await fetch(
+        `http://localhost:5000/api/admin/user/${id}/role`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            ...(authHeader ? { Authorization: authHeader } : {}),
+          },
+          body: JSON.stringify({ role: newRole }),
+        }
+      );
+      const data = await res.json();
+
+      if (!res.ok) {
+        const msg =
+          data?.toast?.message || data?.message || "Failed to change role";
+        if (data?.toast?.type === "error") toast.error(msg);
+        else toast.error(msg);
+        throw new Error(msg);
+      }
+
+      // show backend toast if present, fallback to generic
+      if (data?.toast?.message) {
+        data.toast.type === "success"
+          ? toast.success(data.toast.message)
+          : toast.error(data.toast.message);
+      } else {
+        toast.success("Role changed successfully");
+      }
+
+      // If the user's new role no longer matches the current panel's role, remove them from list.
+      if (newRole !== role) {
+        setUsers((prev) => prev.filter((u) => u.id !== id));
+      } else {
+        // otherwise update the user's role in-place
+        setUsers((prev) =>
+          prev.map((u) => (u.id === id ? { ...u, role: newRole } : u))
+        );
+      }
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to change role");
+    }
+  };
+
   // Client-side fallback filter so matched users always display in the table
   const normalizedSearch = (searchTerm || "").trim().toLowerCase();
   const displayedUsers = users.filter((u) =>
@@ -328,7 +427,16 @@ function UserListPanel({
         u.contact.toLowerCase().includes(normalizedSearch)
       : true
   );
-
+  const tabletitles = [
+    { label: "First Name" },
+    { label: "Last Name" },
+    { label: "Email" },
+    { label: "Contact" },
+    { label: "Status" },
+    { label: "Last Logged In" },
+    { label: "Last Updated" },
+    { label: "Actions" },
+  ];
   return (
     <div>
       <h2 className="text-xl font-semibold mb-3">{title}</h2>
@@ -338,14 +446,11 @@ function UserListPanel({
         <table className="w-full text-left border border-gray-200 rounded-lg overflow-hidden">
           <thead className="bg-gray-200">
             <tr>
-              <Th>First Name</Th>
-              <Th>Last Name</Th>
-              <Th>Email</Th>
-              <Th>Contact</Th>
-              <Th>Status</Th>
-              <Th>Last Logged In</Th>
-              <Th>Last Udpated</Th>
-              <Th>Actions</Th>
+              {tabletitles.map((item) => (
+                <Th key={item.label} className="whitespace-nowrap">
+                  {item.label}
+                </Th>
+              ))}
             </tr>
           </thead>
           <tbody
@@ -399,29 +504,58 @@ function UserListPanel({
                         {u.isactive ? "Active" : "Inactive"}
                       </div>
                     </Td>
-                    <Td>04/02/25</Td>
-                    <Td>08/02/25</Td>
+                    <Td>08/24/25</Td>
+
+                    <Td>02/01/04</Td>
                     <Td>
-                      <div className="flex w-52 gap-2">
-                        {u.isactive ? (
-                          <div
-                            onClick={() => block(u.id)}
-                            className="px-3 py-1 rounded-full bg-red-500 text-white hover:bg-red-600  cursor-pointer"
-                          >
-                            Block
+                      <Popover>
+                        <PopoverTrigger>
+                          <div className="item-center flex cursor-pointer px-3 py-1 hover:bg-gray-100 rounded">
+                            {" "}
+                            <Ellipsis></Ellipsis>
                           </div>
-                        ) : (
-                          <div
-                            onClick={() => unblock(u.id)}
-                            className="px-3 py-1 rounded-full bg-green-500 text-white hover:bg-green-600  cursor-pointer"
-                          >
-                            Unblock
-                          </div>
-                        )}
-                        <div className="px-3 py-1 rounded-full bg-gray-200 text-black cursor-pointer hover:bg-gray-300">
-                          Change Role
-                        </div>
-                      </div>
+                        </PopoverTrigger>
+                        <PopoverContent>
+                          {u.firstname} {u.lastname}
+                          {u.isactive ? (
+                            <div
+                              onClick={() => block(u.id)}
+                              className="px-3 py-1 rounded bg-red-500 text-white hover:bg-red-600  cursor-pointer"
+                            >
+                              Block
+                            </div>
+                          ) : (
+                            <div
+                              onClick={() => unblock(u.id)}
+                              className="px-3 py-1 rounded bg-green-500 text-white hover:bg-green-600  cursor-pointer"
+                            >
+                              Unblock
+                            </div>
+                          )}
+                          {/* REPLACED: dynamic role choices based on panel role */}
+                          <Popover>
+                            <PopoverTrigger>
+                              <div className="px-3 py-1 rounded bg-gray-200 text-black cursor-pointer hover:bg-gray-300">
+                                Change Role
+                              </div>
+                            </PopoverTrigger>
+                            <PopoverContent>
+                              <div className="font-medium mb-2">
+                                Change {u.firstname}'s Role to
+                              </div>
+                              {roleChoices.map((choice) => (
+                                <div
+                                  key={choice.value}
+                                  onClick={() => changeRole(u.id, choice.value)}
+                                  className="px-3 py-1 rounded bg-gray-200 text-black hover:text-white hover:bg-gray-300 cursor-pointer mb-1"
+                                >
+                                  {choice.label}
+                                </div>
+                              ))}
+                            </PopoverContent>
+                          </Popover>
+                        </PopoverContent>
+                      </Popover>
                     </Td>
                   </tr>
                 ))}
@@ -500,68 +634,168 @@ function CreateUserPanel() {
     reset();
   };
 
+  // --- NEW: users list for table in right column ---
+  const [users, setUsers] = useState<User[]>([]);
+  const [loadingUsers, setLoadingUsers] = useState(false);
+  const [usersError, setUsersError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const fetchAll = async () => {
+      setLoadingUsers(true);
+      setUsersError(null);
+      try {
+        const raw =
+          typeof window !== "undefined"
+            ? localStorage.getItem("access_token")
+            : null;
+        const authHeader =
+          raw && raw.startsWith("Bearer ") ? raw : raw ? `Bearer ${raw}` : "";
+        const roles = ["customer", "employee", "admin"];
+        const promises = roles.map((r) =>
+          fetch(`http://localhost:5000/api/admin/list?role=${r}`, {
+            headers: {
+              "Content-Type": "application/json",
+              ...(authHeader ? { Authorization: authHeader } : {}),
+            },
+          })
+            .then(async (res) => {
+              if (!res.ok) return { users: [] };
+              return res.json();
+            })
+            .catch(() => ({ users: [] }))
+        );
+        const results = await Promise.all(promises);
+        if (cancelled) return;
+        // combine and dedupe by id
+        const combined: User[] = [];
+        const seen = new Set<string>();
+        for (const r of results) {
+          const list = Array.isArray(r.users) ? r.users : [];
+          for (const u of list) {
+            if (!seen.has(u.id)) {
+              seen.add(u.id);
+              combined.push(u);
+            }
+          }
+        }
+        setUsers(combined);
+      } catch (e: any) {
+        if (!cancelled) setUsersError(e?.message || "Failed to load users");
+      } finally {
+        if (!cancelled) setLoadingUsers(false);
+      }
+    };
+    fetchAll();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   return (
     <div className="grid gap-6 md:grid-cols-2">
       <div>
-        <h2 className="text-xl font-semibold mb-3"></h2>
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            save();
-          }}
-          className="grid gap-3"
-        >
-          <Input
-            label="First name"
-            value={formData.firstname}
-            onChange={(v) => setFormData((s) => ({ ...s, firstname: v }))}
-          />
-          {formErrors.firstname && (
-            <p className="text-red-500">{formErrors.firstname}</p>
+        <h2 className="text-xl font-semibold mb-3">Create User</h2>
+        <div className="bg-white overflow-y-auto max-h-96">
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              save();
+            }}
+            className="grid gap-3"
+          >
+            <Input
+              label="First name"
+              value={formData.firstname}
+              onChange={(v) => setFormData((s) => ({ ...s, firstname: v }))}
+            />
+            {formErrors.firstname && (
+              <p className="text-red-500">{formErrors.firstname}</p>
+            )}
+            <Input
+              label="Last name"
+              value={formData.lastname}
+              onChange={(v) => setFormData((s) => ({ ...s, lastname: v }))}
+            />
+            {formErrors.lastname && (
+              <p className="text-red-500">{formErrors.lastname}</p>
+            )}
+            <Input
+              label="Email"
+              type="email"
+              value={formData.email}
+              onChange={(v) => setFormData((s) => ({ ...s, email: v }))}
+            />
+            {formErrors.email && (
+              <p className="text-red-500">{formErrors.email}</p>
+            )}
+            <Input
+              label="Password"
+              type="password"
+              value={formData.password}
+              onChange={(v) => setFormData((s) => ({ ...s, password: v }))}
+            />
+            {formErrors.password && (
+              <p className="text-red-500">{formErrors.password}</p>
+            )}
+            <Input
+              label="Contact"
+              value={formData.contact}
+              onChange={(v) => setFormData((s) => ({ ...s, contact: v }))}
+            />
+            {formErrors.contact && (
+              <p className="text-red-500">{formErrors.contact}</p>
+            )}
+            <div className="flex gap-2">
+              <button
+                type="submit"
+                className="bg-litratoblack text-white px-4 py-2 rounded font-bold"
+              >
+                Save
+              </button>
+            </div>
+            {error && <p className="text-red-600 mt-2">{error}</p>}
+          </form>
+        </div>
+      </div>
+
+      {/* --- NEW: right column table of users --- */}
+      <div>
+        <h2 className="text-xl font-semibold mb-3">Users</h2>
+        <div className="bg-white rounded shadow p-2 overflow-auto max-h-96">
+          {loadingUsers && <p className="text-gray-500">Loading users…</p>}
+          {usersError && <p className="text-red-600">{usersError}</p>}
+          {!loadingUsers && !usersError && (
+            <table className="w-full text-left  border-gray-200 rounded">
+              <thead className="bg-gray-200 ">
+                <tr>
+                  <Th>First</Th>
+                  <Th>Last</Th>
+                  <Th>Email</Th>
+                  <Th>Role</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {users.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="text-center py-4 text-gray-500">
+                      No users found
+                    </td>
+                  </tr>
+                ) : (
+                  users.map((u) => (
+                    <tr key={u.id} className="border-t">
+                      <Td>{u.firstname}</Td>
+                      <Td>{u.lastname}</Td>
+                      <Td>{u.email}</Td>
+                      <Td>{u.role ?? "—"}</Td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
           )}
-          <Input
-            label="Last name"
-            value={formData.lastname}
-            onChange={(v) => setFormData((s) => ({ ...s, lastname: v }))}
-          />
-          {formErrors.lastname && (
-            <p className="text-red-500">{formErrors.lastname}</p>
-          )}
-          <Input
-            label="Email"
-            type="email"
-            value={formData.email}
-            onChange={(v) => setFormData((s) => ({ ...s, email: v }))}
-          />
-          {formErrors.email && (
-            <p className="text-red-500">{formErrors.email}</p>
-          )}
-          <Input
-            label="Password"
-            type="password"
-            value={formData.password}
-            onChange={(v) => setFormData((s) => ({ ...s, password: v }))}
-          />
-          {formErrors.password && (
-            <p className="text-red-500">{formErrors.password}</p>
-          )}
-          <Input
-            label="Contact"
-            value={formData.contact}
-            onChange={(v) => setFormData((s) => ({ ...s, contact: v }))}
-          />
-          {formErrors.contact && (
-            <p className="text-red-500">{formErrors.contact}</p>
-          )}
-          <div className="flex gap-2">
-            <button
-              type="submit"
-              className="bg-litratoblack text-white px-4 py-2 rounded-lg font-bold"
-            >
-              Save
-            </button>
-          </div>
-        </form>
+        </div>
       </div>
     </div>
   );
