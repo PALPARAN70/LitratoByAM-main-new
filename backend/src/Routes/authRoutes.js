@@ -5,7 +5,7 @@ const authMiddleware = require('../Middleware/authMiddleware')
 
 router.post('/register', authController.register)
 router.post('/login', authController.login)
-router.post('/logout', authController.logout)
+router.post('/logout', authMiddleware, authController.logout)
 // email verification
 router.get('/verify', authController.verifyEmail)
 router.get('/getProfile', authMiddleware, authController.getProfile)

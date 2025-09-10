@@ -137,8 +137,12 @@ exports.login = async (req, res) => {
     const token = jwt.sign(
       { id: user.id, role: user.role },
       process.env.JWT_SECRET,
-      { expiresIn: '2h' }
+      { expiresIn: '1h' }
     )
+
+    try {
+      await userModel.updateLastLogin(user.id)
+    } catch {}
 
     res.json({
       message: 'Login successful',
@@ -152,7 +156,13 @@ exports.login = async (req, res) => {
 }
 
 //logout function
-exports.logout = (req, res) => {
+exports.logout = async (req, res) => {
+  try {
+    await userModel.updateLastLogin(req.user.id)
+  } catch (e) {
+    // don't fail logout if logging last_login fails
+    console.error('Failed to update last_login on logout:', e)
+  }
   res.json({ message: 'Logout successful' })
 }
 

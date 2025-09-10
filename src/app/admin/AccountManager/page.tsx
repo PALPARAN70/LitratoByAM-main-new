@@ -1,60 +1,61 @@
-"use client";
-import { useEffect, useState } from "react";
-import { toast } from "sonner";
-import { type createUserData } from "../../../../schemas/schema/requestvalidation";
-import { FilterIcon } from "lucide-react";
-import { Ellipsis } from "lucide-react";
+'use client'
+import { useEffect, useState } from 'react'
+import { toast } from 'sonner'
+import { type createUserData } from '../../../../schemas/schema/requestvalidation'
+import { FilterIcon } from 'lucide-react'
+import { Ellipsis } from 'lucide-react'
 import {
   Popover,
   PopoverTrigger,
   PopoverContent,
   PopoverAnchor,
-} from "@/components/ui/popover";
+} from '@/components/ui/popover'
 type User = {
-  id: string;
-  firstname: string;
-  lastname: string;
-  email: string;
-  contact: string;
-  isactive: boolean;
-  last_updated: string | null;
-  role?: string;
-};
+  id: string
+  firstname: string
+  lastname: string
+  email: string
+  contact: string
+  isactive: boolean
+  last_updated: string | null
+  last_login?: string | null
+  role?: string
+}
 type Customer = {
-  id: string;
-  firstname: string;
-  lastname: string;
-  password: any;
-  email: string;
-  contact: string;
-};
-type TabKey = "createusers" | "customers" | "staff" | "admin";
+  id: string
+  firstname: string
+  lastname: string
+  password: any
+  email: string
+  contact: string
+}
+type TabKey = 'createusers' | 'customers' | 'staff' | 'admin'
 
 export default function AdminAccountManagementPage() {
-  const [active, setActive] = useState<TabKey>("customers");
+  const [active, setActive] = useState<TabKey>('customers')
   // controlled search input and applied search term
-  const [searchInput, setSearchInput] = useState("");
-  const [searchTerm, setSearchTerm] = useState("");
+  const [searchInput, setSearchInput] = useState('')
+  const [searchTerm, setSearchTerm] = useState('')
 
   // Debounce: when user types, wait 500ms after last keystroke to apply searchTerm
   useEffect(() => {
-    const trimmed = searchInput.trim();
+    const trimmed = searchInput.trim()
     // If input equals applied term, do nothing
-    if (trimmed === searchTerm) return;
+    if (trimmed === searchTerm) return
     const id = setTimeout(() => {
-      setSearchTerm(trimmed);
-    }, 500);
-    return () => clearTimeout(id);
+      setSearchTerm(trimmed)
+    }, 500)
+    return () => clearTimeout(id)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchInput]); // intentionally only depends on searchInput
+  }, [searchInput]) // intentionally only depends on searchInput
 
   const filterOptions = [
-    { label: "firstname", value: "all" },
-    { label: "lastname", value: "active" },
-    { label: "last updated", value: "inactive" },
-    { label: "last logged in", value: "inactive" },
-    { label: "contact", value: "inactive" },
-  ];
+    { label: 'firstname', value: 'all' },
+    { label: 'lastname', value: 'active' },
+    { label: 'last updated', value: 'inactive' },
+    { label: 'last logged in', value: 'inactive' },
+    { label: 'contact', value: 'inactive' },
+  ]
 
   return (
     <div className="p-4">
@@ -64,34 +65,34 @@ export default function AdminAccountManagementPage() {
 
       <nav className="flex gap-2 mb-6">
         <TabButton
-          active={active === "createusers"}
-          onClick={() => setActive("createusers")}
+          active={active === 'createusers'}
+          onClick={() => setActive('createusers')}
         >
           Create User
         </TabButton>
         <TabButton
-          active={active === "customers"}
-          onClick={() => setActive("customers")}
+          active={active === 'customers'}
+          onClick={() => setActive('customers')}
         >
           Customers
         </TabButton>
         <TabButton
-          active={active === "staff"}
-          onClick={() => setActive("staff")}
+          active={active === 'staff'}
+          onClick={() => setActive('staff')}
         >
           Staff
         </TabButton>
         <TabButton
-          active={active === "admin"}
-          onClick={() => setActive("admin")}
+          active={active === 'admin'}
+          onClick={() => setActive('admin')}
         >
           Admin
         </TabButton>
         <div className="flex-grow flex">
           <form
             onSubmit={(e) => {
-              e.preventDefault();
-              setSearchTerm(searchInput.trim());
+              e.preventDefault()
+              setSearchTerm(searchInput.trim())
             }}
             className="w-1/4 bg-gray-200 rounded-full items-center flex px-1 py-1"
           >
@@ -124,22 +125,22 @@ export default function AdminAccountManagementPage() {
         </div>
       </nav>
       <section className="bg-white h-125 rounded-xl shadow p-4">
-        {active === "createusers" && <CreateUserPanel />}
-        {active === "customers" && (
+        {active === 'createusers' && <CreateUserPanel />}
+        {active === 'customers' && (
           <UserListPanel
             role="customer"
             title="Customer Accounts"
             searchTerm={searchTerm}
           />
         )}
-        {active === "staff" && (
+        {active === 'staff' && (
           <UserListPanel
             role="employee"
             title="Staff (Employee) Accounts"
             searchTerm={searchTerm}
           />
         )}
-        {active === "admin" && (
+        {active === 'admin' && (
           <UserListPanel
             role="admin"
             title="Admin Accounts"
@@ -148,7 +149,7 @@ export default function AdminAccountManagementPage() {
         )}
       </section>
     </div>
-  );
+  )
 }
 
 function TabButton({
@@ -156,9 +157,9 @@ function TabButton({
   onClick,
   children,
 }: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
+  active: boolean
+  onClick: () => void
+  children: React.ReactNode
 }) {
   return (
     <div
@@ -166,13 +167,13 @@ function TabButton({
       className={`px-4 py-2 rounded-full cursor-pointer border font-semibold transition
         ${
           active
-            ? "bg-litratoblack text-white border-litratoblack"
-            : "bg-white text-litratoblack border-gray-300 hover:bg-gray-100"
+            ? 'bg-litratoblack text-white border-litratoblack'
+            : 'bg-white text-litratoblack border-gray-300 hover:bg-gray-100'
         }`}
     >
       {children}
     </div>
-  );
+  )
 }
 
 /* Unified User List Panel */
@@ -182,243 +183,243 @@ function UserListPanel({
   // added: incoming search term to filter by last name (server-side query)
   searchTerm,
 }: {
-  role: "customer" | "employee" | "admin";
-  title: string;
-  searchTerm?: string;
+  role: 'customer' | 'employee' | 'admin'
+  title: string
+  searchTerm?: string
 }) {
-  const [users, setUsers] = useState<User[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [users, setUsers] = useState<User[]>([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   // animateIn toggles opacity for a smooth load transition
-  const [animateIn, setAnimateIn] = useState(false);
+  const [animateIn, setAnimateIn] = useState(false)
 
   // minimum spinner/skeleton time to avoid flicker when backend is very fast
-  const MIN_LOADING_MS = 240;
-  const sleep = (ms: number) => new Promise((res) => setTimeout(res, ms));
+  const MIN_LOADING_MS = 240
+  const sleep = (ms: number) => new Promise((res) => setTimeout(res, ms))
 
   useEffect(() => {
-    let cancelled = false;
+    let cancelled = false
     const fetchUsers = async () => {
       // start loading, keep skeleton visible and prepare to animate new rows in
-      const start = Date.now();
-      setLoading(true);
-      setAnimateIn(false);
-      setError(null);
+      const start = Date.now()
+      setLoading(true)
+      setAnimateIn(false)
+      setError(null)
       try {
         const raw =
-          typeof window !== "undefined"
-            ? localStorage.getItem("access_token")
-            : null;
+          typeof window !== 'undefined'
+            ? localStorage.getItem('access_token')
+            : null
         const authHeader =
-          raw && raw.startsWith("Bearer ") ? raw : raw ? `Bearer ${raw}` : "";
+          raw && raw.startsWith('Bearer ') ? raw : raw ? `Bearer ${raw}` : ''
         // include lastname query when searchTerm is present
         const url =
           `http://localhost:5000/api/admin/list?role=${role}` +
-          (searchTerm ? `&lastname=${encodeURIComponent(searchTerm)}` : "");
+          (searchTerm ? `&lastname=${encodeURIComponent(searchTerm)}` : '')
         const res = await fetch(url, {
           headers: {
-            "Content-Type": "application/json",
+            'Content-Type': 'application/json',
             ...(authHeader ? { Authorization: authHeader } : {}),
           },
-        });
+        })
         if (res.status === 401)
-          throw new Error("Unauthorized. Please log in again.");
+          throw new Error('Unauthorized. Please log in again.')
         if (res.status === 403)
-          throw new Error("Forbidden: Admin role required.");
+          throw new Error('Forbidden: Admin role required.')
         if (!res.ok) {
-          const msg = await res.text();
-          throw new Error(msg || `Failed to load ${role} list (${res.status})`);
+          const msg = await res.text()
+          throw new Error(msg || `Failed to load ${role} list (${res.status})`)
         }
-        const data = await res.json();
+        const data = await res.json()
         // ensure a minimum loading time to avoid flicker
-        const elapsed = Date.now() - start;
-        if (elapsed < MIN_LOADING_MS) await sleep(MIN_LOADING_MS - elapsed);
+        const elapsed = Date.now() - start
+        if (elapsed < MIN_LOADING_MS) await sleep(MIN_LOADING_MS - elapsed)
         if (!cancelled) {
-          setUsers(Array.isArray(data.users) ? data.users : []);
+          setUsers(Array.isArray(data.users) ? data.users : [])
           // tiny delay to allow DOM update, then fade-in the new rows
           setTimeout(() => {
-            if (!cancelled) setAnimateIn(true);
-          }, 20);
+            if (!cancelled) setAnimateIn(true)
+          }, 20)
         }
       } catch (e: any) {
-        if (!cancelled) setError(e?.message || "Failed to load users");
+        if (!cancelled) setError(e?.message || 'Failed to load users')
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) setLoading(false)
       }
-    };
-    fetchUsers();
+    }
+    fetchUsers()
     return () => {
-      cancelled = true;
-    };
-  }, [role, searchTerm]); // re-run when searchTerm changes
+      cancelled = true
+    }
+  }, [role, searchTerm]) // re-run when searchTerm changes
 
   // Helper to normalize Authorization header
   const getAuthHeader = () => {
     const raw =
-      typeof window !== "undefined"
-        ? localStorage.getItem("access_token")
-        : null;
-    return raw ? (raw.startsWith("Bearer ") ? raw : `Bearer ${raw}`) : "";
-  };
+      typeof window !== 'undefined'
+        ? localStorage.getItem('access_token')
+        : null
+    return raw ? (raw.startsWith('Bearer ') ? raw : `Bearer ${raw}`) : ''
+  }
 
   // Re-fetch list after an action
   const refreshUsers = async () => {
     // similar controlled refresh: show skeletons, ensure min loading time, then animate in
-    const start = Date.now();
+    const start = Date.now()
     try {
-      setLoading(true);
-      setAnimateIn(false);
-      setError(null);
-      const authHeader = getAuthHeader();
+      setLoading(true)
+      setAnimateIn(false)
+      setError(null)
+      const authHeader = getAuthHeader()
       const url =
         `http://localhost:5000/api/admin/list?role=${role}` +
-        (searchTerm ? `&lastname=${encodeURIComponent(searchTerm)}` : "");
+        (searchTerm ? `&lastname=${encodeURIComponent(searchTerm)}` : '')
       const res = await fetch(url, {
         headers: {
-          "Content-Type": "application/json",
+          'Content-Type': 'application/json',
           ...(authHeader ? { Authorization: authHeader } : {}),
         },
-      });
-      if (!res.ok) throw new Error(await res.text());
-      const data = await res.json();
-      const elapsed = Date.now() - start;
-      if (elapsed < MIN_LOADING_MS) await sleep(MIN_LOADING_MS - elapsed);
-      setUsers(Array.isArray(data.users) ? data.users : []);
-      setTimeout(() => setAnimateIn(true), 20);
+      })
+      if (!res.ok) throw new Error(await res.text())
+      const data = await res.json()
+      const elapsed = Date.now() - start
+      if (elapsed < MIN_LOADING_MS) await sleep(MIN_LOADING_MS - elapsed)
+      setUsers(Array.isArray(data.users) ? data.users : [])
+      setTimeout(() => setAnimateIn(true), 20)
     } catch (e: any) {
-      setError(e?.message || "Failed to refresh users");
+      setError(e?.message || 'Failed to refresh users')
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  };
+  }
 
   // Connect to backend block/unblock
-  const callAdminAction = async (id: string, action: "block" | "unblock") => {
+  const callAdminAction = async (id: string, action: 'block' | 'unblock') => {
     try {
-      const authHeader = getAuthHeader();
+      const authHeader = getAuthHeader()
       const res = await fetch(
         `http://localhost:5000/api/admin/user/${id}/${action}`,
         {
-          method: "PATCH",
+          method: 'PATCH',
           headers: {
-            "Content-Type": "application/json",
+            'Content-Type': 'application/json',
             ...(authHeader ? { Authorization: authHeader } : {}),
           },
           body: JSON.stringify({}),
         }
-      );
-      const data = await res.json();
+      )
+      const data = await res.json()
 
       if (!res.ok) {
         // Prefer backend toast message when available
         const msg =
-          data?.toast?.message || data?.message || `Failed to ${action} user`;
-        if (data?.toast?.type === "error") {
+          data?.toast?.message || data?.message || `Failed to ${action} user`
+        if (data?.toast?.type === 'error') {
         } else {
-          toast.error(msg);
+          toast.error(msg)
         }
-        throw new Error(msg);
+        throw new Error(msg)
       }
 
       // Show backend toast (success / error) if present, fallback to generic
       if (data?.toast?.message) {
-        if (data.toast.type === "success") toast.success(data.toast.message);
-        else toast.error(data.toast.message);
+        if (data.toast.type === 'success') toast.success(data.toast.message)
+        else toast.error(data.toast.message)
       } else {
         toast.success(
-          `User ${action === "block" ? "blocked" : "unblocked"} successfully`
-        );
+          `User ${action === 'block' ? 'blocked' : 'unblocked'} successfully`
+        )
       }
 
       // Use the backend response to update the toggled user's status
       setUsers((prev) =>
         prev.map((u) => (u.id === id ? { ...u, isactive: !!data.isactive } : u))
-      );
+      )
       // No need to refresh; the UI already reflects the new state
     } catch (e: any) {
       // Use sonner toast for errors instead of alert
-      toast.error(e?.message || `Failed to ${action} user`);
+      toast.error(e?.message || `Failed to ${action} user`)
     }
-  };
+  }
 
-  const block = (id: string) => callAdminAction(id, "block");
-  const unblock = (id: string) => callAdminAction(id, "unblock");
+  const block = (id: string) => callAdminAction(id, 'block')
+  const unblock = (id: string) => callAdminAction(id, 'unblock')
 
   // --- NEW: compute available role change choices based on current panel role
   const roleChoices: {
-    label: string;
-    value: "customer" | "employee" | "admin";
+    label: string
+    value: 'customer' | 'employee' | 'admin'
   }[] = (() => {
-    if (role === "customer")
+    if (role === 'customer')
       return [
-        { label: "Staff", value: "employee" },
-        { label: "Admin", value: "admin" },
-      ];
-    if (role === "employee")
+        { label: 'Staff', value: 'employee' },
+        { label: 'Admin', value: 'admin' },
+      ]
+    if (role === 'employee')
       return [
-        { label: "Customer", value: "customer" },
-        { label: "Admin", value: "admin" },
-      ];
+        { label: 'Customer', value: 'customer' },
+        { label: 'Admin', value: 'admin' },
+      ]
     // role === "admin"
     return [
-      { label: "Customer", value: "customer" },
-      { label: "Staff", value: "employee" },
-    ];
-  })();
+      { label: 'Customer', value: 'customer' },
+      { label: 'Staff', value: 'employee' },
+    ]
+  })()
 
   // --- NEW: arrow function to change a user's role
   const changeRole = async (
     id: string,
-    newRole: "customer" | "employee" | "admin"
+    newRole: 'customer' | 'employee' | 'admin'
   ) => {
     try {
-      const authHeader = getAuthHeader();
+      const authHeader = getAuthHeader()
       const res = await fetch(
         `http://localhost:5000/api/admin/user/${id}/role`,
         {
-          method: "PATCH",
+          method: 'PATCH',
           headers: {
-            "Content-Type": "application/json",
+            'Content-Type': 'application/json',
             ...(authHeader ? { Authorization: authHeader } : {}),
           },
           body: JSON.stringify({ role: newRole }),
         }
-      );
-      const data = await res.json();
+      )
+      const data = await res.json()
 
       if (!res.ok) {
         const msg =
-          data?.toast?.message || data?.message || "Failed to change role";
-        if (data?.toast?.type === "error") toast.error(msg);
-        else toast.error(msg);
-        throw new Error(msg);
+          data?.toast?.message || data?.message || 'Failed to change role'
+        if (data?.toast?.type === 'error') toast.error(msg)
+        else toast.error(msg)
+        throw new Error(msg)
       }
 
       // show backend toast if present, fallback to generic
       if (data?.toast?.message) {
-        data.toast.type === "success"
+        data.toast.type === 'success'
           ? toast.success(data.toast.message)
-          : toast.error(data.toast.message);
+          : toast.error(data.toast.message)
       } else {
-        toast.success("Role changed successfully");
+        toast.success('Role changed successfully')
       }
 
       // If the user's new role no longer matches the current panel's role, remove them from list.
       if (newRole !== role) {
-        setUsers((prev) => prev.filter((u) => u.id !== id));
+        setUsers((prev) => prev.filter((u) => u.id !== id))
       } else {
         // otherwise update the user's role in-place
         setUsers((prev) =>
           prev.map((u) => (u.id === id ? { ...u, role: newRole } : u))
-        );
+        )
       }
     } catch (e: any) {
-      toast.error(e?.message || "Failed to change role");
+      toast.error(e?.message || 'Failed to change role')
     }
-  };
+  }
 
   // Client-side fallback filter so matched users always display in the table
-  const normalizedSearch = (searchTerm || "").trim().toLowerCase();
+  const normalizedSearch = (searchTerm || '').trim().toLowerCase()
   const displayedUsers = users.filter((u) =>
     normalizedSearch
       ? u.firstname.toLowerCase().includes(normalizedSearch) ||
@@ -426,17 +427,17 @@ function UserListPanel({
         u.email.toLowerCase().includes(normalizedSearch) ||
         u.contact.toLowerCase().includes(normalizedSearch)
       : true
-  );
+  )
   const tabletitles = [
-    { label: "First Name" },
-    { label: "Last Name" },
-    { label: "Email" },
-    { label: "Contact" },
-    { label: "Status" },
-    { label: "Last Logged In" },
-    { label: "Last Updated" },
-    { label: "Actions" },
-  ];
+    { label: 'First Name' },
+    { label: 'Last Name' },
+    { label: 'Email' },
+    { label: 'Contact' },
+    { label: 'Status' },
+    { label: 'Last Logged In' },
+    { label: 'Last Updated' },
+    { label: 'Actions' },
+  ]
   return (
     <div>
       <h2 className="text-xl font-semibold mb-3">{title}</h2>
@@ -456,7 +457,7 @@ function UserListPanel({
           <tbody
             // skeletons remain visible while loading; when not loading fade real rows in
             className={`transition-opacity duration-300 ease-out ${
-              loading ? "opacity-100" : animateIn ? "opacity-100" : "opacity-0"
+              loading ? 'opacity-100' : animateIn ? 'opacity-100' : 'opacity-0'
             }`}
           >
             {loading
@@ -501,17 +502,24 @@ function UserListPanel({
 
                     <Td>
                       <div className="flex w-20">
-                        {u.isactive ? "Active" : "Inactive"}
+                        {u.isactive ? 'Active' : 'Inactive'}
                       </div>
                     </Td>
-                    <Td>08/24/25</Td>
-
-                    <Td>02/01/04</Td>
+                    <Td>
+                      {u.last_login
+                        ? new Date(u.last_login).toLocaleString()
+                        : '—'}
+                    </Td>
+                    <Td>
+                      {u.last_updated
+                        ? new Date(u.last_updated).toLocaleString()
+                        : '—'}
+                    </Td>
                     <Td>
                       <Popover>
                         <PopoverTrigger>
                           <div className="item-center flex cursor-pointer px-3 py-1 hover:bg-gray-100 rounded">
-                            {" "}
+                            {' '}
                             <Ellipsis></Ellipsis>
                           </div>
                         </PopoverTrigger>
@@ -562,7 +570,7 @@ function UserListPanel({
             {displayedUsers.length === 0 && !loading && (
               <tr>
                 <td colSpan={8} className="text-center py-6 text-gray-500">
-                  {searchTerm ? "No available users" : `No ${role}s found`}
+                  {searchTerm ? 'No available users' : `No ${role}s found`}
                 </td>
               </tr>
             )}
@@ -570,43 +578,43 @@ function UserListPanel({
         </table>
       </div>
     </div>
-  );
+  )
 }
 
 // Create User Panel (local state only)
 function CreateUserPanel() {
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null)
 
   const [formData, setFormData] = useState<
-    Omit<Customer, "id"> | createUserData
+    Omit<Customer, 'id'> | createUserData
   >({
-    firstname: "",
-    lastname: "",
-    email: "",
-    password: "",
-    contact: "",
-  });
+    firstname: '',
+    lastname: '',
+    email: '',
+    password: '',
+    contact: '',
+  })
 
   const reset = () => {
     setFormData({
-      firstname: "",
-      lastname: "",
-      email: "",
-      password: "",
-      contact: "",
-    });
-  };
+      firstname: '',
+      lastname: '',
+      email: '',
+      password: '',
+      contact: '',
+    })
+  }
 
   const [formErrors, _setFormErrors] = useState<
     Partial<Record<keyof createUserData, string>>
-  >({});
+  >({})
 
   const save = async () => {
-    if (!formData.firstname || !formData.lastname || !formData.email) return;
+    if (!formData.firstname || !formData.lastname || !formData.email) return
     try {
-      const res = await fetch("http://localhost:5000/api/auth/register", {
-        method: "POST",
-        headers: { "Content-type": "application/json" },
+      const res = await fetch('http://localhost:5000/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-type': 'application/json' },
         body: JSON.stringify({
           username: formData.email,
           password: formData.password,
@@ -621,76 +629,76 @@ function CreateUserPanel() {
           postal_code: null,
           contact: formData.contact,
         }),
-      });
-      const data = await res.json();
+      })
+      const data = await res.json()
       if (res.ok) {
-        toast.success("User Creation successful! Please verify your email.");
+        toast.success('User Creation successful! Please verify your email.')
       } else {
-        setError(data.message || "User creation failed");
+        setError(data.message || 'User creation failed')
       }
     } catch (err) {
-      setError("An error occurred");
+      setError('An error occurred')
     }
-    reset();
-  };
+    reset()
+  }
 
   // --- NEW: users list for table in right column ---
-  const [users, setUsers] = useState<User[]>([]);
-  const [loadingUsers, setLoadingUsers] = useState(false);
-  const [usersError, setUsersError] = useState<string | null>(null);
+  const [users, setUsers] = useState<User[]>([])
+  const [loadingUsers, setLoadingUsers] = useState(false)
+  const [usersError, setUsersError] = useState<string | null>(null)
 
   useEffect(() => {
-    let cancelled = false;
+    let cancelled = false
     const fetchAll = async () => {
-      setLoadingUsers(true);
-      setUsersError(null);
+      setLoadingUsers(true)
+      setUsersError(null)
       try {
         const raw =
-          typeof window !== "undefined"
-            ? localStorage.getItem("access_token")
-            : null;
+          typeof window !== 'undefined'
+            ? localStorage.getItem('access_token')
+            : null
         const authHeader =
-          raw && raw.startsWith("Bearer ") ? raw : raw ? `Bearer ${raw}` : "";
-        const roles = ["customer", "employee", "admin"];
+          raw && raw.startsWith('Bearer ') ? raw : raw ? `Bearer ${raw}` : ''
+        const roles = ['customer', 'employee', 'admin']
         const promises = roles.map((r) =>
           fetch(`http://localhost:5000/api/admin/list?role=${r}`, {
             headers: {
-              "Content-Type": "application/json",
+              'Content-Type': 'application/json',
               ...(authHeader ? { Authorization: authHeader } : {}),
             },
           })
             .then(async (res) => {
-              if (!res.ok) return { users: [] };
-              return res.json();
+              if (!res.ok) return { users: [] }
+              return res.json()
             })
             .catch(() => ({ users: [] }))
-        );
-        const results = await Promise.all(promises);
-        if (cancelled) return;
+        )
+        const results = await Promise.all(promises)
+        if (cancelled) return
         // combine and dedupe by id
-        const combined: User[] = [];
-        const seen = new Set<string>();
+        const combined: User[] = []
+        const seen = new Set<string>()
         for (const r of results) {
-          const list = Array.isArray(r.users) ? r.users : [];
+          const list = Array.isArray(r.users) ? r.users : []
           for (const u of list) {
             if (!seen.has(u.id)) {
-              seen.add(u.id);
-              combined.push(u);
+              seen.add(u.id)
+              combined.push(u)
             }
           }
         }
-        setUsers(combined);
+        setUsers(combined)
       } catch (e: any) {
-        if (!cancelled) setUsersError(e?.message || "Failed to load users");
+        if (!cancelled) setUsersError(e?.message || 'Failed to load users')
       } finally {
-        if (!cancelled) setLoadingUsers(false);
+        if (!cancelled) setLoadingUsers(false)
       }
-    };
-    fetchAll();
+    }
+    fetchAll()
     return () => {
-      cancelled = true;
-    };
-  }, []);
+      cancelled = true
+    }
+  }, [])
 
   return (
     <div className="grid gap-6 md:grid-cols-2">
@@ -699,8 +707,8 @@ function CreateUserPanel() {
         <div className="bg-white overflow-y-auto max-h-96">
           <form
             onSubmit={(e) => {
-              e.preventDefault();
-              save();
+              e.preventDefault()
+              save()
             }}
             className="grid gap-3"
           >
@@ -788,7 +796,7 @@ function CreateUserPanel() {
                       <Td>{u.firstname}</Td>
                       <Td>{u.lastname}</Td>
                       <Td>{u.email}</Td>
-                      <Td>{u.role ?? "—"}</Td>
+                      <Td>{u.role ?? '—'}</Td>
                     </tr>
                   ))
                 )}
@@ -798,18 +806,18 @@ function CreateUserPanel() {
         </div>
       </div>
     </div>
-  );
+  )
 }
 function Input({
   label,
   value,
   onChange,
-  type = "text",
+  type = 'text',
 }: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  type?: string;
+  label: string
+  value: string
+  onChange: (v: string) => void
+  type?: string
 }) {
   return (
     <label className="block">
@@ -821,28 +829,28 @@ function Input({
         className="w-full border rounded-lg px-3 py-2 outline-none"
       />
     </label>
-  );
+  )
 }
 /* UI table helpers (pruned unused components) */
 function Th({
   children,
-  className = "",
+  className = '',
 }: {
-  children: React.ReactNode;
-  className?: string;
+  children: React.ReactNode
+  className?: string
 }) {
   return (
     <th className={`px-3 py-2 text-sm font-semibold ${className}`}>
       {children}
     </th>
-  );
+  )
 }
 function Td({
   children,
-  className = "",
+  className = '',
 }: {
-  children: React.ReactNode;
-  className?: string;
+  children: React.ReactNode
+  className?: string
 }) {
-  return <td className={`px-3 py-2 text-sm ${className}`}>{children}</td>;
+  return <td className={`px-3 py-2 text-sm ${className}`}>{children}</td>
 }

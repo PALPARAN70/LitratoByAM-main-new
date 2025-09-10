@@ -23,7 +23,8 @@ async function initUserTable() {
             verification_token TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            isactive BOOLEAN DEFAULT TRUE
+            isactive BOOLEAN DEFAULT TRUE,
+            last_login TIMESTAMP DEFAULT NULL
         )
     `)
 }
@@ -184,6 +185,14 @@ async function listAllUsers() {
 }
 /* ------------------------------------------------------------- */
 
+// Update last_login to the current timestamp
+async function updateLastLogin(userId) {
+  await pool.query(
+    'UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = $1',
+    [userId]
+  )
+}
+
 // Export
 module.exports = {
   initUserTable,
@@ -200,4 +209,5 @@ module.exports = {
   listAllUsers,
   isInActive,
   isActive,
+  updateLastLogin,
 }

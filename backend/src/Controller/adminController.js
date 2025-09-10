@@ -33,7 +33,8 @@ exports.listUsers = async (req, res) => {
       email: u.username,
       contact: u.contact || '',
       role: u.role || '',
-
+      last_login: u.last_login || null,
+      last_updated: u.last_updated || null,
       isactive: u.isactive === true, // added
     }))
 
