@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, useMemo } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-
+import MotionDiv from "../../../../Litratocomponents/MotionDiv";
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:5000";
 
 // Hoisted static schemas (prevents re-allocations each render)
@@ -288,157 +288,159 @@ export default function AccountManagementPage() {
   }, [changingPassword, passwordEditMode, passwordDirty, passwordForm]);
 
   return (
-    <div className="h-screen p-4">
-      <div className="flex flex-col p-4 justify-center gap-4">
-        {/* ================= Profile Section ================= */}
-        <div className="flex flex-col justify-center gap-2 items-center">
-          {/* Profile picture */}
-          <div className="flex bg-black h-30 w-30 rounded-full relative">
-            <Image
-              src={"/Images/me.jpg"}
-              alt="profile pic"
-              fill
-              className="rounded-full object-cover "
-            />
-          </div>
-
-          {/* Welcome text */}
-          <p className="text-black text-center text-3xl font-semibold">
-            Welcome, {personalForm.Firstname} {personalForm.Lastname ?? "User"}!
-          </p>
-
-          {/* Profile action buttons */}
-          <div className="flex flex-row gap-6">
-            {/* Unified Edit/Cancel/Save button */}
-            <div
-              onClick={handleProfileAction}
-              className={`bg-litratoblack rounded-full cursor-pointer py-2 px-4 text-white ${
-                saving ? "opacity-70 pointer-events-none" : ""
-              }`}
-            >
-              {!isEditable
-                ? "Edit Profile"
-                : saving
-                ? "Saving..."
-                : isPersonalDirty
-                ? "Save Changes"
-                : "Cancel Edit"}
-            </div>
-
-            {/* Black Change Password button with improved detector */}
-            <div
-              onClick={handlePasswordAction}
-              className={`bg-litratoblack rounded-full py-2 px-4 text-white ${
-                changingPassword
-                  ? "bg-gray-500 cursor-not-allowed"
-                  : "cursor-pointer"
-              }`}
-            >
-              {changingPassword
-                ? "Saving..."
-                : passwordEditMode
-                ? passwordDirty
-                  ? "Save Password "
-                  : "Cancel Edit"
-                : "Change Password"}
-            </div>
-          </div>
-        </div>
-
-        {/* ================= Personal Info Section ================= */}
-        <p className="text-2xl font-semibold">Manage your account</p>
-        <div className="flex flex-row gap-12 ">
-          {PERSONAL_INFO.map((field) => (
-            <div key={field.label} className="flex flex-col w-auto">
-              <label>{field.label}:</label>
-              <input
-                type={field.type}
-                value={
-                  field.key === "Birthdate" && personalForm.Birthdate
-                    ? isEditable
-                      ? personalForm.Birthdate
-                      : formatReadableDate(personalForm.Birthdate)
-                    : (personalForm as any)[field.key] ?? ""
-                }
-                onChange={(e) =>
-                  setPersonalForm((prev) => ({
-                    ...prev,
-                    [field.key]: e.target.value,
-                  }))
-                }
-                disabled={!isEditable}
-                className={`w-full rounded-md px-3 py-2 text-sm focus:outline-none ${
-                  isEditable
-                    ? "bg-gray-200"
-                    : "bg-gray-100 text-gray-400 cursor-not-allowed"
-                }`}
+    <MotionDiv>
+      <div className="h-screen p-4">
+        <div className="flex flex-col p-4 justify-center gap-4">
+          {/* ================= Profile Section ================= */}
+          <div className="flex flex-col justify-center gap-2 items-center">
+            {/* Profile picture */}
+            <div className="flex bg-black h-30 w-30 rounded-full relative">
+              <Image
+                src={"/Images/me.jpg"}
+                alt="profile pic"
+                fill
+                className="rounded-full object-cover "
               />
             </div>
-          ))}
-        </div>
 
-        {/* ================= Address Info Section ================= */}
-        <div className="flex flex-row gap-12">
-          {ADDRESS_INFO.map((field) => (
-            <div key={field.label} className="flex flex-col w-auto">
-              <label>{field.label}:</label>
-              <input
-                type={field.type}
-                value={personalForm[field.key] ?? ""}
-                onChange={(e) =>
-                  setPersonalForm((prev) => ({
-                    ...prev,
-                    [field.key]: e.target.value,
-                  }))
-                }
-                readOnly={!isEditable}
-                className={`w-full rounded-md px-3 py-2 text-sm focus:outline-none ${
-                  isEditable
-                    ? "bg-gray-200"
-                    : "bg-gray-100 text-gray-400 cursor-not-allowed"
+            {/* Welcome text */}
+            <p className="text-black text-center text-3xl font-semibold">
+              Welcome, {personalForm.Firstname}{" "}
+              {personalForm.Lastname ?? "User"}!
+            </p>
+
+            {/* Profile action buttons */}
+            <div className="flex flex-row gap-6">
+              {/* Unified Edit/Cancel/Save button */}
+              <div
+                onClick={handleProfileAction}
+                className={`bg-litratoblack rounded-full cursor-pointer py-2 px-4 text-white ${
+                  saving ? "opacity-70 pointer-events-none" : ""
                 }`}
-              />
-            </div>
-          ))}
-        </div>
+              >
+                {!isEditable
+                  ? "Edit Profile"
+                  : saving
+                  ? "Saving..."
+                  : isPersonalDirty
+                  ? "Save Changes"
+                  : "Cancel Edit"}
+              </div>
 
-        <p className="text-2xl font-semibold">Account Settings</p>
-        <div className="flex flex-col gap-4 w-1/3">
-          {ACCOUNT_SETTINGS.map((field) => (
-            <div key={field.label} className="flex flex-col">
-              <label>{field.label}:</label>
-              <input
-                type={field.type}
-                placeholder="Enter here:"
-                value={
-                  field.label === "Old Password"
-                    ? passwordForm.oldPassword
-                    : field.label === "New Password"
-                    ? passwordForm.newPassword
-                    : passwordForm.confirmPassword
-                }
-                onChange={(e) =>
-                  setPasswordForm((prev) => ({
-                    ...prev,
-                    [field.label === "Old Password"
-                      ? "oldPassword"
+              {/* Black Change Password button with improved detector */}
+              <div
+                onClick={handlePasswordAction}
+                className={`bg-litratoblack rounded-full py-2 px-4 text-white ${
+                  changingPassword
+                    ? "bg-gray-500 cursor-not-allowed"
+                    : "cursor-pointer"
+                }`}
+              >
+                {changingPassword
+                  ? "Saving..."
+                  : passwordEditMode
+                  ? passwordDirty
+                    ? "Save Password "
+                    : "Cancel Edit"
+                  : "Change Password"}
+              </div>
+            </div>
+          </div>
+
+          {/* ================= Personal Info Section ================= */}
+          <p className="text-2xl font-semibold">Manage your account</p>
+          <div className="flex flex-row gap-12 ">
+            {PERSONAL_INFO.map((field) => (
+              <div key={field.label} className="flex flex-col w-auto">
+                <label>{field.label}:</label>
+                <input
+                  type={field.type}
+                  value={
+                    field.key === "Birthdate" && personalForm.Birthdate
+                      ? isEditable
+                        ? personalForm.Birthdate
+                        : formatReadableDate(personalForm.Birthdate)
+                      : (personalForm as any)[field.key] ?? ""
+                  }
+                  onChange={(e) =>
+                    setPersonalForm((prev) => ({
+                      ...prev,
+                      [field.key]: e.target.value,
+                    }))
+                  }
+                  disabled={!isEditable}
+                  className={`w-full rounded-md px-3 py-2 text-sm focus:outline-none ${
+                    isEditable
+                      ? "bg-gray-200"
+                      : "bg-gray-100 text-gray-400 cursor-not-allowed"
+                  }`}
+                />
+              </div>
+            ))}
+          </div>
+
+          {/* ================= Address Info Section ================= */}
+          <div className="flex flex-row gap-12">
+            {ADDRESS_INFO.map((field) => (
+              <div key={field.label} className="flex flex-col w-auto">
+                <label>{field.label}:</label>
+                <input
+                  type={field.type}
+                  value={personalForm[field.key] ?? ""}
+                  onChange={(e) =>
+                    setPersonalForm((prev) => ({
+                      ...prev,
+                      [field.key]: e.target.value,
+                    }))
+                  }
+                  readOnly={!isEditable}
+                  className={`w-full rounded-md px-3 py-2 text-sm focus:outline-none ${
+                    isEditable
+                      ? "bg-gray-200"
+                      : "bg-gray-100 text-gray-400 cursor-not-allowed"
+                  }`}
+                />
+              </div>
+            ))}
+          </div>
+
+          <p className="text-2xl font-semibold">Account Settings</p>
+          <div className="flex flex-col gap-4 w-1/3">
+            {ACCOUNT_SETTINGS.map((field) => (
+              <div key={field.label} className="flex flex-col">
+                <label>{field.label}:</label>
+                <input
+                  type={field.type}
+                  placeholder="Enter here:"
+                  value={
+                    field.label === "Old Password"
+                      ? passwordForm.oldPassword
                       : field.label === "New Password"
-                      ? "newPassword"
-                      : "confirmPassword"]: e.target.value,
-                  }))
-                }
-                disabled={!passwordEditMode || changingPassword}
-                className={`w-full rounded-md px-3 py-2 text-sm focus:outline-none ${
-                  !passwordEditMode || changingPassword
-                    ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-                    : "bg-gray-200"
-                }`}
-              />
-            </div>
-          ))}
+                      ? passwordForm.newPassword
+                      : passwordForm.confirmPassword
+                  }
+                  onChange={(e) =>
+                    setPasswordForm((prev) => ({
+                      ...prev,
+                      [field.label === "Old Password"
+                        ? "oldPassword"
+                        : field.label === "New Password"
+                        ? "newPassword"
+                        : "confirmPassword"]: e.target.value,
+                    }))
+                  }
+                  disabled={!passwordEditMode || changingPassword}
+                  className={`w-full rounded-md px-3 py-2 text-sm focus:outline-none ${
+                    !passwordEditMode || changingPassword
+                      ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                      : "bg-gray-200"
+                  }`}
+                />
+              </div>
+            ))}
+          </div>
         </div>
       </div>
-    </div>
+    </MotionDiv>
   );
 }
-//
