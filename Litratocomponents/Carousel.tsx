@@ -65,7 +65,7 @@ const ImageSlider = () => {
             initial="center"
             animate={pos}
             variants={imageVariants}
-            transition={{ duration: 0.5 }}
+            transition={{ duration: 0.05 }}
             style={{ width: "40%", height: "50%", position: "absolute" }}
           />
         );

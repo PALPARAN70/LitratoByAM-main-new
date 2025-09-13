@@ -9,7 +9,7 @@ function LitratoNavbar() {
 
   return (
     <div>
-      <div className="fixed top-[36px] left-1/2 transform -translate-x-1/2 w-[710px] h-[45px] bg-white z-50 rounded flex justify-around pt-[13px] items-center font-semibold text-[20px] shadow-md shadow-litratoblack">
+      <div className="fixed top-[36px] left-1/2 transform -translate-x-1/2 w-[710px] h-[45px] bg-white z-99 rounded flex justify-around pt-[13px] items-center font-semibold text-[20px] shadow-md shadow-litratoblack">
         <p
           onClick={() => scrollToSection("home")}
           tabIndex={-1}
