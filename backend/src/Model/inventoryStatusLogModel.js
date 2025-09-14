@@ -3,17 +3,17 @@ const { pool } = require('../Config/db')
 
 async function initInventoryStatusLogTable() {
   await pool.query(`
-    CREATE TABLE status_log (
-    log_id SERIAL PRIMARY KEY,
-    entity_type VARCHAR(50) NOT NULL, -- "Inventory" or "Package"
-    entity_id INT NOT NULL,
-    status VARCHAR(50) NOT NULL,
-    notes TEXT,
-    updated_by INT NOT NULL, -- FK to staff/admin later
-    updated_at TIMESTAMP DEFAULT NOW(),
-    display BOOLEAN DEFAULT TRUE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    CREATE TABLE IF NOT EXISTS status_log (
+      log_id SERIAL PRIMARY KEY,
+      entity_type VARCHAR(50) NOT NULL, -- "Inventory" or "Package"
+      entity_id INT NOT NULL,
+      status VARCHAR(50) NOT NULL,
+      notes TEXT,
+      updated_by INT NOT NULL, -- FK to staff/admin later
+      updated_at TIMESTAMP DEFAULT NOW(),
+      display BOOLEAN DEFAULT TRUE,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
   `)
 }
@@ -71,10 +71,23 @@ async function updateLog(
   )
 }
 
+// NEW: soft delete a log
+async function softDeleteLog(log_id) {
+  await pool.query(
+    `
+      UPDATE status_log
+      SET display = FALSE, last_updated = NOW()
+      WHERE log_id = $1
+    `,
+    [log_id]
+  )
+}
+
 module.exports = {
   initInventoryStatusLogTable,
   createStatusLog,
   findLogsByEntity,
   getAllLogs,
   updateLog,
+  softDeleteLog, // <-- export
 }
