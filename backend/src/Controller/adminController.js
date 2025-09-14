@@ -260,13 +260,15 @@ exports.deleteInventoryItem = async (req, res) => {
 //create package -C
 exports.createPackage = async (req, res) => {
   try {
-    const { package_name, description, price, status, display } = req.body
+    const { package_name, description, price, status, display, image_url } =
+      req.body
     const newPackage = await packageModel.createPackage(
       package_name,
       description,
       price,
       status,
-      display
+      display,
+      image_url
     )
     res.json({
       toast: { type: 'success', message: 'Package created successfully' },
@@ -298,16 +300,16 @@ exports.listPackages = async (req, res) => {
 exports.updatePackage = async (req, res) => {
   try {
     const { package_id } = req.params
-    const { package_name, description, price, status, display } = req.body
+    const { package_name, description, price, status, display, image_url } =
+      req.body
 
-    //only update fields that are provided such as name, description, price, status, display
-    //create updates object dynamically
     const updates = {
       ...(package_name !== undefined && { package_name }),
       ...(description !== undefined && { description }),
       ...(price !== undefined && { price }),
       ...(status !== undefined && { status }),
       ...(display !== undefined && { display }),
+      ...(image_url !== undefined && { image_url }),
     }
     // if no valid fields provided
     if (Object.keys(updates).length === 0) {
@@ -450,7 +452,7 @@ exports.updatePackageInventoryItem = async (req, res) => {
     )
     if (!updated) {
       return res.status(404).json({
-        toast: { type: 'error', message: 'Item not found or no changes' },
+        toast: { type: 'error', message: 'Package inventory item not found' },
       })
     }
 
@@ -478,9 +480,9 @@ exports.deletePackageInventoryItem = async (req, res) => {
       { display: false }
     )
     if (!updated) {
-      return res
-        .status(404)
-        .json({ toast: { type: 'error', message: 'Item not found' } })
+      return res.status(404).json({
+        toast: { type: 'error', message: 'Package inventory item not found' },
+      })
     }
     res.json({
       toast: {
