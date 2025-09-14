@@ -10,6 +10,7 @@ async function initPackagesTable() {
       price NUMERIC(10,2) DEFAULT 0.00,
       status BOOLEAN DEFAULT TRUE,
       display BOOLEAN DEFAULT TRUE,
+      image_url TEXT,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
@@ -21,17 +22,17 @@ async function createPackage(
   description,
   price,
   status = true,
-  display = true
+  display = true,
+  image_url = null
 ) {
-  const result = await pool.query(
-    `
-      INSERT INTO packages (package_name, description, price, status, display)
-      VALUES ($1,$2,$3,$4,$5)
-      RETURNING *
-    `,
-    [package_name, description, price, status, display]
-  )
-  return result.rows[0]
+  const query = `
+    INSERT INTO packages (package_name, description, price, status, display, image_url)
+    VALUES ($1, $2, $3, $4, $5, $6)
+    RETURNING *
+  `
+  const values = [package_name, description, price, status, display, image_url]
+  const { rows } = await pool.query(query, values)
+  return rows[0]
 }
 // Get all packages
 async function getAllPackages() {
