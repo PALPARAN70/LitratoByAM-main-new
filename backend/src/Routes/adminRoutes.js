@@ -183,4 +183,40 @@ router.post(
   }
 )
 
+// ----- inventory status log routes ----- //
+router.post(
+  '/inventory-status-log',
+  authMiddleware,
+  roleMiddleware('admin'),
+  adminController.createInventoryStatusLog
+)
+
+router.get(
+  '/inventory-status-log',
+  authMiddleware,
+  roleMiddleware('admin'),
+  adminController.listInventoryStatusLogs
+)
+
+router.get(
+  '/inventory-status-log/by-entity',
+  authMiddleware,
+  roleMiddleware('admin'),
+  adminController.listInventoryStatusLogsByEntity
+)
+
+router.patch(
+  '/inventory-status-log/:log_id',
+  authMiddleware,
+  roleMiddleware('admin'),
+  adminController.updateInventoryStatusLog
+)
+
+router.delete(
+  '/inventory-status-log/:log_id',
+  authMiddleware,
+  roleMiddleware('admin'),
+  adminController.deleteInventoryStatusLog
+)
+
 module.exports = router

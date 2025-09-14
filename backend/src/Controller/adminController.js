@@ -222,13 +222,41 @@ exports.updateInventoryItem = async (req, res) => {
     const { inventoryID } = req.params
     const updates = req.body
 
-    await inventoryModel.updateInventory(inventoryID, updates)
+    // fetch current to compare status
+    const current = await inventoryModel.findInventoryById(inventoryID)
+    if (!current) {
+      return res
+        .status(404)
+        .json({ toast: { type: 'error', message: 'Inventory item not found' } })
+    }
+
+    const updated = await inventoryModel.updateInventory(inventoryID, updates)
+
+    // if status changed, create a status log (server-side auditing)
+    if (Object.prototype.hasOwnProperty.call(updates, 'status')) {
+      const prev = current.status === true
+      const next = !!updates.status
+      if (prev !== next) {
+        try {
+          await inventoryStatusLogModel.createStatusLog(
+            'Inventory',
+            Number(inventoryID),
+            next ? 'available' : 'unavailable',
+            updates.notes || null,
+            req.user?.id || 0
+          )
+        } catch (e) {
+          console.error('Create status log failed:', e)
+        }
+      }
+    }
 
     res.json({
       toast: {
         type: 'success',
         message: 'Inventory item updated successfully',
       },
+      item: updated,
     })
   } catch (e) {
     console.error('Update Inventory Item Error:', e)
@@ -503,19 +531,24 @@ exports.deletePackageInventoryItem = async (req, res) => {
 exports.createInventoryStatusLog = async (req, res) => {
   try {
     const { entity_type, entity_id, status, notes, updated_by } = req.body
-    const newLog = await inventoryStatusLogModel.createStatusLog(
-      entity_type,
-      entity_id,
-      status,
-      notes,
-      updated_by
+    if (!entity_type || entity_id == null || !status) {
+      return res
+        .status(400)
+        .json({ toast: { type: 'error', message: 'Missing required fields' } })
+    }
+    const updater = req.user?.id ?? updated_by ?? 0
+    await inventoryStatusLogModel.createStatusLog(
+      String(entity_type),
+      Number(entity_id),
+      String(status),
+      notes ?? null,
+      Number(updater)
     )
     res.json({
       toast: {
         type: 'success',
         message: 'Inventory status log created successfully',
       },
-      inventoryStatusLog: newLog,
     })
   } catch (e) {
     console.error('Create Inventory Status Log Error:', e)
@@ -524,16 +557,17 @@ exports.createInventoryStatusLog = async (req, res) => {
       .json({ toast: { type: 'error', message: 'Internal server error' } })
   }
 }
+
 //list all inventory status logs -R
 exports.listInventoryStatusLogs = async (req, res) => {
   try {
-    const inventoryStatusLogs = await inventoryStatusLogModel.getAllLogs()
+    const rows = await inventoryStatusLogModel.getAllLogs()
     res.json({
       toast: {
         type: 'success',
         message: 'Inventory status logs retrieved successfully',
       },
-      inventoryStatusLogs,
+      inventoryStatusLogs: rows,
     })
   } catch (e) {
     console.error('List Inventory Status Logs Error:', e)
@@ -542,18 +576,61 @@ exports.listInventoryStatusLogs = async (req, res) => {
       .json({ toast: { type: 'error', message: 'Internal server error' } })
   }
 }
-//update inventory status log -U
+
+// NEW: list logs by entity
+exports.listInventoryStatusLogsByEntity = async (req, res) => {
+  try {
+    const { entity_type, entity_id } = req.query
+    if (!entity_type || !entity_id) {
+      return res.status(400).json({
+        toast: { type: 'error', message: 'entity_type and entity_id required' },
+      })
+    }
+    const rows = await inventoryStatusLogModel.findLogsByEntity(
+      String(entity_type),
+      Number(entity_id)
+    )
+    res.json({
+      toast: {
+        type: 'success',
+        message: 'Inventory status logs retrieved successfully',
+      },
+      inventoryStatusLogs: rows,
+    })
+  } catch (e) {
+    console.error('List Inventory Status Logs By Entity Error:', e)
+    res
+      .status(500)
+      .json({ toast: { type: 'error', message: 'Internal server error' } })
+  }
+}
+
+// update inventory status log -U
 exports.updateInventoryStatusLog = async (req, res) => {
   try {
     const { log_id } = req.params
-    const { entity_type, entity_id, status, notes, updated_by } = req.body
+    const { entity_type, entity_id, status, notes } = req.body
+    if (!log_id) {
+      return res
+        .status(400)
+        .json({ toast: { type: 'error', message: 'log_id is required' } })
+    }
+    if (!entity_type || entity_id == null || !status) {
+      return res.status(400).json({
+        toast: {
+          type: 'error',
+          message: 'entity_type, entity_id, and status are required',
+        },
+      })
+    }
+    const updater = req.user?.id ?? 0
     await inventoryStatusLogModel.updateLog(
-      log_id,
-      entity_type,
-      entity_id,
-      status,
-      notes,
-      updated_by
+      Number(log_id),
+      String(entity_type),
+      Number(entity_id),
+      String(status),
+      notes ?? null,
+      Number(updater)
     )
     res.json({
       toast: {
@@ -568,11 +645,12 @@ exports.updateInventoryStatusLog = async (req, res) => {
       .json({ toast: { type: 'error', message: 'Internal server error' } })
   }
 }
+
 //delete inventory status log by making display false -D
 exports.deleteInventoryStatusLog = async (req, res) => {
   try {
     const { log_id } = req.params
-    await inventoryStatusLogModel.updateLog(log_id, { display: false })
+    await inventoryStatusLogModel.softDeleteLog(log_id)
     res.json({
       toast: {
         type: 'success',

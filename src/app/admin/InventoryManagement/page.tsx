@@ -58,7 +58,7 @@ type EquipmentRow = {
 const FILTER_OPTIONS = [
   { label: 'Package', value: 'all' },
   { label: 'Equipment', value: 'active' },
-  { label: 'Log Items', value: 'inactive' },
+  { label: 'Item Logs', value: 'inactive' },
 ]
 
 export default function InventoryManagementPage() {
@@ -87,7 +87,7 @@ export default function InventoryManagementPage() {
             active={active === 'logitems'}
             onClick={() => setActive('logitems')}
           >
-            Log Items
+            Item Logs
           </TabButton>
 
           <div className="flex-grow flex">
@@ -119,9 +119,10 @@ export default function InventoryManagementPage() {
           </div>
         </nav>
         <section className="bg-white h-125 rounded-xl shadow p-4">
-          {' '}
           {active === 'equipment' && <CreateEquipmentPanel />}
           {active === 'package' && <CreatePackagePanel />}
+          {active === 'logitems' && <ItemLogsPanel />}
+          {/* NEW */}
         </section>
       </div>
     </MotionDiv>
@@ -1276,6 +1277,251 @@ export default function InventoryManagementPage() {
           {packages.map((pkg) => (
             <SimplePackageCard key={pkg.id} pkg={pkg} />
           ))}
+        </div>
+      </div>
+    )
+  }
+
+  // NEW: Item Logs panel
+  function ItemLogsPanel() {
+    type LogRow = {
+      log_id: number
+      entity_type: string
+      entity_id: number
+      status: string
+      notes: string | null
+      updated_by: number
+      updated_at: string
+    }
+
+    const [logs, setLogs] = useState<LogRow[]>([])
+    const [loading, setLoading] = useState(false)
+    const [form, setForm] = useState<{
+      entity_type: 'Inventory' | 'Package'
+      entity_id: string
+      status: string
+      notes: string
+    }>({
+      entity_type: 'Inventory',
+      entity_id: '',
+      status: 'available',
+      notes: '',
+    })
+
+    const API_ORIGIN =
+      process.env.NEXT_PUBLIC_API_ORIGIN ?? 'http://localhost:5000'
+    const API_BASE = `${API_ORIGIN}/api/admin`
+    const getCookie = (name: string) =>
+      typeof document === 'undefined'
+        ? ''
+        : document.cookie
+            .split('; ')
+            .find((r) => r.startsWith(name + '='))
+            ?.split('=')[1] || ''
+    const getAuthHeaderString = () => {
+      const raw =
+        (typeof window !== 'undefined' &&
+          localStorage.getItem('access_token')) ||
+        getCookie('access_token')
+      if (!raw) return ''
+      return raw.startsWith('Bearer ') ? raw : `Bearer ${raw}`
+    }
+    const getAuthHeaders = (): Record<string, string> => {
+      const auth = getAuthHeaderString()
+      return auth ? { Authorization: auth } : {}
+    }
+
+    const load = useCallback(async () => {
+      setLoading(true)
+      try {
+        const res = await fetch(`${API_BASE}/inventory-status-log`, {
+          headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        })
+        if (!res.ok) throw new Error(await res.text())
+        const data = await res.json()
+        const list = Array.isArray(data?.inventoryStatusLogs)
+          ? data.inventoryStatusLogs
+          : Array.isArray(data)
+          ? data
+          : []
+        setLogs(list)
+      } catch (e) {
+        console.error('Load logs failed:', e)
+      } finally {
+        setLoading(false)
+      }
+    }, [API_BASE])
+
+    useEffect(() => {
+      load()
+    }, [load])
+
+    const createLog = async () => {
+      if (!form.entity_id || !form.status) return
+      try {
+        const res = await fetch(`${API_BASE}/inventory-status-log`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+          body: JSON.stringify({
+            entity_type: form.entity_type,
+            entity_id: Number(form.entity_id),
+            status: form.status,
+            notes: form.notes || null,
+            updated_by: 0, // server can replace with req.user.id if desired
+          }),
+        })
+        if (!res.ok) throw new Error(await res.text())
+        await load()
+        setForm((p) => ({
+          ...p,
+          entity_id: '',
+          status: 'available',
+          notes: '',
+        }))
+      } catch (e) {
+        console.error('Create log failed:', e)
+      }
+    }
+
+    const deleteLog = async (id: number) => {
+      const prev = logs
+      setLogs((p) => p.filter((l) => l.log_id !== id))
+      try {
+        const res = await fetch(`${API_BASE}/inventory-status-log/${id}`, {
+          method: 'DELETE',
+          headers: { ...getAuthHeaders() },
+        })
+        if (!res.ok) throw new Error(await res.text())
+      } catch (e) {
+        console.error('Delete log failed:', e)
+        setLogs(prev)
+      }
+    }
+
+    return (
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-col md:flex-row gap-3 md:items-end">
+          <div className="flex flex-col gap-1">
+            <label className="text-sm font-medium">Entity Type</label>
+            <Select
+              value={form.entity_type}
+              onValueChange={(v) =>
+                setForm((p) => ({
+                  ...p,
+                  entity_type: v as 'Inventory' | 'Package',
+                }))
+              }
+            >
+              <SelectTrigger className="h-9 text-sm rounded">
+                <SelectValue placeholder="Select type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Inventory">Inventory</SelectItem>
+                <SelectItem value="Package">Package</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-sm font-medium">Entity ID</label>
+            <Input
+              className="h-9 rounded-md border px-3 text-sm outline-none"
+              placeholder="e.g. 12"
+              value={form.entity_id}
+              onChange={(e) =>
+                setForm((p) => ({ ...p, entity_id: e.target.value }))
+              }
+            />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-sm font-medium">Status</label>
+            <Select
+              value={form.status}
+              onValueChange={(v) => setForm((p) => ({ ...p, status: v }))}
+            >
+              <SelectTrigger className="h-9 text-sm rounded">
+                <SelectValue placeholder="Select status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="available">Available</SelectItem>
+                <SelectItem value="unavailable">Unavailable</SelectItem>
+                <SelectItem value="maintenance">Maintenance</SelectItem>
+                <SelectItem value="damaged">Damaged</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex-1 flex flex-col gap-1">
+            <label className="text-sm font-medium">Notes</label>
+            <Input
+              className="h-9 rounded-md border px-3 text-sm outline-none"
+              placeholder="Optional notes"
+              value={form.notes}
+              onChange={(e) =>
+                setForm((p) => ({ ...p, notes: e.target.value }))
+              }
+            />
+          </div>
+          <Button
+            className="bg-litratoblack text-white h-9"
+            onClick={createLog}
+          >
+            Add Log
+          </Button>
+        </div>
+
+        <div className="overflow-hidden rounded border">
+          <Table className="w-full table-auto">
+            <TableHeader>
+              <TableRow>
+                <TableHead className="px-4 py-2">ID</TableHead>
+                <TableHead className="px-4 py-2">Entity</TableHead>
+                <TableHead className="px-4 py-2">Entity ID</TableHead>
+                <TableHead className="px-4 py-2">Status</TableHead>
+                <TableHead className="px-4 py-2">Notes</TableHead>
+                <TableHead className="px-4 py-2">Updated By</TableHead>
+                <TableHead className="px-4 py-2">Updated At</TableHead>
+                <TableHead className="px-4 py-2">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {loading ? (
+                <TableRow>
+                  <TableCell className="px-4 py-3" colSpan={8}>
+                    Loading...
+                  </TableCell>
+                </TableRow>
+              ) : logs.length === 0 ? (
+                <TableRow>
+                  <TableCell className="px-4 py-3" colSpan={8}>
+                    No logs found
+                  </TableCell>
+                </TableRow>
+              ) : (
+                logs.map((l) => (
+                  <TableRow key={l.log_id} className="even:bg-gray-50">
+                    <TableCell className="px-4 py-2">{l.log_id}</TableCell>
+                    <TableCell className="px-4 py-2">{l.entity_type}</TableCell>
+                    <TableCell className="px-4 py-2">{l.entity_id}</TableCell>
+                    <TableCell className="px-4 py-2">{l.status}</TableCell>
+                    <TableCell className="px-4 py-2">{l.notes || ''}</TableCell>
+                    <TableCell className="px-4 py-2">{l.updated_by}</TableCell>
+                    <TableCell className="px-4 py-2">
+                      {new Date(l.updated_at).toLocaleString()}
+                    </TableCell>
+                    <TableCell className="px-4 py-2">
+                      <button
+                        type="button"
+                        onClick={() => deleteLog(l.log_id)}
+                        title="Delete"
+                        className="text-litratored hover:text-red-600"
+                      >
+                        Delete
+                      </button>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
         </div>
       </div>
     )
