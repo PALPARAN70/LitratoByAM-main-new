@@ -265,6 +265,7 @@ exports.updateInventoryItem = async (req, res) => {
       .json({ toast: { type: 'error', message: 'Internal server error' } })
   }
 }
+
 //delete inventory item by making display false -D
 exports.deleteInventoryItem = async (req, res) => {
   try {
