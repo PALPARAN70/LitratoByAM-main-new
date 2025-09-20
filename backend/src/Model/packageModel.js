@@ -41,12 +41,24 @@ async function getAllPackages() {
   )
   return result.rows
 }
+// Get archived (hidden) packages
+async function getArchivedPackages() {
+  const result = await pool.query(
+    `SELECT * FROM packages WHERE display = FALSE ORDER BY package_name ASC`
+  )
+  return result.rows
+}
 // Get package by ID
 async function getPackageById(id) {
   const result = await pool.query(
     `SELECT * FROM packages WHERE id = $1 AND display = TRUE`,
     [id]
   )
+  return result.rows[0]
+}
+// Get package by ID ignoring display (used for diff when un-archiving)
+async function getPackageByIdAny(id) {
+  const result = await pool.query(`SELECT * FROM packages WHERE id = $1`, [id])
   return result.rows[0]
 }
 // Update package details
@@ -57,6 +69,7 @@ async function updatePackage(id, updates) {
     price: true,
     status: true,
     display: true,
+    image_url: true,
   }
   const sets = []
   const values = []
@@ -84,6 +97,8 @@ module.exports = {
   initPackagesTable,
   createPackage,
   getAllPackages,
+  getArchivedPackages,
   getPackageById,
+  getPackageByIdAny,
   updatePackage,
 }

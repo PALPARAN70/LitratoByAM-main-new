@@ -155,6 +155,7 @@ const inventoryModel = require('../Model/inventoryModel')
 const packageModel = require('../Model/packageModel')
 const packageInventoryItemModel = require('../Model/packageInventoryItemModel')
 const inventoryStatusLogModel = require('../Model/inventoryStatusLogModel')
+const materialTypesModel = require('../Model/materialTypesModel')
 
 //create inventory item -C
 exports.createInventoryItem = async (req, res) => {
@@ -162,8 +163,6 @@ exports.createInventoryItem = async (req, res) => {
     const {
       materialName,
       materialType,
-      totalQuantity,
-      availableQuantity,
       condition,
       status,
       lastDateChecked,
@@ -174,14 +173,32 @@ exports.createInventoryItem = async (req, res) => {
     const newItem = await inventoryModel.createInventoryItem(
       materialName,
       materialType,
-      totalQuantity,
-      availableQuantity,
       condition,
       status,
       lastDateChecked,
       notes,
       display
     )
+
+    // auto log: equipment created
+    try {
+      await inventoryStatusLogModel.createStatusLog(
+        'Inventory',
+        Number(newItem.id),
+        'created',
+        JSON.stringify({
+          changes: {
+            material_name: [null, newItem.material_name],
+            material_type: [null, newItem.material_type],
+            condition: [null, newItem.condition],
+            status: [null, newItem.status ? 'available' : 'unavailable'],
+          },
+        }),
+        req.user?.id || 0
+      )
+    } catch (logErr) {
+      console.error('Auto log (create inventory) failed:', logErr)
+    }
 
     res.json({
       toast: {
@@ -195,6 +212,35 @@ exports.createInventoryItem = async (req, res) => {
     res
       .status(500)
       .json({ toast: { type: 'error', message: 'Internal server error' } })
+  }
+}
+
+// -------- material types management -------- //
+exports.listMaterialTypes = async (_req, res) => {
+  try {
+    const rows = await materialTypesModel.listMaterialTypes()
+    res.json({ materialTypes: rows })
+  } catch (e) {
+    console.error('List material types error:', e)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+exports.createMaterialType = async (req, res) => {
+  try {
+    const { name } = req.body || {}
+    if (!name || !String(name).trim()) {
+      return res.status(400).json({ error: 'Name is required' })
+    }
+    const row = await materialTypesModel.createMaterialType(String(name).trim())
+    res.json({ materialType: row })
+  } catch (e) {
+    console.error('Create material type error:', e)
+    if (e.code === '23505') {
+      // unique violation
+      return res.status(409).json({ error: 'Type already exists' })
+    }
+    res.status(500).json({ error: 'Internal server error' })
   }
 }
 //used for creating inventory items
@@ -232,24 +278,60 @@ exports.updateInventoryItem = async (req, res) => {
 
     const updated = await inventoryModel.updateInventory(inventoryID, updates)
 
-    // if status changed, create a status log (server-side auditing)
-    if (Object.prototype.hasOwnProperty.call(updates, 'status')) {
-      const prev = current.status === true
-      const next = !!updates.status
-      if (prev !== next) {
-        try {
-          await inventoryStatusLogModel.createStatusLog(
-            'Inventory',
-            Number(inventoryID),
-            next ? 'available' : 'unavailable',
-            updates.notes || null,
-            req.user?.id || 0
-          )
-        } catch (e) {
-          console.error('Create status log failed:', e)
+    // build change diff (only relevant fields)
+    const diff = {}
+    const trackFields = [
+      'material_name',
+      'material_type',
+      'condition',
+      'status',
+    ]
+    for (const f of trackFields) {
+      if (Object.prototype.hasOwnProperty.call(updates, f)) {
+        const oldVal = current[f]
+        const newVal = updated ? updated[f] : undefined
+        if (oldVal !== newVal) {
+          // normalize status boolean to labels
+          const normalize = (field, val) => {
+            if (field === 'status') return val ? 'available' : 'unavailable'
+            return val === null || val === undefined ? null : String(val)
+          }
+          diff[f] = [normalize(f, oldVal), normalize(f, newVal)]
         }
       }
     }
+    if (Object.keys(diff).length) {
+      try {
+        await inventoryStatusLogModel.createStatusLog(
+          'Inventory',
+          Number(inventoryID),
+          'updated',
+          JSON.stringify({ changes: diff }),
+          req.user?.id || 0
+        )
+      } catch (logErr) {
+        console.error('Auto log (update inventory) failed:', logErr)
+      }
+    }
+
+    // // if status changed, create a status log (server-side auditing)
+    // if (Object.prototype.hasOwnProperty.call(updates, 'status')) {
+    //   const prev = current.status === true
+    //   const next = !!updates.status
+    //   if (prev !== next) {
+    //     try {
+    //       await inventoryStatusLogModel.createStatusLog(
+    //         'Inventory',
+    //         Number(inventoryID),
+    //         next ? 'available' : 'unavailable',
+    //         updates.notes || null,
+    //         req.user?.id || 0
+    //       )
+    //     } catch (e) {
+    //       console.error('Create status log failed:', e)
+    //     }
+    //   }
+    // }
 
     res.json({
       toast: {
@@ -299,6 +381,25 @@ exports.createPackage = async (req, res) => {
       display,
       image_url
     )
+    // auto log: package created
+    try {
+      await inventoryStatusLogModel.createStatusLog(
+        'Package',
+        Number(newPackage.id),
+        'created',
+        JSON.stringify({
+          changes: {
+            package_name: [null, newPackage.package_name],
+            price: [null, String(newPackage.price)],
+            status: [null, newPackage.status ? 'active' : 'inactive'],
+            display: [null, newPackage.display ? 'visible' : 'hidden'],
+          },
+        }),
+        req.user?.id || 0
+      )
+    } catch (logErr) {
+      console.error('Auto log (create package) failed:', logErr)
+    }
     res.json({
       toast: { type: 'success', message: 'Package created successfully' },
       package: newPackage,
@@ -320,6 +421,24 @@ exports.listPackages = async (req, res) => {
     })
   } catch (e) {
     console.error('List Packages Error:', e)
+    res
+      .status(500)
+      .json({ toast: { type: 'error', message: 'Internal server error' } })
+  }
+}
+// list archived (hidden) packages
+exports.listArchivedPackages = async (_req, res) => {
+  try {
+    const packages = await packageModel.getArchivedPackages()
+    res.json({
+      toast: {
+        type: 'success',
+        message: 'Archived packages retrieved successfully',
+      },
+      packages,
+    })
+  } catch (e) {
+    console.error('List Archived Packages Error:', e)
     res
       .status(500)
       .json({ toast: { type: 'error', message: 'Internal server error' } })
@@ -347,6 +466,18 @@ exports.updatePackage = async (req, res) => {
         .json({ toast: { type: 'error', message: 'No valid fields provided' } })
     }
     //update package
+    // need original for diff when fields change (including archived packages)
+    let original = null
+    try {
+      // First try visible fetch
+      original = await packageModel.getPackageById(package_id)
+      // If not found (likely archived), fetch regardless of display so diff logging still works
+      if (!original && typeof packageModel.getPackageByIdAny === 'function') {
+        original = await packageModel.getPackageByIdAny(package_id)
+      }
+    } catch (e) {
+      // ignore fetch error
+    }
     const updated = await packageModel.updatePackage(package_id, updates)
     if (!updated) {
       return res
@@ -354,6 +485,45 @@ exports.updatePackage = async (req, res) => {
         .json({ toast: { type: 'error', message: 'Package not found' } })
     }
     //return success
+    // diff logging (only certain fields)
+    if (original && updated) {
+      const diff = {}
+      const track = ['package_name', 'price', 'status', 'display']
+      for (const f of track) {
+        if (Object.prototype.hasOwnProperty.call(updates, f)) {
+          const oldVal = original[f]
+          const newVal = updated[f]
+          if (oldVal !== newVal) {
+            const normalize = (field, val) => {
+              if (field === 'status') return val ? 'active' : 'inactive'
+              if (field === 'display') return val ? 'visible' : 'hidden'
+              return val === null || val === undefined ? null : String(val)
+            }
+            diff[f] = [normalize(f, oldVal), normalize(f, newVal)]
+          }
+        }
+      }
+      if (Object.keys(diff).length) {
+        try {
+          // Special case: un-archiving (display hidden -> visible)
+          const displayChange = diff.display
+          const isUnarchive =
+            displayChange &&
+            displayChange[0] === 'hidden' &&
+            displayChange[1] === 'visible'
+          await inventoryStatusLogModel.createStatusLog(
+            'Package',
+            Number(package_id),
+            isUnarchive ? 'unarchived' : 'updated',
+            JSON.stringify({ changes: diff }),
+            req.user?.id || 0
+          )
+        } catch (logErr) {
+          console.error('Auto log (update package) failed:', logErr)
+        }
+      }
+    }
+
     res.json({
       toast: { type: 'success', message: 'Package updated successfully' },
       package: updated,

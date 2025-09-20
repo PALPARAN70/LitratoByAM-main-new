@@ -58,8 +58,6 @@ type EquipmentRow = {
   id: string
   name: string
   type: string
-  totalQuantity: number
-  availableQuantity: number
   condition: string
   status: EquipmentTabKey
   moreDetails: string
@@ -67,6 +65,87 @@ type EquipmentRow = {
   notes: string
   created_at: string
   last_updated: string
+}
+
+// Default equipment type options
+const DEFAULT_EQUIPMENT_TYPES = [
+  'Camera',
+  'Tripod',
+  'Lighting',
+  'Backdrop',
+  'Printer',
+  'Prop',
+  'Speech bubble',
+  'Frame',
+  'Electronics',
+]
+
+//<------------------------ Add Type button component----------[ Part of Add Equipment ]------------------------->
+const AddTypeButton = ({ onAdd }: { onAdd: (type: string) => void }) => {
+  const [adding, setAdding] = React.useState(false)
+  const [value, setValue] = React.useState('')
+
+  const normalize = (v: string) => {
+    const trimmed = v.trim()
+    if (!trimmed) return ''
+    return trimmed.charAt(0).toUpperCase() + trimmed.slice(1)
+  }
+  const commit = () => {
+    const v = normalize(value)
+    if (!v) return
+    onAdd(v)
+    setValue('')
+    setAdding(false)
+  }
+  return (
+    <div className="flex items-center">
+      {adding ? (
+        <div className="flex items-center gap-1">
+          <input
+            className="h-9 w-28 rounded border bg-background px-2 text-xs"
+            placeholder="New type"
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                commit()
+              } else if (e.key === 'Escape') {
+                setAdding(false)
+                setValue('')
+              }
+            }}
+          />
+          <button
+            type="button"
+            className="rounded bg-primary px-2 py-1 text-[10px] font-medium text-primary-foreground hover:opacity-90"
+            onClick={commit}
+          >
+            Add
+          </button>
+          <button
+            type="button"
+            className="rounded border px-2 py-1 text-[10px] hover:bg-muted"
+            onClick={() => {
+              setAdding(false)
+              setValue('')
+            }}
+          >
+            Cancel
+          </button>
+        </div>
+      ) : (
+        <button
+          type="button"
+          className="h-9 whitespace-nowrap rounded border px-2 text-xs font-medium hover:bg-muted"
+          onClick={() => setAdding(true)}
+          title="Add new equipment type"
+        >
+          New
+        </button>
+      )}
+    </div>
+  )
 }
 
 // Hoisted static filter options (prevents re-creation on each render)
@@ -191,6 +270,9 @@ export default function InventoryManagementPage() {
   function CreateEquipmentPanel({ searchTerm }: { searchTerm?: string }) {
     const [active, setActive] = useState<EquipmentTabKey>('available')
     const [items, setItems] = useState<EquipmentRow[]>([])
+    const [equipmentTypes, setEquipmentTypes] = useState<string[]>(
+      DEFAULT_EQUIPMENT_TYPES
+    )
     // API base (override via .env.local NEXT_PUBLIC_API_ORIGIN=http://localhost:5000)
     const API_ORIGIN =
       process.env.NEXT_PUBLIC_API_ORIGIN ?? 'http://localhost:5000'
@@ -223,8 +305,6 @@ export default function InventoryManagementPage() {
       id: String(it.id),
       name: it.material_name,
       type: it.material_type,
-      totalQuantity: Number(it.total_quantity ?? 0),
-      availableQuantity: Number(it.available_quantity ?? 0),
       condition: it.condition ?? '',
       status: it.status ? 'available' : 'unavailable',
       moreDetails: 'View',
@@ -267,8 +347,6 @@ export default function InventoryManagementPage() {
       id: '',
       name: '',
       type: '',
-      totalQuantity: 0,
-      availableQuantity: 0,
       condition: '',
       status: 'available' as EquipmentTabKey,
       last_date_checked: '',
@@ -282,12 +360,14 @@ export default function InventoryManagementPage() {
     ) => setForm((prev) => ({ ...prev, [key]: value }))
     const handleCreate = async () => {
       try {
+        // Basic validation: require name and type selection
+        if (!form.name.trim() || !form.type.trim()) {
+          console.warn('Name and Type are required to create equipment')
+          return
+        }
         const body = {
           materialName: form.name.trim(),
           materialType: form.type.trim(),
-          totalQuantity: Number(form.totalQuantity) || 0,
-          availableQuantity:
-            Number(form.availableQuantity || form.totalQuantity) || 0,
           condition: form.condition.trim() || 'Good',
           status: form.status === 'available',
           lastDateChecked: new Date().toISOString(),
@@ -313,8 +393,6 @@ export default function InventoryManagementPage() {
         id: '',
         name: '',
         type: '',
-        totalQuantity: 0,
-        availableQuantity: 0,
         condition: '',
         status: 'available',
         last_date_checked: '',
@@ -392,15 +470,11 @@ export default function InventoryManagementPage() {
     // Columns defined once
     const columns = useMemo(
       () => [
-        { key: 'id', label: 'SKU' },
         { key: 'name', label: 'Name' },
         { key: 'type', label: 'Type' },
-        { key: 'totalQuantity', label: 'Total Quantity' },
-        { key: 'availableQuantity', label: 'Quantity' },
         { key: 'condition', label: 'Condition' },
         { key: 'status', label: 'Status' },
         { key: 'moreDetails', label: 'More Details' },
-        // NEW: Actions column
         { key: 'actions', label: 'Actions' },
       ],
       []
@@ -423,10 +497,7 @@ export default function InventoryManagementPage() {
         updates.material_name = String(form.name).trim()
       if (form.type !== undefined)
         updates.material_type = String(form.type).trim()
-      if (form.totalQuantity !== undefined)
-        updates.total_quantity = Number(form.totalQuantity)
-      if (form.availableQuantity !== undefined)
-        updates.available_quantity = Number(form.availableQuantity)
+      // quantity fields removed from schema; ignore any legacy fields
       if (form.condition !== undefined)
         updates.condition = String(form.condition).trim() || 'Good'
       if (form.notes !== undefined) updates.notes = form.notes ?? ''
@@ -470,12 +541,7 @@ export default function InventoryManagementPage() {
               ...(updates.material_type !== undefined && {
                 type: updates.material_type,
               }),
-              ...(updates.total_quantity !== undefined && {
-                totalQuantity: updates.total_quantity,
-              }),
-              ...(updates.available_quantity !== undefined && {
-                availableQuantity: updates.available_quantity,
-              }),
+              // quantity fields removed
               ...(updates.condition !== undefined && {
                 condition: updates.condition,
               }),
@@ -600,12 +666,32 @@ export default function InventoryManagementPage() {
                     </div>
                     <div className="flex flex-col gap-1">
                       <label className="text-sm font-medium">Type</label>
-                      <Input
-                        className="h-9 rounded-md border px-3 text-sm outline-none"
-                        placeholder="e.g. Photography"
-                        value={form.type}
-                        onChange={handleText('type')}
-                      />
+                      <div className="flex gap-2">
+                        <Select
+                          value={form.type}
+                          onValueChange={(value) => updateForm('type', value)}
+                        >
+                          <SelectTrigger className="h-9 text-sm rounded w-full">
+                            <SelectValue placeholder="Select type" />
+                          </SelectTrigger>
+                          <SelectContent className="max-h-56 overflow-auto">
+                            {equipmentTypes.map((t) => (
+                              <SelectItem key={t} value={t}>
+                                {t}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <AddTypeButton
+                          onAdd={(newType) => {
+                            setEquipmentTypes((prev) => {
+                              if (prev.includes(newType)) return prev
+                              return [...prev, newType]
+                            })
+                            updateForm('type', newType)
+                          }}
+                        />
+                      </div>
                     </div>
                     <div className="flex flex-col gap-1">
                       <label className="text-sm font-medium">Condition</label>
@@ -624,18 +710,7 @@ export default function InventoryManagementPage() {
                         </SelectContent>
                       </Select>
                     </div>
-                    <div className="flex flex-col gap-1">
-                      <label className="text-sm font-medium">
-                        Total Quantity
-                      </label>
-                      <Input
-                        type="number"
-                        min={0}
-                        className="h-9 rounded-md border px-3 text-sm outline-none "
-                        value={form.totalQuantity}
-                        onChange={handleNumber('totalQuantity')}
-                      />
-                    </div>
+                    {/* Quantity fields removed */}
 
                     <div className="flex flex-col gap-1">
                       <label className="text-sm font-medium">Status</label>
@@ -1016,8 +1091,7 @@ export default function InventoryManagementPage() {
           setForm({
             name: row.name,
             type: row.type,
-            totalQuantity: row.totalQuantity,
-            availableQuantity: row.availableQuantity,
+            // quantity fields removed
             condition: row.condition,
             notes: row.notes,
           })
@@ -1059,12 +1133,32 @@ export default function InventoryManagementPage() {
                 </div>
                 <div className="flex flex-col gap-1">
                   <label className="text-sm font-medium">Type</label>
-                  <Input
-                    className="h-9 rounded-md border px-3 text-sm outline-none"
-                    placeholder="e.g. Photography"
+                  <Select
                     value={(form.type as string) ?? ''}
-                    onChange={handleChange('type')}
-                  />
+                    onValueChange={(v) => setForm((p) => ({ ...p, type: v }))}
+                  >
+                    <SelectTrigger className="h-9 text-sm rounded">
+                      <SelectValue placeholder="Select type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {equipmentTypes.map((t) => (
+                        <SelectItem key={t} value={t}>
+                          {t}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <div className="mt-2">
+                    <AddTypeButton
+                      onAdd={(newType) => {
+                        setEquipmentTypes((prev) => {
+                          if (prev.includes(newType)) return prev
+                          return [...prev, newType]
+                        })
+                        setForm((p) => ({ ...p, type: newType }))
+                      }}
+                    />
+                  </div>
                 </div>
                 <div className="flex flex-col gap-1">
                   <label className="text-sm font-medium">Condition</label>
@@ -1083,26 +1177,7 @@ export default function InventoryManagementPage() {
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="flex flex-col gap-1">
-                  <label className="text-sm font-medium">Total Quantity</label>
-                  <Input
-                    type="number"
-                    min={0}
-                    className="h-9 rounded-md border px-3 text-sm outline-none"
-                    value={(form.totalQuantity as number) ?? 0}
-                    onChange={handleChange('totalQuantity')}
-                  />
-                </div>
-                <div className="flex flex-col gap-1">
-                  <label className="text-sm font-medium">Quantity</label>
-                  <Input
-                    type="number"
-                    min={0}
-                    className="h-9 rounded-md border px-3 text-sm outline-none"
-                    value={(form.availableQuantity as number) ?? 0}
-                    onChange={handleChange('availableQuantity')}
-                  />
-                </div>
+                {/* Quantity fields removed from edit dialog */}
                 <div className="flex flex-col gap-1 sm:col-span-2">
                   <label className="text-sm font-medium">Notes</label>
                   <Textarea
@@ -1149,7 +1224,17 @@ export default function InventoryManagementPage() {
     }
 
     const [open, setOpen] = useState(false)
-    const [packages, setPackages] = useState<PackageItem[]>([])
+    const [packages, setPackages] = useState<PackageItem[]>([]) // active (display=true)
+    const [archivedPackages, setArchivedPackages] = useState<PackageItem[]>([]) // archived (display=false)
+    const [pkgView, setPkgView] = useState<'active' | 'archived'>('active')
+    const [editPkgOpen, setEditPkgOpen] = useState(false)
+    const [editPkgForm, setEditPkgForm] = useState<{
+      id: string
+      name: string
+      price: number
+      imageUrl: string
+      features: string[]
+    }>({ id: '', name: '', price: 0, imageUrl: '', features: [] })
     const [pkgForm, setPkgForm] = useState<{
       name: string
       price: number
@@ -1194,8 +1279,6 @@ export default function InventoryManagementPage() {
     type InvPick = {
       id: string
       name: string
-      available: number
-      total: number
     }
     const [inventory, setInventory] = useState<InvPick[]>([])
     const [selected, setSelected] = useState<Record<string, number>>({}) // inventory_id -> qty
@@ -1220,8 +1303,7 @@ export default function InventoryManagementPage() {
           const items = list.map((it: any) => ({
             id: String(it.id),
             name: it.material_name as string,
-            available: Number(it.available_quantity ?? 0),
-            total: Number(it.total_quantity ?? 0),
+            // quantities removed from schema
           }))
           if (!ignore) setInventory(items)
         } catch (e) {
@@ -1233,21 +1315,13 @@ export default function InventoryManagementPage() {
       }
     }, [API_BASE])
 
-    const toggleItem = (id: string, on: boolean, max: number) =>
+    const toggleItem = (id: string, on: boolean) =>
       setSelected((prev) => {
         const next = { ...prev }
-        if (on) {
-          if (!next[id]) next[id] = Math.min(1, Math.max(1, max))
-        } else {
-          delete next[id]
-        }
+        if (on) next[id] = 1
+        else delete next[id]
         return next
       })
-    const setQty = (id: string, qty: number, max: number) =>
-      setSelected((prev) => ({
-        ...prev,
-        [id]: Math.max(1, Math.min(max, Number(qty) || 1)),
-      }))
 
     const handleCreatePackage = async () => {
       const name = pkgForm.name.trim()
@@ -1280,10 +1354,10 @@ export default function InventoryManagementPage() {
         if (!pkgId) throw new Error('Package created but id missing')
 
         // 2) Create junction rows for selected inventory items
-        const pairs = Object.entries(selected).filter(([, q]) => Number(q) > 0)
-        if (pairs.length) {
+        const ids = Object.keys(selected)
+        if (ids.length) {
           await Promise.all(
-            pairs.map(([inventory_id, quantity]) =>
+            ids.map((inventory_id) =>
               fetch(`${API_BASE}/package-inventory-item`, {
                 method: 'POST',
                 headers: {
@@ -1293,7 +1367,7 @@ export default function InventoryManagementPage() {
                 body: JSON.stringify({
                   package_id: Number(pkgId),
                   inventory_id: Number(inventory_id),
-                  quantity: Number(quantity),
+                  quantity: 1,
                 }),
               }).then(async (r) => {
                 if (!r.ok) throw new Error(await r.text())
@@ -1359,7 +1433,7 @@ export default function InventoryManagementPage() {
       }
     }
 
-    // Fetch existing packages on mount
+    // Fetch existing packages (active) on mount
     useEffect(() => {
       let ignore = false
       ;(async () => {
@@ -1388,6 +1462,37 @@ export default function InventoryManagementPage() {
         ignore = true
       }
     }, [API_BASE])
+
+    // Fetch archived packages when panel first opens OR when switching to archived view and we haven't loaded yet
+    useEffect(() => {
+      if (pkgView !== 'archived') return
+      // if we already loaded once skip
+      if (archivedPackages.length) return
+      let ignore = false
+      ;(async () => {
+        try {
+          const res = await fetch(`${API_BASE}/package/archived`, {
+            headers: {
+              'Content-Type': 'application/json',
+              ...getAuthHeaders(),
+            },
+          })
+          if (!res.ok) throw new Error(`GET /package/archived ${res.status}`)
+          const data = await res.json()
+          const list = Array.isArray(data)
+            ? data
+            : Array.isArray(data.packages)
+            ? data.packages
+            : []
+          if (!ignore) setArchivedPackages(list.map(mapPackageFromApi))
+        } catch (e) {
+          console.error('Load archived packages failed:', e)
+        }
+      })()
+      return () => {
+        ignore = true
+      }
+    }, [pkgView, archivedPackages.length, API_BASE])
 
     // Cast to any to align with your PromoCard API without forcing prop types here.
     const Promo = PromoCard as any
@@ -1485,9 +1590,11 @@ export default function InventoryManagementPage() {
     function SimplePackageCard({
       pkg,
       onToggleDisplay,
+      onEdit,
     }: {
       pkg: PackageItem
       onToggleDisplay?: (pkg: PackageItem) => void
+      onEdit?: (pkg: PackageItem) => void
     }) {
       const features = Array.isArray(pkg.features) ? pkg.features : []
       const hidden = pkg.display === false
@@ -1512,17 +1619,29 @@ export default function InventoryManagementPage() {
                   Hidden
                 </span>
               ) : null}
-              <div
-                onClick={() => onToggleDisplay?.(pkg)}
-                className="absolute to-80 right-2 inline-flex items-center justify-center w-8 h-8 rounded-full bg-slate-300 cursor-pointer hover:text-white  "
-                title={hidden ? 'Unhide package' : 'Hide package'}
-                aria-label={hidden ? 'Unhide package' : 'Hide package'}
-              >
-                {hidden ? (
-                  <Eye className="w-4 h-4" />
-                ) : (
-                  <EyeOff className="w-4 h-4" />
-                )}
+              <div className="absolute top-2 right-2 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => onEdit?.(pkg)}
+                  className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-slate-300 hover:bg-slate-400"
+                  title="Edit package"
+                  aria-label="Edit package"
+                >
+                  <Pencil className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onToggleDisplay?.(pkg)}
+                  className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-slate-300 hover:bg-slate-400"
+                  title={hidden ? 'Unhide package' : 'Hide package'}
+                  aria-label={hidden ? 'Unhide package' : 'Hide package'}
+                >
+                  {hidden ? (
+                    <Eye className="w-4 h-4" />
+                  ) : (
+                    <EyeOff className="w-4 h-4" />
+                  )}
+                </button>
               </div>
             </div>
             <p className="text-sm text-gray-600">
@@ -1615,10 +1734,16 @@ export default function InventoryManagementPage() {
     // Toggle package visibility (display flag) with optimistic UI update
     const togglePackageDisplay = async (pkg: PackageItem) => {
       const nextDisplay = pkg.display === false ? true : false
-      const prev = packages
-      setPackages((p) =>
-        p.map((it) => (it.id === pkg.id ? { ...it, display: nextDisplay } : it))
-      )
+      // optimistic move between arrays
+      if (nextDisplay) {
+        // move from archived -> active
+        setArchivedPackages((arr) => arr.filter((p) => p.id !== pkg.id))
+        setPackages((arr) => [{ ...pkg, display: true }, ...arr])
+      } else {
+        // move from active -> archived
+        setPackages((arr) => arr.filter((p) => p.id !== pkg.id))
+        setArchivedPackages((arr) => [{ ...pkg, display: false }, ...arr])
+      }
       try {
         const res = await fetch(`${API_BASE}/package/${pkg.id}`, {
           method: 'PATCH',
@@ -1631,33 +1756,112 @@ export default function InventoryManagementPage() {
         if (!res.ok) throw new Error(await res.text())
       } catch (e) {
         console.error('Toggle package display failed:', e)
-        setPackages(prev)
+        // rollback
+        if (nextDisplay) {
+          // revert move back to archived
+          setPackages((arr) => arr.filter((p) => p.id !== pkg.id))
+          setArchivedPackages((arr) => [{ ...pkg }, ...arr])
+        } else {
+          setArchivedPackages((arr) => arr.filter((p) => p.id !== pkg.id))
+          setPackages((arr) => [{ ...pkg }, ...arr])
+        }
       }
     }
 
     // Apply search filter by package name (case-insensitive)
     const normalizedPkgSearch = (searchTerm || '').trim().toLowerCase()
-    const filteredPackages = useMemo(() => {
+    const filteredActive = useMemo(() => {
       if (!normalizedPkgSearch) return packages
       return packages.filter((p) =>
         (p.name || '').toLowerCase().includes(normalizedPkgSearch)
       )
     }, [packages, normalizedPkgSearch])
+    const filteredArchived = useMemo(() => {
+      if (!normalizedPkgSearch) return archivedPackages
+      return archivedPackages.filter((p) =>
+        (p.name || '').toLowerCase().includes(normalizedPkgSearch)
+      )
+    }, [archivedPackages, normalizedPkgSearch])
+    const activeList = pkgView === 'active' ? filteredActive : filteredArchived
 
     // NEW: pagination for packages (3 per page)
     const PKG_PER_PAGE = 3
     const [pkgPage, setPkgPage] = useState(1)
     const pkgTotalPages = Math.max(
       1,
-      Math.ceil(filteredPackages.length / PKG_PER_PAGE)
+      Math.ceil(activeList.length / PKG_PER_PAGE)
     )
     useEffect(() => {
       setPkgPage((p) => Math.min(Math.max(1, p), pkgTotalPages))
     }, [pkgTotalPages])
     const paginatedPackages = useMemo(() => {
       const start = (pkgPage - 1) * PKG_PER_PAGE
-      return filteredPackages.slice(start, start + PKG_PER_PAGE)
-    }, [filteredPackages, pkgPage])
+      return activeList.slice(start, start + PKG_PER_PAGE)
+    }, [activeList, pkgPage])
+
+    const openEditPackage = (pkg: PackageItem) => {
+      setEditPkgForm({
+        id: pkg.id,
+        name: pkg.name,
+        price: pkg.price,
+        imageUrl: pkg.imageUrl,
+        features: [...pkg.features],
+      })
+      setEditPkgOpen(true)
+    }
+
+    const handleEditFileChange: React.ChangeEventHandler<
+      HTMLInputElement
+    > = async (e) => {
+      const file = e.target.files?.[0]
+      if (!file) return
+      try {
+        const url = await uploadPackageImage(file)
+        setEditPkgForm((p) => ({ ...p, imageUrl: url }))
+      } catch (err) {
+        console.error('Edit package image upload failed:', err)
+      }
+    }
+
+    const saveEditedPackage = async () => {
+      const id = editPkgForm.id
+      if (!id) return
+      try {
+        const res = await fetch(`${API_BASE}/package/${id}`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            ...getAuthHeaders(),
+          },
+          body: JSON.stringify({
+            package_name: editPkgForm.name.trim(),
+            price: editPkgForm.price,
+            image_url: editPkgForm.imageUrl,
+            description: editPkgForm.features
+              .map((f) => f.trim())
+              .filter(Boolean)
+              .join('\n'),
+          }),
+        })
+        if (!res.ok) throw new Error(await res.text())
+        setPackages((prev) =>
+          prev.map((p) =>
+            p.id === id
+              ? {
+                  ...p,
+                  name: editPkgForm.name,
+                  price: editPkgForm.price,
+                  imageUrl: editPkgForm.imageUrl,
+                  features: [...editPkgForm.features],
+                }
+              : p
+          )
+        )
+        setEditPkgOpen(false)
+      } catch (e) {
+        console.error('Save edited package failed:', e)
+      }
+    }
     const pkgWindowPages = useMemo(
       () => pageWindow(pkgPage, pkgTotalPages, 3),
       [pkgPage, pkgTotalPages]
@@ -1665,9 +1869,24 @@ export default function InventoryManagementPage() {
 
     return (
       <div className="flex flex-col h-full min-h-0">
-        <div className="flex justify-between border-b-2 border-black">
-          <div className="flex flex-row gap-4 ">
-            <h2>Create Package</h2>
+        <div className="flex justify-between border-b-2 border-black items-center">
+          <div className="flex items-center gap-4">
+            <h2 className="text-xl font-semibold">Create Package</h2>
+            {/* Active / Archived toggle using shared TabButton for consistent styling */}
+            <div className="flex gap-2 mb-2">
+              <TabButton
+                active={pkgView === 'active'}
+                onClick={() => setPkgView('active')}
+              >
+                Active
+              </TabButton>
+              <TabButton
+                active={pkgView === 'archived'}
+                onClick={() => setPkgView('archived')}
+              >
+                Archived
+              </TabButton>
+            </div>
           </div>
 
           <Dialog open={open} onOpenChange={setOpen}>
@@ -1758,7 +1977,6 @@ export default function InventoryManagementPage() {
                       ) : (
                         inventory.map((it) => {
                           const checked = it.id in selected
-                          const qty = selected[it.id] ?? 1
                           return (
                             <div
                               key={it.id}
@@ -1768,36 +1986,14 @@ export default function InventoryManagementPage() {
                                 type="checkbox"
                                 checked={checked}
                                 onChange={(e) =>
-                                  toggleItem(
-                                    it.id,
-                                    e.target.checked,
-                                    it.available
-                                  )
+                                  toggleItem(it.id, e.target.checked)
                                 }
                               />
                               <div className="flex-1">
                                 <div className="text-sm font-medium">
                                   {it.name}
                                 </div>
-                                <div className="text-xs text-gray-600">
-                                  Available: {it.available} / Total: {it.total}
-                                </div>
                               </div>
-                              <Input
-                                type="number"
-                                min={1}
-                                max={it.available || 1}
-                                value={qty}
-                                disabled={!checked}
-                                onChange={(e) =>
-                                  setQty(
-                                    it.id,
-                                    Number(e.target.value),
-                                    it.available || 1
-                                  )
-                                }
-                                className="w-24 h-8"
-                              />
                             </div>
                           )
                         })
@@ -1865,14 +2061,149 @@ export default function InventoryManagementPage() {
         </div>
 
         {/* Cards grid scrolls; pagination stays at bottom */}
+
+        {/* Edit Package Dialog */}
+        {editPkgOpen && (
+          <Dialog
+            open={editPkgOpen}
+            onOpenChange={(o) => {
+              if (!o) setEditPkgOpen(false)
+            }}
+          >
+            <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>Edit Package</DialogTitle>
+                <DialogDescription>
+                  Update package details and image.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div>
+                  <label className="text-sm font-medium">Name</label>
+                  <Input
+                    value={editPkgForm.name}
+                    onChange={(e) =>
+                      setEditPkgForm((p) => ({ ...p, name: e.target.value }))
+                    }
+                    placeholder="Package name"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Price (PHP)</label>
+                  <Input
+                    type="number"
+                    value={editPkgForm.price}
+                    onChange={(e) =>
+                      setEditPkgForm((p) => ({
+                        ...p,
+                        price: Number(e.target.value) || 0,
+                      }))
+                    }
+                    placeholder="0"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium mb-1 block">
+                    Image
+                  </label>
+                  {editPkgForm.imageUrl ? (
+                    <img
+                      src={editPkgForm.imageUrl}
+                      alt="preview"
+                      className="w-full h-40 object-cover rounded mb-2"
+                    />
+                  ) : null}
+                  <Input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleEditFileChange}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm font-medium">Features</label>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="h-8 rounded px-3"
+                      onClick={() =>
+                        setEditPkgForm((p) => ({
+                          ...p,
+                          features: [...p.features, ''],
+                        }))
+                      }
+                    >
+                      Add Feature
+                    </Button>
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    {editPkgForm.features.map((feat, idx) => (
+                      <div key={idx} className="flex items-center gap-2">
+                        <Input
+                          className="h-9 rounded-md border px-3 text-sm outline-none"
+                          placeholder={`Feature ${idx + 1}`}
+                          value={feat}
+                          onChange={(e) =>
+                            setEditPkgForm((p) => {
+                              const copy = [...p.features]
+                              copy[idx] = e.target.value
+                              return { ...p, features: copy }
+                            })
+                          }
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="h-9 rounded"
+                          onClick={() =>
+                            setEditPkgForm((p) => ({
+                              ...p,
+                              features: p.features.filter((_, i) => i !== idx),
+                            }))
+                          }
+                        >
+                          Remove
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              <DialogFooter className="mt-4">
+                <DialogClose asChild>
+                  <Button type="button" variant="outline">
+                    Cancel
+                  </Button>
+                </DialogClose>
+                <Button
+                  type="button"
+                  className="bg-litratoblack text-white"
+                  onClick={saveEditedPackage}
+                >
+                  Save Changes
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        )}
+
         <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 flex-1 min-h-0 overflow-auto">
-          {paginatedPackages.map((pkg) => (
-            <SimplePackageCard
-              key={pkg.id}
-              pkg={pkg}
-              onToggleDisplay={togglePackageDisplay}
-            />
-          ))}
+          {paginatedPackages.length ? (
+            paginatedPackages.map((pkg) => (
+              <SimplePackageCard
+                key={pkg.id}
+                pkg={pkg}
+                onToggleDisplay={() => togglePackageDisplay(pkg)}
+                onEdit={() => openEditPackage(pkg)}
+              />
+            ))
+          ) : (
+            <div className="col-span-full text-center text-sm text-gray-500 py-6">
+              {pkgView === 'active'
+                ? 'No active packages found.'
+                : 'No archived packages.'}
+            </div>
+          )}
         </div>
 
         {/* Pagination pinned at bottom */}
@@ -2073,6 +2404,46 @@ export default function InventoryManagementPage() {
       }
     }, [API_BASE])
 
+    // Fetch archived packages too so names are available even when hidden
+    useEffect(() => {
+      let ignore = false
+      ;(async () => {
+        try {
+          const res = await fetch(`${API_BASE}/package/archived`, {
+            headers: {
+              'Content-Type': 'application/json',
+              ...getAuthHeaders(),
+            },
+          })
+          if (!res.ok) return
+          const data = await res.json()
+          const list = Array.isArray(data)
+            ? data
+            : Array.isArray((data as any)?.packages)
+            ? (data as any).packages
+            : []
+          if (!list.length) return
+          const add: Record<string, string> = {}
+          for (const it of list) {
+            const id = String((it as any).id ?? (it as any).package_id ?? '')
+            if (!id) continue
+            const name = String(
+              (it as any).package_name ?? (it as any).name ?? `#${id}`
+            )
+            add[id] = name
+          }
+          if (!ignore && Object.keys(add).length) {
+            setPackageNames((prev) => ({ ...add, ...prev }))
+          }
+        } catch (e) {
+          console.error('Load archived package names failed:', e)
+        }
+      })()
+      return () => {
+        ignore = true
+      }
+    }, [API_BASE])
+
     const load = useCallback(async () => {
       setLoading(true)
       try {
@@ -2125,31 +2496,65 @@ export default function InventoryManagementPage() {
       }
     }
 
-    const deleteLog = async (id: number) => {
-      const prev = logs
-      setLogs((p) => p.filter((l) => l.log_id !== id))
-      try {
-        const res = await fetch(`${API_BASE}/inventory-status-log/${id}`, {
-          method: 'DELETE',
-          headers: { ...getAuthHeaders() },
-        })
-        if (!res.ok) throw new Error(await res.text())
-      } catch (e) {
-        console.error('Delete log failed:', e)
-        setLogs(prev)
-      }
-    }
-
+    // NEW: pagination for logs (5 per page)
     const LOGS_PER_PAGE = 5
     const [logsPage, setLogsPage] = useState(1)
     const logsTotalPages = Math.max(1, Math.ceil(logs.length / LOGS_PER_PAGE))
     useEffect(() => {
       setLogsPage((p) => Math.min(Math.max(1, p), logsTotalPages))
     }, [logsTotalPages, logs.length])
+    const enrichedLogs = useMemo(() => {
+      return logs.map((l: any) => {
+        let changes: Record<string, [any, any]> | null = null
+        if (l.notes) {
+          try {
+            const parsed = JSON.parse(l.notes)
+            if (parsed && typeof parsed === 'object' && parsed.changes) {
+              changes = parsed.changes
+            }
+          } catch {}
+        }
+        // Determine log type and display status/condition based on entity type and changes
+        let logType = 'Updated'
+        if (l.status === 'created') logType = 'Created'
+        else if (l.status === 'unarchived') logType = 'Unarchived'
+        else if (l.status === 'archived') logType = 'Archived'
+        let statusDisplay = ''
+        let conditionDisplay: string | null = null
+        if (l.entity_type === 'Inventory') {
+          if (changes?.status) {
+            statusDisplay = String(changes.status[1]) // already 'available'|'unavailable'
+          } else {
+            // fallback: if initial log (created) assume available unless explicitly different
+            statusDisplay = 'available'
+          }
+          if (changes?.condition) {
+            conditionDisplay = String(changes.condition[1])
+          }
+        } else if (l.entity_type === 'Package') {
+          if (changes?.display) {
+            statusDisplay =
+              changes.display[1] === 'visible' ? 'unhidden' : 'hidden'
+          } else {
+            statusDisplay = 'unhidden'
+          }
+          conditionDisplay = null
+        } else {
+          statusDisplay = l.status
+        }
+        return {
+          ...l,
+          _changes: changes,
+          _logType: logType,
+          _statusDisplay: statusDisplay,
+          _conditionDisplay: conditionDisplay,
+        }
+      })
+    }, [logs])
     const paginatedLogs = useMemo(() => {
       const start = (logsPage - 1) * LOGS_PER_PAGE
-      return logs.slice(start, start + LOGS_PER_PAGE)
-    }, [logs, logsPage])
+      return enrichedLogs.slice(start, start + LOGS_PER_PAGE)
+    }, [enrichedLogs, logsPage])
     const logsWindowPages = useMemo(
       () => pageWindow(logsPage, logsTotalPages, 3),
       [logsPage, logsTotalPages]
@@ -2250,11 +2655,12 @@ export default function InventoryManagementPage() {
           <Table className="w-full table-auto">
             <TableHeader>
               <TableRow className="bg-gray-200 hover:not-enabled:bg-gray-200">
-                <TableHead className="px-4 py-2">ID</TableHead>
                 <TableHead className="px-4 py-2">Entity</TableHead>
                 <TableHead className="px-4 py-2">Name</TableHead>
+                <TableHead className="px-4 py-2">Log Type</TableHead>
                 <TableHead className="px-4 py-2">Status</TableHead>
-                <TableHead className="px-4 py-2">Notes</TableHead>
+                <TableHead className="px-4 py-2">Condition</TableHead>
+                <TableHead className="px-4 py-2">More Details</TableHead>
                 <TableHead className="px-4 py-2">Updated By</TableHead>
                 <TableHead className="px-4 py-2">Updated At</TableHead>
                 <TableHead className="px-4 py-2">Actions</TableHead>
@@ -2263,20 +2669,19 @@ export default function InventoryManagementPage() {
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell className="px-4 py-3" colSpan={8}>
+                  <TableCell className="px-4 py-3" colSpan={9}>
                     Loading...
                   </TableCell>
                 </TableRow>
               ) : paginatedLogs.length === 0 ? (
                 <TableRow>
-                  <TableCell className="px-4 py-3" colSpan={8}>
+                  <TableCell className="px-4 py-3" colSpan={9}>
                     No logs found
                   </TableCell>
                 </TableRow>
               ) : (
                 paginatedLogs.map((l) => (
                   <TableRow key={l.log_id} className="even:bg-gray-50">
-                    <TableCell className="px-4 py-2">{l.log_id}</TableCell>
                     <TableCell className="px-4 py-2">{l.entity_type}</TableCell>
                     <TableCell className="px-4 py-2">
                       {l.entity_type === 'Inventory'
@@ -2286,8 +2691,65 @@ export default function InventoryManagementPage() {
                         ? packageNames[String(l.entity_id)] ?? `#${l.entity_id}`
                         : `#${l.entity_id}`}
                     </TableCell>
-                    <TableCell className="px-4 py-2">{l.status}</TableCell>
-                    <TableCell className="px-4 py-2">{l.notes || ''}</TableCell>
+                    <TableCell className="px-4 py-2">{l._logType}</TableCell>
+                    <TableCell className="px-4 py-2 capitalize">
+                      {l._statusDisplay}
+                    </TableCell>
+                    <TableCell className="px-4 py-2 capitalize">
+                      {l._conditionDisplay ??
+                        (l.entity_type === 'Package' ? '' : '—')}
+                    </TableCell>
+                    <TableCell className="px-4 py-2">
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <button
+                            type="button"
+                            aria-label="More details"
+                            className="inline-flex items-center justify-center rounded border px-2 py-1 bg-gray-100 hover:bg-gray-200"
+                          >
+                            <Ellipsis className="h-4 w-4" />
+                          </button>
+                        </PopoverTrigger>
+                        <PopoverContent align="end" className="w-64 text-xs">
+                          <div className="space-y-1">
+                            {l._changes ? (
+                              <div className="mt-2">
+                                <div className="font-medium mb-1">Changes:</div>
+                                <ul className="list-disc list-inside space-y-0.5">
+                                  {Object.entries(l._changes).map(
+                                    ([field, pair]) => {
+                                      const [oldV, newV] = pair as [any, any]
+                                      return (
+                                        <li key={field}>
+                                          <span className="font-medium capitalize">
+                                            {field.replace(/_/g, ' ')}:
+                                          </span>{' '}
+                                          {oldV === null ||
+                                          oldV === undefined ||
+                                          oldV === ''
+                                            ? '—'
+                                            : String(oldV)}{' '}
+                                          {'->'}{' '}
+                                          {newV === null ||
+                                          newV === undefined ||
+                                          newV === ''
+                                            ? '—'
+                                            : String(newV)}
+                                        </li>
+                                      )
+                                    }
+                                  )}
+                                </ul>
+                              </div>
+                            ) : (
+                              <div className="mt-2 text-gray-500">
+                                No field changes
+                              </div>
+                            )}
+                          </div>
+                        </PopoverContent>
+                      </Popover>
+                    </TableCell>
                     <TableCell className="px-4 py-2">{l.updated_by}</TableCell>
                     <TableCell className="px-4 py-2">
                       {new Date(l.updated_at).toLocaleString()}
@@ -2295,11 +2757,10 @@ export default function InventoryManagementPage() {
                     <TableCell className="px-4 py-2">
                       <button
                         type="button"
-                        onClick={() => deleteLog(l.log_id)}
-                        title="Delete"
-                        className="text-litratored hover:text-red-600"
+                        title="Edit log (not implemented)"
+                        onClick={() => {}}
                       >
-                        <Trash2></Trash2>
+                        <Pencil></Pencil>
                       </button>
                     </TableCell>
                   </TableRow>
