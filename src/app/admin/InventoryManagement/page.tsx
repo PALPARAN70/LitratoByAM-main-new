@@ -186,7 +186,10 @@ export default function InventoryManagementPage() {
     () => <CreatePackagePanel searchTerm={searchTerm} />,
     [searchTerm]
   )
-  const itemLogsPanelEl = useMemo(() => <ItemLogsPanel />, [])
+  const itemLogsPanelEl = useMemo(
+    () => <ItemLogsPanel searchTerm={searchTerm} />,
+    [searchTerm]
+  )
 
   return (
     <>
@@ -1234,7 +1237,13 @@ export default function InventoryManagementPage() {
       price: number
       imageUrl: string
       features: string[]
-    }>({ id: '', name: '', price: 0, imageUrl: '', features: [] })
+    }>({
+      id: '',
+      name: '',
+      price: 0,
+      imageUrl: '',
+      features: [],
+    })
     const [pkgForm, setPkgForm] = useState<{
       name: string
       price: number
@@ -2257,14 +2266,16 @@ export default function InventoryManagementPage() {
     )
   }
 
-  function ItemLogsPanel() {
+  function ItemLogsPanel({ searchTerm }: { searchTerm?: string }) {
     type LogRow = {
       log_id: number
       entity_type: string
       entity_id: number
       status: string
       notes: string | null
-      updated_by: number
+      updated_by: number | null
+      updated_by_name?: string
+      updated_by_username?: string
       updated_at: string
     }
 
@@ -2375,10 +2386,10 @@ export default function InventoryManagementPage() {
           const data = await res.json()
           const list = Array.isArray(data)
             ? data
-            : Array.isArray((data as any)?.packages)
-            ? (data as any).packages
-            : Array.isArray((data as any)?.items)
-            ? (data as any).items
+            : Array.isArray(data.packages)
+            ? data.packages
+            : Array.isArray(data.items)
+            ? data.items
             : []
           const map: Record<string, string> = {}
           const arr: { id: string; name: string }[] = []
@@ -2480,7 +2491,7 @@ export default function InventoryManagementPage() {
             entity_id: Number(form.entity_id),
             status: form.status,
             notes: form.notes || null,
-            updated_by: 0, // server can replace with req.user.id if desired
+            // updated_by removed; server uses req.user.id
           }),
         })
         if (!res.ok) throw new Error(await res.text())
@@ -2496,65 +2507,147 @@ export default function InventoryManagementPage() {
       }
     }
 
-    // NEW: pagination for logs (5 per page)
+    // NEW: filters (entity, status) — search is unified via top search bar
+    const [filterEntity, setFilterEntity] = useState<
+      'all' | 'Inventory' | 'Package'
+    >('all')
+    const [filterStatus, setFilterStatus] = useState<
+      | 'all'
+      | 'available'
+      | 'unavailable'
+      | 'maintenance'
+      | 'damaged'
+      | 'hidden'
+      | 'unhidden'
+    >('all')
+    const [filterSearch, setFilterSearch] = useState('')
+
+    const STATUS_OPTIONS_ALL = [
+      { label: 'All statuses', value: 'all' as const },
+      { label: 'Available', value: 'available' as const },
+      { label: 'Unavailable', value: 'unavailable' as const },
+      { label: 'Maintenance', value: 'maintenance' as const },
+      { label: 'Damaged', value: 'damaged' as const },
+      { label: 'Unhidden', value: 'unhidden' as const },
+      { label: 'Hidden', value: 'hidden' as const },
+    ]
+    const STATUS_OPTIONS_INV = STATUS_OPTIONS_ALL.filter((o) =>
+      ['all', 'available', 'unavailable', 'maintenance', 'damaged'].includes(
+        o.value
+      )
+    )
+    const STATUS_OPTIONS_PKG = STATUS_OPTIONS_ALL.filter((o) =>
+      ['all', 'hidden', 'unhidden'].includes(o.value)
+    )
+    const currentStatusOptions = useMemo(() => {
+      if (filterEntity === 'Inventory') return STATUS_OPTIONS_INV
+      if (filterEntity === 'Package') return STATUS_OPTIONS_PKG
+      return STATUS_OPTIONS_ALL
+    }, [filterEntity])
+
+    const enrichedLogs = useMemo(() => {
+      return logs
+        .map((l: any) => {
+          let changes: Record<string, [any, any]> | null = null
+          if (l.notes) {
+            try {
+              const parsed = JSON.parse(l.notes)
+              if (parsed && typeof parsed === 'object' && parsed.changes) {
+                changes = parsed.changes
+              }
+            } catch {}
+          }
+          // Determine log type and display status/condition based on entity type and changes
+          let logType = 'Updated'
+          if (l.status === 'created') logType = 'Created'
+          else if (l.status === 'unarchived') logType = 'Unarchived'
+          else if (l.status === 'archived') logType = 'Archived'
+          let statusDisplay = ''
+          let conditionDisplay: string | null = null
+          if (l.entity_type === 'Inventory') {
+            if (changes?.status) {
+              statusDisplay = String(changes.status[1]) // already 'available'|'unavailable'
+            } else {
+              // fallback: if initial log (created) assume available unless explicitly different
+              statusDisplay = 'available'
+            }
+            if (changes?.condition) {
+              conditionDisplay = String(changes.condition[1])
+            }
+          } else if (l.entity_type === 'Package') {
+            if (changes?.display) {
+              statusDisplay =
+                changes.display[1] === 'visible' ? 'unhidden' : 'hidden'
+            } else {
+              statusDisplay = 'unhidden'
+            }
+            conditionDisplay = null
+          } else {
+            statusDisplay = l.status
+          }
+          return {
+            ...l,
+            _changes: changes,
+            _logType: logType,
+            _statusDisplay: statusDisplay,
+            _conditionDisplay: conditionDisplay,
+          }
+        })
+        .sort((a, b) => {
+          // Sort by updated_at in descending order (latest first)
+          const dateA = new Date(a.updated_at).getTime()
+          const dateB = new Date(b.updated_at).getTime()
+          return dateB - dateA
+        })
+    }, [logs])
+
+    // NEW: apply filters and unified search (by resolved entity name)
+    const filteredLogs = useMemo(() => {
+      const q = (searchTerm || '').trim().toLowerCase()
+      return enrichedLogs.filter((l: any) => {
+        if (filterEntity !== 'all' && l.entity_type !== filterEntity)
+          return false
+        if (
+          filterStatus !== 'all' &&
+          (l._statusDisplay || '').toLowerCase() !== filterStatus
+        ) {
+          return false
+        }
+        if (q) {
+          const name =
+            l.entity_type === 'Inventory'
+              ? inventoryNames[String(l.entity_id)] ?? ''
+              : l.entity_type === 'Package'
+              ? packageNames[String(l.entity_id)] ?? ''
+              : ''
+          const hay = (name || `#${l.entity_id}`).toLowerCase()
+          if (!hay.includes(q)) return false
+        }
+        return true
+      })
+    }, [
+      enrichedLogs,
+      filterEntity,
+      filterStatus,
+      searchTerm, // <-- use unified search term
+      inventoryNames,
+      packageNames,
+    ])
+
+    // UPDATED: pagination for filtered logs (5 per page)
     const LOGS_PER_PAGE = 5
     const [logsPage, setLogsPage] = useState(1)
-    const logsTotalPages = Math.max(1, Math.ceil(logs.length / LOGS_PER_PAGE))
+    const logsTotalPages = Math.max(
+      1,
+      Math.ceil(filteredLogs.length / LOGS_PER_PAGE)
+    )
     useEffect(() => {
       setLogsPage((p) => Math.min(Math.max(1, p), logsTotalPages))
-    }, [logsTotalPages, logs.length])
-    const enrichedLogs = useMemo(() => {
-      return logs.map((l: any) => {
-        let changes: Record<string, [any, any]> | null = null
-        if (l.notes) {
-          try {
-            const parsed = JSON.parse(l.notes)
-            if (parsed && typeof parsed === 'object' && parsed.changes) {
-              changes = parsed.changes
-            }
-          } catch {}
-        }
-        // Determine log type and display status/condition based on entity type and changes
-        let logType = 'Updated'
-        if (l.status === 'created') logType = 'Created'
-        else if (l.status === 'unarchived') logType = 'Unarchived'
-        else if (l.status === 'archived') logType = 'Archived'
-        let statusDisplay = ''
-        let conditionDisplay: string | null = null
-        if (l.entity_type === 'Inventory') {
-          if (changes?.status) {
-            statusDisplay = String(changes.status[1]) // already 'available'|'unavailable'
-          } else {
-            // fallback: if initial log (created) assume available unless explicitly different
-            statusDisplay = 'available'
-          }
-          if (changes?.condition) {
-            conditionDisplay = String(changes.condition[1])
-          }
-        } else if (l.entity_type === 'Package') {
-          if (changes?.display) {
-            statusDisplay =
-              changes.display[1] === 'visible' ? 'unhidden' : 'hidden'
-          } else {
-            statusDisplay = 'unhidden'
-          }
-          conditionDisplay = null
-        } else {
-          statusDisplay = l.status
-        }
-        return {
-          ...l,
-          _changes: changes,
-          _logType: logType,
-          _statusDisplay: statusDisplay,
-          _conditionDisplay: conditionDisplay,
-        }
-      })
-    }, [logs])
+    }, [logsTotalPages, filteredLogs.length])
     const paginatedLogs = useMemo(() => {
       const start = (logsPage - 1) * LOGS_PER_PAGE
-      return enrichedLogs.slice(start, start + LOGS_PER_PAGE)
-    }, [enrichedLogs, logsPage])
+      return filteredLogs.slice(start, start + LOGS_PER_PAGE)
+    }, [filteredLogs, logsPage])
     const logsWindowPages = useMemo(
       () => pageWindow(logsPage, logsTotalPages, 3),
       [logsPage, logsTotalPages]
@@ -2562,92 +2655,59 @@ export default function InventoryManagementPage() {
 
     return (
       <div className="flex h-full min-h-0 flex-col gap-4">
+        {/* Filters toolbar: entity + status (search removed; uses unified search bar) */}
         <div className="flex flex-col md:flex-row gap-3 md:items-end">
           <div className="flex flex-col gap-1">
-            <label className="text-sm font-medium">Entity Type</label>
+            <label className="text-sm font-medium">Filter: Entity</label>
             <Select
-              value={form.entity_type}
-              onValueChange={(v) =>
-                setForm((p) => ({
-                  ...p,
-                  entity_type: v as 'Inventory' | 'Package',
-                  entity_id: '',
-                }))
-              }
+              value={filterEntity}
+              onValueChange={(v) => {
+                setFilterEntity(v as 'all' | 'Inventory' | 'Package')
+                setFilterStatus('all')
+              }}
             >
               <SelectTrigger className="h-9 text-sm rounded">
-                <SelectValue placeholder="Select type" />
+                <SelectValue placeholder="All entities" />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="all">All</SelectItem>
                 <SelectItem value="Inventory">Inventory</SelectItem>
                 <SelectItem value="Package">Package</SelectItem>
               </SelectContent>
             </Select>
           </div>
+
           <div className="flex flex-col gap-1">
-            <label className="text-sm font-medium">
-              {form.entity_type === 'Inventory' ? 'Item' : 'Package'}
-            </label>
+            <label className="text-sm font-medium">Filter: Status</label>
             <Select
-              value={form.entity_id}
-              onValueChange={(v) => setForm((p) => ({ ...p, entity_id: v }))}
+              value={filterStatus}
+              onValueChange={(v) =>
+                setFilterStatus(
+                  v as
+                    | 'all'
+                    | 'available'
+                    | 'unavailable'
+                    | 'maintenance'
+                    | 'damaged'
+                    | 'hidden'
+                    | 'unhidden'
+                )
+              }
             >
               <SelectTrigger className="h-9 text-sm rounded">
-                <SelectValue
-                  placeholder={
-                    form.entity_type === 'Inventory'
-                      ? 'Select item'
-                      : 'Select package'
-                  }
-                />
+                <SelectValue placeholder="All statuses" />
               </SelectTrigger>
               <SelectContent>
-                {(form.entity_type === 'Inventory'
-                  ? inventoryList
-                  : packageList
-                ).map((opt) => (
-                  <SelectItem key={opt.id} value={opt.id}>
-                    {opt.name}
+                {currentStatusOptions.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>
+                    {opt.label}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
-          <div className="flex flex-col gap-1">
-            <label className="text-sm font-medium">Status</label>
-            <Select
-              value={form.status}
-              onValueChange={(v) => setForm((p) => ({ ...p, status: v }))}
-            >
-              <SelectTrigger className="h-9 text-sm rounded">
-                <SelectValue placeholder="Select status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="available">Available</SelectItem>
-                <SelectItem value="unavailable">Unavailable</SelectItem>
-                <SelectItem value="maintenance">Maintenance</SelectItem>
-                <SelectItem value="damaged">Damaged</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="flex-1 flex flex-col gap-1">
-            <label className="text-sm font-medium">Notes</label>
-            <Input
-              className="h-9 rounded-md border px-3 text-sm outline-none"
-              placeholder="Optional..."
-              value={form.notes}
-              onChange={(e) =>
-                setForm((p) => ({ ...p, notes: e.target.value }))
-              }
-            />
-          </div>
-          <Button
-            type="button"
-            className="bg-litratoblack rounded text-white h-9"
-            onClick={createLog}
-          >
-            Add Log
-          </Button>
+
+          {/* Removed local "Search by name" input; unified search bar is used */}
         </div>
 
         {/* Table area scrolls; pagination stays at bottom */}
@@ -2718,6 +2778,16 @@ export default function InventoryManagementPage() {
                                 <ul className="list-disc list-inside space-y-0.5">
                                   {Object.entries(l._changes).map(
                                     ([field, pair]) => {
+                                      if (field === 'image_url') {
+                                        return (
+                                          <li key={field}>
+                                            <span className="font-medium">
+                                              Image:
+                                            </span>{' '}
+                                            changed
+                                          </li>
+                                        )
+                                      }
                                       const [oldV, newV] = pair as [any, any]
                                       return (
                                         <li key={field}>
@@ -2750,7 +2820,15 @@ export default function InventoryManagementPage() {
                         </PopoverContent>
                       </Popover>
                     </TableCell>
-                    <TableCell className="px-4 py-2">{l.updated_by}</TableCell>
+                    <TableCell className="px-4 py-2">
+                      {(() => {
+                        const name =
+                          (l.updated_by_name && l.updated_by_name.trim()) ||
+                          l.updated_by_username
+                        if (name) return name
+                        return l.updated_by != null ? `#${l.updated_by}` : '—'
+                      })()}
+                    </TableCell>
                     <TableCell className="px-4 py-2">
                       {new Date(l.updated_at).toLocaleString()}
                     </TableCell>

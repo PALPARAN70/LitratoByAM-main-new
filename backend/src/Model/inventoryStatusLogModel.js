@@ -3,18 +3,17 @@ const { pool } = require('../Config/db')
 
 async function initInventoryStatusLogTable() {
   await pool.query(`
-    CREATE TABLE IF NOT EXISTS status_log (
-      log_id SERIAL PRIMARY KEY,
-      entity_type VARCHAR(50) NOT NULL, -- "Inventory" or "Package"
-      entity_id INT NOT NULL,
-      status VARCHAR(50) NOT NULL,
-      notes TEXT,
-      updated_by INT NOT NULL, -- FK to staff/admin later
-      updated_at TIMESTAMP DEFAULT NOW(),
-      display BOOLEAN DEFAULT TRUE,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
+  CREATE TABLE IF NOT EXISTS status_log (
+    log_id SERIAL PRIMARY KEY,
+    entity_type VARCHAR(50) NOT NULL,
+    entity_id INT NOT NULL,
+    status VARCHAR(50) NOT NULL,
+    notes TEXT,
+    updated_by INT REFERENCES users(id) ON DELETE SET NULL,
+    display BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  )
   `)
 }
 //create status log
@@ -37,8 +36,13 @@ async function createStatusLog(
 async function findLogsByEntity(entity_type, entity_id) {
   const result = await pool.query(
     `
-    SELECT * FROM status_log
-    WHERE entity_type = $1 AND entity_id = $2
+    SELECT s.*,
+           COALESCE(NULLIF(TRIM(CONCAT(u.firstname, ' ', u.lastname)), ''), u.username) AS updated_by_name,
+           u.username AS updated_by_username
+    FROM status_log s
+    LEFT JOIN users u ON u.id = s.updated_by
+    WHERE s.entity_type = $1 AND s.entity_id = $2 AND s.display = TRUE
+    ORDER BY s.updated_at DESC, s.log_id DESC
   `,
     [entity_type, entity_id]
   )
@@ -47,7 +51,15 @@ async function findLogsByEntity(entity_type, entity_id) {
 //get all logs
 async function getAllLogs() {
   const result = await pool.query(
-    'SELECT * FROM status_log WHERE display = TRUE'
+    `
+    SELECT s.*,
+           COALESCE(NULLIF(TRIM(CONCAT(u.firstname, ' ', u.lastname)), ''), u.username) AS updated_by_name,
+           u.username AS updated_by_username
+    FROM status_log s
+    LEFT JOIN users u ON u.id = s.updated_by
+    WHERE s.display = TRUE
+    ORDER BY s.updated_at DESC, s.log_id DESC
+    `
   )
   return result.rows
 }
@@ -76,7 +88,7 @@ async function softDeleteLog(log_id) {
   await pool.query(
     `
       UPDATE status_log
-      SET display = FALSE, last_updated = NOW()
+      SET display = FALSE, updated_at = NOW()
       WHERE log_id = $1
     `,
     [log_id]
