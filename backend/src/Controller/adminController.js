@@ -194,7 +194,7 @@ exports.createInventoryItem = async (req, res) => {
             status: [null, newItem.status ? 'available' : 'unavailable'],
           },
         }),
-        req.user?.id || 0
+        req.user?.id ?? null
       )
     } catch (logErr) {
       console.error('Auto log (create inventory) failed:', logErr)
@@ -307,7 +307,7 @@ exports.updateInventoryItem = async (req, res) => {
           Number(inventoryID),
           'updated',
           JSON.stringify({ changes: diff }),
-          req.user?.id || 0
+          req.user?.id ?? null
         )
       } catch (logErr) {
         console.error('Auto log (update inventory) failed:', logErr)
@@ -395,7 +395,7 @@ exports.createPackage = async (req, res) => {
             display: [null, newPackage.display ? 'visible' : 'hidden'],
           },
         }),
-        req.user?.id || 0
+        req.user?.id ?? null
       )
     } catch (logErr) {
       console.error('Auto log (create package) failed:', logErr)
@@ -448,89 +448,118 @@ exports.listArchivedPackages = async (_req, res) => {
 exports.updatePackage = async (req, res) => {
   try {
     const { package_id } = req.params
-    const { package_name, description, price, status, display, image_url } =
-      req.body
-
-    const updates = {
-      ...(package_name !== undefined && { package_name }),
-      ...(description !== undefined && { description }),
-      ...(price !== undefined && { price }),
-      ...(status !== undefined && { status }),
-      ...(display !== undefined && { display }),
-      ...(image_url !== undefined && { image_url }),
-    }
-    // if no valid fields provided
-    if (Object.keys(updates).length === 0) {
+    const id = Number(package_id)
+    if (!Number.isFinite(id)) {
       return res
         .status(400)
-        .json({ toast: { type: 'error', message: 'No valid fields provided' } })
+        .json({ toast: { type: 'error', message: 'Invalid package id' } })
     }
-    //update package
-    // need original for diff when fields change (including archived packages)
-    let original = null
-    try {
-      // First try visible fetch
-      original = await packageModel.getPackageById(package_id)
-      // If not found (likely archived), fetch regardless of display so diff logging still works
-      if (!original && typeof packageModel.getPackageByIdAny === 'function') {
-        original = await packageModel.getPackageByIdAny(package_id)
-      }
-    } catch (e) {
-      // ignore fetch error
-    }
-    const updated = await packageModel.updatePackage(package_id, updates)
-    if (!updated) {
+
+    // Load current package
+    const existing = await packageModel.getPackageById(id)
+    if (!existing) {
       return res
         .status(404)
         .json({ toast: { type: 'error', message: 'Package not found' } })
     }
-    //return success
-    // diff logging (only certain fields)
-    if (original && updated) {
-      const diff = {}
-      const track = ['package_name', 'price', 'status', 'display']
-      for (const f of track) {
-        if (Object.prototype.hasOwnProperty.call(updates, f)) {
-          const oldVal = original[f]
-          const newVal = updated[f]
-          if (oldVal !== newVal) {
-            const normalize = (field, val) => {
-              if (field === 'status') return val ? 'active' : 'inactive'
-              if (field === 'display') return val ? 'visible' : 'hidden'
-              return val === null || val === undefined ? null : String(val)
-            }
-            diff[f] = [normalize(f, oldVal), normalize(f, newVal)]
-          }
+
+    // Whitelist fields we allow to change
+    const allowed = [
+      'package_name',
+      'description',
+      'price',
+      'image_url',
+      'display',
+    ]
+    const body = req.body || {}
+    const updates = {}
+
+    if (Object.prototype.hasOwnProperty.call(body, 'package_name')) {
+      const v = String(body.package_name ?? '').trim()
+      if (v !== '') updates.package_name = v
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'description')) {
+      updates.description =
+        body.description == null ? '' : String(body.description)
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'price')) {
+      const n = Number(body.price)
+      if (Number.isFinite(n)) updates.price = n
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'image_url')) {
+      updates.image_url = body.image_url == null ? '' : String(body.image_url)
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'display')) {
+      updates.display = Boolean(body.display)
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return res.json({
+        toast: { type: 'success', message: 'No changes detected' },
+        package: existing,
+      })
+    }
+
+    // Compute changes for logging (old -> new)
+    const changes = {}
+    for (const k of allowed) {
+      if (!(k in updates)) continue
+      const oldV = existing[k]
+      let newV = updates[k]
+      if (k === 'display') {
+        const oldDisp = !!oldV
+        const newDisp = !!newV
+        if (oldDisp !== newDisp) {
+          changes.display = [
+            oldDisp ? 'visible' : 'hidden',
+            newDisp ? 'visible' : 'hidden',
+          ]
         }
-      }
-      if (Object.keys(diff).length) {
-        try {
-          // Special case: un-archiving (display hidden -> visible)
-          const displayChange = diff.display
-          const isUnarchive =
-            displayChange &&
-            displayChange[0] === 'hidden' &&
-            displayChange[1] === 'visible'
-          await inventoryStatusLogModel.createStatusLog(
-            'Package',
-            Number(package_id),
-            isUnarchive ? 'unarchived' : 'updated',
-            JSON.stringify({ changes: diff }),
-            req.user?.id || 0
-          )
-        } catch (logErr) {
-          console.error('Auto log (update package) failed:', logErr)
+      } else {
+        const oldStr = oldV == null ? '' : String(oldV)
+        const newStr = newV == null ? '' : String(newV)
+        if (oldStr !== newStr) {
+          // mask long URLs in logs; UI can show "Image changed"
+          if (k === 'image_url') {
+            changes[k] = ['changed', 'changed']
+          } else {
+            changes[k] = [oldStr, newStr]
+          }
         }
       }
     }
 
-    res.json({
+    // Persist update
+    const updated = await packageModel.updatePackage(id, updates)
+
+    // Determine log status
+    let logStatus = 'updated'
+    if ('display' in updates) {
+      const was = !!existing.display
+      const now = !!updates.display
+      if (was === false && now === true) logStatus = 'unarchived'
+      else if (was === true && now === false) logStatus = 'archived'
+    }
+
+    // Only write a log if something actually changed (including image_url)
+    const hasChanges = Object.keys(changes).length > 0
+    if (hasChanges) {
+      await inventoryStatusLogModel.createStatusLog(
+        'Package',
+        id,
+        logStatus,
+        JSON.stringify({ changes }),
+        req.user?.id ?? null
+      )
+    }
+
+    return res.json({
       toast: { type: 'success', message: 'Package updated successfully' },
       package: updated,
     })
   } catch (e) {
     console.error('Update Package Error:', e)
-    res
+    return res
       .status(500)
       .json({ toast: { type: 'error', message: 'Internal server error' } })
   }
@@ -707,13 +736,13 @@ exports.createInventoryStatusLog = async (req, res) => {
         .status(400)
         .json({ toast: { type: 'error', message: 'Missing required fields' } })
     }
-    const updater = req.user?.id ?? updated_by ?? 0
+    const updater = req.user?.id ?? null
     await inventoryStatusLogModel.createStatusLog(
       String(entity_type),
       Number(entity_id),
       String(status),
       notes ?? null,
-      Number(updater)
+      updater
     )
     res.json({
       toast: {
@@ -794,14 +823,14 @@ exports.updateInventoryStatusLog = async (req, res) => {
         },
       })
     }
-    const updater = req.user?.id ?? 0
+    const updater = req.user?.id ?? null
     await inventoryStatusLogModel.updateLog(
       Number(log_id),
       String(entity_type),
       Number(entity_id),
       String(status),
       notes ?? null,
-      Number(updater)
+      updater
     )
     res.json({
       toast: {
