@@ -111,6 +111,13 @@ router.get(
   roleMiddleware('admin'),
   adminController.listPackages
 )
+// get archived packages
+router.get(
+  '/package/archived',
+  authMiddleware,
+  roleMiddleware('admin'),
+  adminController.listArchivedPackages
+)
 
 // support both PATCH and PUT
 router.patch(
@@ -217,6 +224,20 @@ router.delete(
   authMiddleware,
   roleMiddleware('admin'),
   adminController.deleteInventoryStatusLog
+)
+
+// -------- material types routes -------- //
+router.get(
+  '/material-types',
+  authMiddleware,
+  roleMiddleware('admin'),
+  adminController.listMaterialTypes
+)
+router.post(
+  '/material-types',
+  authMiddleware,
+  roleMiddleware('admin'),
+  adminController.createMaterialType
 )
 
 module.exports = router

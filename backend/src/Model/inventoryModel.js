@@ -1,14 +1,15 @@
 const { pool } = require('../Config/db')
+const { initMaterialTypesTable } = require('./materialTypesModel')
 
 // Create inventory table if not exists
 async function initInventoryTable() {
+  // ensure material types table exists first (independent but used logically)
+  await initMaterialTypesTable()
   await pool.query(`
     CREATE TABLE IF NOT EXISTS inventory (
       id SERIAL PRIMARY KEY,
       material_name VARCHAR(100) NOT NULL,
       material_type VARCHAR(50),
-      total_quantity INT NOT NULL DEFAULT 0,
-      available_quantity INT NOT NULL DEFAULT 0,
       condition VARCHAR(50) DEFAULT 'Good',
       status BOOLEAN DEFAULT TRUE,
       last_date_checked TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -24,8 +25,6 @@ async function initInventoryTable() {
 async function createInventoryItem(
   materialName,
   materialType,
-  totalQuantity,
-  availableQuantity,
   condition,
   status,
   lastDateChecked,
@@ -37,22 +36,18 @@ async function createInventoryItem(
       INSERT INTO inventory (
         material_name,
         material_type,
-        total_quantity,
-        available_quantity,
         condition,
         status,
         last_date_checked,
         notes,
         display
       )
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+      VALUES ($1,$2,$3,$4,$5,$6,$7)
       RETURNING *
     `,
     [
       materialName,
       materialType,
-      totalQuantity,
-      availableQuantity,
       condition,
       status,
       lastDateChecked,
@@ -87,8 +82,6 @@ async function updateInventory(id, updates) {
   const allowed = {
     material_name: true,
     material_type: true,
-    total_quantity: true,
-    available_quantity: true,
     condition: true,
     status: true,
     last_date_checked: true,
