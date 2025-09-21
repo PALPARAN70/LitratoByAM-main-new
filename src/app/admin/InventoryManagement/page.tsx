@@ -1292,6 +1292,9 @@ export default function InventoryManagementPage() {
     const [inventory, setInventory] = useState<InvPick[]>([])
     const [selected, setSelected] = useState<Record<string, number>>({}) // inventory_id -> qty
 
+    // NEW: edit selection map (inventory_id -> qty)
+    const [editSelected, setEditSelected] = useState<Record<string, number>>({})
+
     useEffect(() => {
       let ignore = false
       ;(async () => {
@@ -1743,16 +1746,24 @@ export default function InventoryManagementPage() {
     // Toggle package visibility (display flag) with optimistic UI update
     const togglePackageDisplay = async (pkg: PackageItem) => {
       const nextDisplay = pkg.display === false ? true : false
-      // optimistic move between arrays
+      const prevView = pkgView
+
       if (nextDisplay) {
         // move from archived -> active
         setArchivedPackages((arr) => arr.filter((p) => p.id !== pkg.id))
         setPackages((arr) => [{ ...pkg, display: true }, ...arr])
+
+        // If currently on Archived, switch to Active so the item is visible there
+        if (prevView === 'archived') {
+          setPkgView('active')
+          setPkgPage(1)
+        }
       } else {
         // move from active -> archived
         setPackages((arr) => arr.filter((p) => p.id !== pkg.id))
         setArchivedPackages((arr) => [{ ...pkg, display: false }, ...arr])
       }
+
       try {
         const res = await fetch(`${API_BASE}/package/${pkg.id}`, {
           method: 'PATCH',
@@ -1765,15 +1776,16 @@ export default function InventoryManagementPage() {
         if (!res.ok) throw new Error(await res.text())
       } catch (e) {
         console.error('Toggle package display failed:', e)
-        // rollback
+        // rollback lists
         if (nextDisplay) {
-          // revert move back to archived
           setPackages((arr) => arr.filter((p) => p.id !== pkg.id))
           setArchivedPackages((arr) => [{ ...pkg }, ...arr])
         } else {
           setArchivedPackages((arr) => arr.filter((p) => p.id !== pkg.id))
           setPackages((arr) => [{ ...pkg }, ...arr])
         }
+        // rollback view if it was changed
+        setPkgView(prevView)
       }
     }
 
@@ -1816,7 +1828,28 @@ export default function InventoryManagementPage() {
         imageUrl: pkg.imageUrl,
         features: [...pkg.features],
       })
+      setEditSelected({}) // reset
       setEditPkgOpen(true)
+      // load package's current items
+      ;(async () => {
+        try {
+          const res = await fetch(`${API_BASE}/package/${pkg.id}/items`, {
+            headers: {
+              'Content-Type': 'application/json',
+              ...getAuthHeaders(),
+            },
+          })
+          if (!res.ok) throw new Error(await res.text())
+          const data = await res.json()
+          const map: Record<string, number> = {}
+          for (const it of data.items || []) {
+            map[String(it.inventory_id)] = Number(it.quantity) || 1
+          }
+          setEditSelected(map)
+        } catch (e) {
+          console.error('Load package items for edit failed:', e)
+        }
+      })()
     }
 
     const handleEditFileChange: React.ChangeEventHandler<
@@ -1853,6 +1886,25 @@ export default function InventoryManagementPage() {
           }),
         })
         if (!res.ok) throw new Error(await res.text())
+
+        // sync package items (add/remove/update); backend logs diffs
+        const items = Object.entries(editSelected).map(
+          ([inventory_id, quantity]) => ({
+            inventory_id: Number(inventory_id),
+            quantity: Number(quantity) || 1,
+          })
+        )
+        const resItems = await fetch(`${API_BASE}/package/${id}/items`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            ...getAuthHeaders(),
+          },
+          body: JSON.stringify({ items }),
+        })
+        if (!resItems.ok) throw new Error(await resItems.text())
+
+        // reflect meta changes locally
         setPackages((prev) =>
           prev.map((p) =>
             p.id === id
@@ -2069,8 +2121,6 @@ export default function InventoryManagementPage() {
           </Dialog>
         </div>
 
-        {/* Cards grid scrolls; pagination stays at bottom */}
-
         {/* Edit Package Dialog */}
         {editPkgOpen && (
           <Dialog
@@ -2079,14 +2129,15 @@ export default function InventoryManagementPage() {
               if (!o) setEditPkgOpen(false)
             }}
           >
-            <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+            <DialogContent className="sm:max-w-lg max-h=[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>Edit Package</DialogTitle>
                 <DialogDescription>
-                  Update package details and image.
+                  Update package details, image, and items.
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-4">
+                {/* Meta fields */}
                 <div>
                   <label className="text-sm font-medium">Name</label>
                   <Input
@@ -2128,6 +2179,8 @@ export default function InventoryManagementPage() {
                     onChange={handleEditFileChange}
                   />
                 </div>
+
+                {/* Features */}
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <label className="text-sm font-medium">Features</label>
@@ -2147,23 +2200,23 @@ export default function InventoryManagementPage() {
                   </div>
                   <div className="flex flex-col gap-2">
                     {editPkgForm.features.map((feat, idx) => (
-                      <div key={idx} className="flex items-center gap-2">
+                      <div key={idx} className="flex gap-2">
                         <Input
-                          className="h-9 rounded-md border px-3 text-sm outline-none"
-                          placeholder={`Feature ${idx + 1}`}
                           value={feat}
                           onChange={(e) =>
-                            setEditPkgForm((p) => {
-                              const copy = [...p.features]
-                              copy[idx] = e.target.value
-                              return { ...p, features: copy }
-                            })
+                            setEditPkgForm((p) => ({
+                              ...p,
+                              features: p.features.map((f, i) =>
+                                i === idx ? e.target.value : f
+                              ),
+                            }))
                           }
+                          placeholder={`Feature #${idx + 1}`}
                         />
                         <Button
                           type="button"
                           variant="outline"
-                          className="h-9 rounded"
+                          className="h-9"
                           onClick={() =>
                             setEditPkgForm((p) => ({
                               ...p,
@@ -2175,6 +2228,92 @@ export default function InventoryManagementPage() {
                         </Button>
                       </div>
                     ))}
+                  </div>
+                </div>
+
+                {/* NEW: Inventory items for this package */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm font-medium">
+                      Inventory Items{' '}
+                    </label>
+                    <div className="flex gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="h-8 px-3"
+                        onClick={() => {
+                          // select all with qty  1 (or keep existing qty)
+                          const map: Record<string, number> = {}
+                          for (const it of inventory) {
+                            map[it.id] = editSelected[it.id] || 1
+                          }
+                          setEditSelected(map)
+                        }}
+                      >
+                        Select All
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="h-8 px-3"
+                        onClick={() => setEditSelected({})}
+                      >
+                        Clear
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="max-h-64 overflow-auto border rounded p-2">
+                    {inventory.length === 0 ? (
+                      <div className="text-sm text-gray-500">
+                        No inventory items available.
+                      </div>
+                    ) : (
+                      inventory.map((it) => {
+                        const checked = editSelected[it.id] != null
+                        const qty = editSelected[it.id] ?? 1
+                        return (
+                          <div
+                            key={it.id}
+                            className="flex items-center gap-2 py-1"
+                          >
+                            <input
+                              type="checkbox"
+                              className="h-4 w-4"
+                              checked={checked}
+                              onChange={(e) => {
+                                const on = e.target.checked
+                                setEditSelected((prev) => {
+                                  const next = { ...prev }
+                                  if (on) {
+                                    next[it.id] = next[it.id] || 1
+                                  } else {
+                                    delete next[it.id]
+                                  }
+                                  return next
+                                })
+                              }}
+                            />
+                            <span className="flex-1 text-sm">{it.name}</span>
+                            <input
+                              type="number"
+                              min={1}
+                              className="w-20 h-8 border rounded px-2"
+                              disabled={!checked}
+                              value={qty}
+                              onChange={(e) => {
+                                const v =
+                                  Math.max(1, Number(e.target.value) || 1) | 0
+                                setEditSelected((prev) => ({
+                                  ...prev,
+                                  [it.id]: v,
+                                }))
+                              }}
+                            />
+                          </div>
+                        )
+                      })
+                    )}
                   </div>
                 </div>
               </div>

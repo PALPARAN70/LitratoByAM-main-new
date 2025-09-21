@@ -455,8 +455,8 @@ exports.updatePackage = async (req, res) => {
         .json({ toast: { type: 'error', message: 'Invalid package id' } })
     }
 
-    // Load current package
-    const existing = await packageModel.getPackageById(id)
+    // Load current package (ALLOW hidden too)
+    const existing = await packageModel.getPackageByIdAny(id)
     if (!existing) {
       return res
         .status(404)
@@ -603,7 +603,8 @@ exports.createPackageInventoryItem = async (req, res) => {
         .json({ toast: { type: 'error', message: 'Quantity must be > 0' } })
     }
 
-    const pkg = await packageModel.getPackageById(package_id)
+    // ALLOW hidden packages
+    const pkg = await packageModel.getPackageByIdAny(package_id)
     if (!pkg) {
       return res
         .status(404)
@@ -864,4 +865,351 @@ exports.deleteInventoryStatusLog = async (req, res) => {
       .json({ toast: { type: 'error', message: 'Internal server error' } })
   }
 }
-//----------------End Inventory Management----------------//
+
+// NEW: list package items for a specific package
+exports.listPackageItemsForPackage = async (req, res) => {
+  try {
+    const { package_id } = req.params
+    const packageId = Number(package_id)
+
+    if (!Number.isFinite(packageId)) {
+      return res.status(400).json({
+        toast: { type: 'error', message: 'Invalid package ID' },
+      })
+    }
+
+    // ALLOW hidden packages
+    const pkg = await packageModel.getPackageByIdAny(packageId)
+    if (!pkg) {
+      return res.status(404).json({
+        toast: { type: 'error', message: 'Package not found' },
+      })
+    }
+
+    // Get package items from existing model API
+    const all = await packageInventoryItemModel.getAllPackageInventoryItems()
+    const items = all.filter(
+      (it) => Number(it.package_id) === packageId && it.display !== false
+    )
+
+    res.json({
+      toast: {
+        type: 'success',
+        message: 'Package items retrieved successfully',
+      },
+      items,
+    })
+  } catch (e) {
+    console.error('List Package Items For Package Error:', e)
+    res
+      .status(500)
+      .json({ toast: { type: 'error', message: 'Internal server error' } })
+  }
+}
+
+// NEW: list packages by user (bookings)
+exports.listPackagesByUser = async (req, res) => {
+  try {
+    const userId = req.user?.id
+    if (!userId) {
+      return res.status(401).json({
+        toast: { type: 'error', message: 'Unauthorized' },
+      })
+    }
+
+    // Get package IDs from user bookings
+    const bookings = await bookingModel.findBookingsByUser(userId)
+    const packageIds = [...new Set(bookings.map((b) => b.package_id))]
+
+    // Fetch packages by IDs
+    const packages = await packageModel.findPackagesByIds(packageIds)
+
+    res.json({
+      toast: {
+        type: 'success',
+        message: 'Packages retrieved successfully',
+      },
+      packages,
+    })
+  } catch (e) {
+    console.error('List Packages By User Error:', e)
+    res
+      .status(500)
+      .json({ toast: { type: 'error', message: 'Internal server error' } })
+  }
+}
+
+// NEW: book package (create booking)
+exports.bookPackage = async (req, res) => {
+  try {
+    const userId = req.user?.id
+    const { package_id, schedule_id, guests, notes } = req.body
+
+    if (!userId) {
+      return res.status(401).json({
+        toast: { type: 'error', message: 'Unauthorized' },
+      })
+    }
+    if (!package_id || !schedule_id || !guests) {
+      return res.status(400).json({
+        toast: {
+          type: 'error',
+          message: 'package_id, schedule_id, guests are required',
+        },
+      })
+    }
+
+    // Check if package exists and is active
+    const pkg = await packageModel.getPackageById(package_id)
+    if (!pkg || !pkg.display) {
+      return res.status(404).json({
+        toast: { type: 'error', message: 'Package not found or inactive' },
+      })
+    }
+
+    // Create the booking
+    const booking = await bookingModel.createBooking({
+      user_id: userId,
+      package_id,
+      schedule_id,
+      guests,
+      notes,
+    })
+
+    res.status(201).json({
+      toast: { type: 'success', message: 'Package booked successfully' },
+      booking,
+    })
+  } catch (e) {
+    console.error('Book Package Error:', e)
+    res
+      .status(500)
+      .json({ toast: { type: 'error', message: 'Internal server error' } })
+  }
+}
+
+// NEW: cancel booking
+exports.cancelBooking = async (req, res) => {
+  try {
+    const { booking_id } = req.params
+
+    // Soft delete the booking
+    await bookingModel.cancelBooking(booking_id)
+
+    res.json({
+      toast: { type: 'success', message: 'Booking canceled successfully' },
+    })
+  } catch (e) {
+    console.error('Cancel Booking Error:', e)
+    res
+      .status(500)
+      .json({ toast: { type: 'error', message: 'Internal server error' } })
+  }
+}
+
+// NEW: list user bookings
+exports.listUserBookings = async (req, res) => {
+  try {
+    const userId = req.user?.id
+    if (!userId) {
+      return res.status(401).json({
+        toast: { type: 'error', message: 'Unauthorized' },
+      })
+    }
+
+    const bookings = await bookingModel.findBookingsByUser(userId)
+
+    res.json({
+      toast: { type: 'success', message: 'Bookings retrieved successfully' },
+      bookings,
+    })
+  } catch (e) {
+    console.error('List User Bookings Error:', e)
+    res
+      .status(500)
+      .json({ toast: { type: 'error', message: 'Internal server error' } })
+  }
+}
+
+// NEW: update booking
+exports.updateBooking = async (req, res) => {
+  try {
+    const { booking_id } = req.params
+    const updates = req.body
+
+    // Whitelist fields we allow to change
+    const allowed = ['guests', 'notes']
+    const filteredUpdates = Object.keys(updates)
+      .filter((key) => allowed.includes(key))
+      .reduce((obj, key) => {
+        obj[key] = updates[key]
+        return obj
+      }, {})
+
+    if (Object.keys(filteredUpdates).length === 0) {
+      return res.json({
+        toast: { type: 'success', message: 'No changes detected' },
+      })
+    }
+
+    // Update the booking
+    await bookingModel.updateBooking(booking_id, filteredUpdates)
+
+    res.json({
+      toast: { type: 'success', message: 'Booking updated successfully' },
+    })
+  } catch (e) {
+    console.error('Update Booking Error:', e)
+    res
+      .status(500)
+      .json({ toast: { type: 'error', message: 'Internal server error' } })
+  }
+}
+
+// NEW: admin - list all bookings
+exports.listAllBookings = async (req, res) => {
+  try {
+    const bookings = await bookingModel.getAllBookings()
+
+    res.json({
+      toast: {
+        type: 'success',
+        message: 'All bookings retrieved successfully',
+      },
+      bookings,
+    })
+  } catch (e) {
+    console.error('List All Bookings Error:', e)
+    res
+      .status(500)
+      .json({ toast: { type: 'error', message: 'Internal server error' } })
+  }
+}
+
+// NEW: admin - update booking status
+exports.updateBookingStatus = async (req, res) => {
+  try {
+    const { booking_id } = req.params
+    const { status } = req.body
+
+    // Update the booking status
+    await bookingModel.updateBooking(booking_id, { status })
+
+    res.json({
+      toast: {
+        type: 'success',
+        message: 'Booking status updated successfully',
+      },
+    })
+  } catch (e) {
+    console.error('Update Booking Status Error:', e)
+    res
+      .status(500)
+      .json({ toast: { type: 'error', message: 'Internal server error' } })
+  }
+}
+
+// NEW: admin - delete booking
+exports.deleteBooking = async (req, res) => {
+  try {
+    const { booking_id } = req.params
+
+    // Soft delete the booking
+    await bookingModel.cancelBooking(booking_id)
+
+    res.json({
+      toast: { type: 'success', message: 'Booking deleted successfully' },
+    })
+  } catch (e) {
+    console.error('Delete Booking Error:', e)
+    res
+      .status(500)
+      .json({ toast: { type: 'error', message: 'Internal server error' } })
+  }
+}
+
+// NEW: replace package items
+exports.replacePackageItems = async (req, res) => {
+  try {
+    const { package_id } = req.params
+    const packageId = Number(package_id)
+    const items = Array.isArray(req.body?.items) ? req.body.items : null
+
+    if (!Number.isFinite(packageId)) {
+      return res.status(400).json({
+        toast: { type: 'error', message: 'Invalid package ID' },
+      })
+    }
+    if (!items) {
+      return res.status(400).json({
+        toast: { type: 'error', message: 'Items array is required' },
+      })
+    }
+
+    // ALLOW hidden packages
+    const pkg = await packageModel.getPackageByIdAny(packageId)
+    if (!pkg) {
+      return res
+        .status(404)
+        .json({ toast: { type: 'error', message: 'Package not found' } })
+    }
+
+    // Soft-delete existing junctions for this package
+    const all = await packageInventoryItemModel.getAllPackageInventoryItems()
+    const existing = all.filter(
+      (it) => Number(it.package_id) === packageId && it.display !== false
+    )
+    for (const it of existing) {
+      await packageInventoryItemModel.updatePackageInventoryItem(it.id, {
+        display: false,
+      })
+    }
+
+    // Add new junctions
+    const newItems = []
+    for (const item of items) {
+      const { inventory_id, quantity } = item
+      if (!inventory_id || quantity == null) {
+        return res.status(400).json({
+          toast: {
+            type: 'error',
+            message: 'inventory_id and quantity are required',
+          },
+        })
+      }
+      if (quantity <= 0) {
+        return res
+          .status(400)
+          .json({ toast: { type: 'error', message: 'Quantity must be > 0' } })
+      }
+
+      const inv = await inventoryModel.findInventoryById(inventory_id)
+      if (!inv) {
+        return res.status(404).json({
+          toast: { type: 'error', message: 'Inventory item not found' },
+        })
+      }
+
+      const junction =
+        await packageInventoryItemModel.createPackageInventoryItem({
+          package_id: packageId,
+          inventory_id,
+          quantity,
+        })
+      newItems.push(junction)
+    }
+
+    res.json({
+      toast: {
+        type: 'success',
+        message: 'Package items replaced successfully',
+      },
+      items: newItems,
+    })
+  } catch (e) {
+    console.error('Replace Package Items Error:', e)
+    res
+      .status(500)
+      .json({ toast: { type: 'error', message: 'Internal server error' } })
+  }
+}

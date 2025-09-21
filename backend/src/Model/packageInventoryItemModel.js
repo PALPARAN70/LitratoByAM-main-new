@@ -74,9 +74,25 @@ async function updatePackageInventoryItem(id, updates) {
   return result.rows[0]
 }
 
+// NEW: get items for a specific package (visible ones)
+async function getPackageInventoryItemsByPackage(package_id) {
+  const result = await pool.query(
+    `
+      SELECT pii.*, i.material_name
+      FROM package_inventory_items pii
+      JOIN inventory i ON i.id = pii.inventory_id
+      WHERE pii.package_id = $1 AND pii.display = TRUE
+      ORDER BY i.material_name ASC
+    `,
+    [package_id]
+  )
+  return result.rows
+}
+
 module.exports = {
   initPackageInventoryItemsTable,
   createPackageInventoryItem,
   getAllPackageInventoryItems,
   updatePackageInventoryItem,
+  getPackageInventoryItemsByPackage, // NEW export
 }

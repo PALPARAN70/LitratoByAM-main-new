@@ -240,4 +240,18 @@ router.post(
   adminController.createMaterialType
 )
 
+// NEW: package items management
+router.get(
+  '/package/:package_id/items',
+  authMiddleware,
+  roleMiddleware('admin'),
+  adminController.listPackageItemsForPackage
+)
+router.put(
+  '/package/:package_id/items',
+  authMiddleware,
+  roleMiddleware('admin'),
+  adminController.replacePackageItems
+)
+
 module.exports = router
