@@ -1136,22 +1136,22 @@ export default function InventoryManagementPage() {
                 </div>
                 <div className="flex flex-col gap-1">
                   <label className="text-sm font-medium">Type</label>
-                  <Select
-                    value={(form.type as string) ?? ''}
-                    onValueChange={(v) => setForm((p) => ({ ...p, type: v }))}
-                  >
-                    <SelectTrigger className="h-9 text-sm rounded">
-                      <SelectValue placeholder="Select type" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {equipmentTypes.map((t) => (
-                        <SelectItem key={t} value={t}>
-                          {t}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <div className="mt-2">
+                  <div className="flex gap-2 items-center">
+                    <Select
+                      value={(form.type as string) ?? ''}
+                      onValueChange={(v) => setForm((p) => ({ ...p, type: v }))}
+                    >
+                      <SelectTrigger className="h-9 text-sm rounded w-full">
+                        <SelectValue placeholder="Select type" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {equipmentTypes.map((t) => (
+                          <SelectItem key={t} value={t}>
+                            {t}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                     <AddTypeButton
                       onAdd={(newType) => {
                         setEquipmentTypes((prev) => {
@@ -2412,6 +2412,7 @@ export default function InventoryManagementPage() {
       entity_id: number
       status: string
       notes: string | null
+      additional_notes?: string | null
       updated_by: number | null
       updated_by_name?: string
       updated_by_username?: string
@@ -2419,6 +2420,9 @@ export default function InventoryManagementPage() {
     }
 
     const [logs, setLogs] = useState<LogRow[]>([])
+    const [editNotesOpen, setEditNotesOpen] = useState(false)
+    const [editingLog, setEditingLog] = useState<LogRow | null>(null)
+    const [editAdditionalNotes, setEditAdditionalNotes] = useState('')
     const [loading, setLoading] = useState(false)
     const [form, setForm] = useState<{
       entity_type: 'Inventory' | 'Package'
@@ -2793,248 +2797,358 @@ export default function InventoryManagementPage() {
     )
 
     return (
-      <div className="flex h-full min-h-0 flex-col gap-4">
-        {/* Filters toolbar: entity + status (search removed; uses unified search bar) */}
-        <div className="flex flex-col md:flex-row gap-3 md:items-end">
-          <div className="flex flex-col gap-1">
-            <label className="text-sm font-medium">Filter: Entity</label>
-            <Select
-              value={filterEntity}
-              onValueChange={(v) => {
-                setFilterEntity(v as 'all' | 'Inventory' | 'Package')
-                setFilterStatus('all')
-              }}
-            >
-              <SelectTrigger className="h-9 text-sm rounded">
-                <SelectValue placeholder="All entities" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All</SelectItem>
-                <SelectItem value="Inventory">Inventory</SelectItem>
-                <SelectItem value="Package">Package</SelectItem>
-              </SelectContent>
-            </Select>
+      <>
+        <div className="flex h-full min-h-0 flex-col gap-4">
+          {/* Filters toolbar: entity + status (search removed; uses unified search bar) */}
+          <div className="flex flex-col md:flex-row gap-3 md:items-end">
+            <div className="flex flex-col gap-1">
+              <label className="text-sm font-medium">Filter: Entity</label>
+              <Select
+                value={filterEntity}
+                onValueChange={(v) => {
+                  setFilterEntity(v as 'all' | 'Inventory' | 'Package')
+                  setFilterStatus('all')
+                }}
+              >
+                <SelectTrigger className="h-9 text-sm rounded">
+                  <SelectValue placeholder="All entities" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All</SelectItem>
+                  <SelectItem value="Inventory">Inventory</SelectItem>
+                  <SelectItem value="Package">Package</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <label className="text-sm font-medium">Filter: Status</label>
+              <Select
+                value={filterStatus}
+                onValueChange={(v) =>
+                  setFilterStatus(
+                    v as
+                      | 'all'
+                      | 'available'
+                      | 'unavailable'
+                      | 'maintenance'
+                      | 'damaged'
+                      | 'hidden'
+                      | 'unhidden'
+                  )
+                }
+              >
+                <SelectTrigger className="h-9 text-sm rounded">
+                  <SelectValue placeholder="All statuses" />
+                </SelectTrigger>
+                <SelectContent>
+                  {currentStatusOptions.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Removed local "Search by name" input; unified search bar is used */}
           </div>
 
-          <div className="flex flex-col gap-1">
-            <label className="text-sm font-medium">Filter: Status</label>
-            <Select
-              value={filterStatus}
-              onValueChange={(v) =>
-                setFilterStatus(
-                  v as
-                    | 'all'
-                    | 'available'
-                    | 'unavailable'
-                    | 'maintenance'
-                    | 'damaged'
-                    | 'hidden'
-                    | 'unhidden'
-                )
-              }
-            >
-              <SelectTrigger className="h-9 text-sm rounded">
-                <SelectValue placeholder="All statuses" />
-              </SelectTrigger>
-              <SelectContent>
-                {currentStatusOptions.map((opt) => (
-                  <SelectItem key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* Removed local "Search by name" input; unified search bar is used */}
-        </div>
-
-        {/* Table area scrolls; pagination stays at bottom */}
-        <div className="flex-1 min-h-0 overflow-auto rounded border">
-          <Table className="w-full table-auto">
-            <TableHeader>
-              <TableRow className="bg-gray-200 hover:not-enabled:bg-gray-200">
-                <TableHead className="px-4 py-2">Entity</TableHead>
-                <TableHead className="px-4 py-2">Name</TableHead>
-                <TableHead className="px-4 py-2">Log Type</TableHead>
-                <TableHead className="px-4 py-2">Status</TableHead>
-                <TableHead className="px-4 py-2">Condition</TableHead>
-                <TableHead className="px-4 py-2">More Details</TableHead>
-                <TableHead className="px-4 py-2">Updated By</TableHead>
-                <TableHead className="px-4 py-2">Updated At</TableHead>
-                <TableHead className="px-4 py-2">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {loading ? (
-                <TableRow>
-                  <TableCell className="px-4 py-3" colSpan={9}>
-                    Loading...
-                  </TableCell>
+          {/* Table area scrolls; pagination stays at bottom */}
+          <div className="flex-1 min-h-0 overflow-auto rounded border">
+            <Table className="w-full table-auto">
+              <TableHeader>
+                <TableRow className="bg-gray-200 hover:not-enabled:bg-gray-200">
+                  <TableHead className="px-4 py-2">Entity</TableHead>
+                  <TableHead className="px-4 py-2">Name</TableHead>
+                  <TableHead className="px-4 py-2">Log Type</TableHead>
+                  <TableHead className="px-4 py-2">Status</TableHead>
+                  <TableHead className="px-4 py-2">Condition</TableHead>
+                  <TableHead className="px-4 py-2">More Details</TableHead>
+                  <TableHead className="px-4 py-2">Updated By</TableHead>
+                  <TableHead className="px-4 py-2">Updated At</TableHead>
+                  <TableHead className="px-4 py-2">Actions</TableHead>
                 </TableRow>
-              ) : paginatedLogs.length === 0 ? (
-                <TableRow>
-                  <TableCell className="px-4 py-3" colSpan={9}>
-                    No logs found
-                  </TableCell>
-                </TableRow>
-              ) : (
-                paginatedLogs.map((l) => (
-                  <TableRow key={l.log_id} className="even:bg-gray-50">
-                    <TableCell className="px-4 py-2">{l.entity_type}</TableCell>
-                    <TableCell className="px-4 py-2">
-                      {l.entity_type === 'Inventory'
-                        ? inventoryNames[String(l.entity_id)] ??
-                          `#${l.entity_id}`
-                        : l.entity_type === 'Package'
-                        ? packageNames[String(l.entity_id)] ?? `#${l.entity_id}`
-                        : `#${l.entity_id}`}
+              </TableHeader>
+              <TableBody>
+                {loading ? (
+                  <TableRow>
+                    <TableCell className="px-4 py-3" colSpan={9}>
+                      Loading...
                     </TableCell>
-                    <TableCell className="px-4 py-2">{l._logType}</TableCell>
-                    <TableCell className="px-4 py-2 capitalize">
-                      {l._statusDisplay}
+                  </TableRow>
+                ) : paginatedLogs.length === 0 ? (
+                  <TableRow>
+                    <TableCell className="px-4 py-3" colSpan={9}>
+                      No logs found
                     </TableCell>
-                    <TableCell className="px-4 py-2 capitalize">
-                      {l._conditionDisplay ??
-                        (l.entity_type === 'Package' ? '' : '—')}
-                    </TableCell>
-                    <TableCell className="px-4 py-2">
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <button
-                            type="button"
-                            aria-label="More details"
-                            className="inline-flex items-center justify-center rounded border px-2 py-1 bg-gray-100 hover:bg-gray-200"
-                          >
-                            <Ellipsis className="h-4 w-4" />
-                          </button>
-                        </PopoverTrigger>
-                        <PopoverContent align="end" className="w-64 text-xs">
-                          <div className="space-y-1">
-                            {l._changes ? (
-                              <div className="mt-2">
-                                <div className="font-medium mb-1">Changes:</div>
-                                <ul className="list-disc list-inside space-y-0.5">
-                                  {Object.entries(l._changes).map(
-                                    ([field, pair]) => {
-                                      if (field === 'image_url') {
+                  </TableRow>
+                ) : (
+                  paginatedLogs.map((l) => (
+                    <TableRow key={l.log_id} className="even:bg-gray-50">
+                      <TableCell className="px-4 py-2">
+                        {l.entity_type}
+                      </TableCell>
+                      <TableCell className="px-4 py-2">
+                        {l.entity_type === 'Inventory'
+                          ? inventoryNames[String(l.entity_id)] ??
+                            `#${l.entity_id}`
+                          : l.entity_type === 'Package'
+                          ? packageNames[String(l.entity_id)] ??
+                            `#${l.entity_id}`
+                          : `#${l.entity_id}`}
+                      </TableCell>
+                      <TableCell className="px-4 py-2">{l._logType}</TableCell>
+                      <TableCell className="px-4 py-2 capitalize">
+                        {l._statusDisplay}
+                      </TableCell>
+                      <TableCell className="px-4 py-2 capitalize">
+                        {l._conditionDisplay ??
+                          (l.entity_type === 'Package' ? '' : '—')}
+                      </TableCell>
+                      <TableCell className="px-4 py-2">
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <button
+                              type="button"
+                              aria-label="More details"
+                              className="inline-flex items-center justify-center rounded border px-2 py-1 bg-gray-100 hover:bg-gray-200"
+                            >
+                              <Ellipsis className="h-4 w-4" />
+                            </button>
+                          </PopoverTrigger>
+                          <PopoverContent align="end" className="w-64 text-xs">
+                            <div className="space-y-1">
+                              {l._changes ? (
+                                <div className="mt-2">
+                                  <div className="font-medium mb-1">
+                                    Changes:
+                                  </div>
+                                  <ul className="list-disc list-inside space-y-0.5">
+                                    {Object.entries(l._changes).map(
+                                      ([field, pair]) => {
+                                        if (field === 'image_url') {
+                                          return (
+                                            <li key={field}>
+                                              <span className="font-medium">
+                                                Image:
+                                              </span>{' '}
+                                              changed
+                                            </li>
+                                          )
+                                        }
+                                        const [oldV, newV] = pair as [any, any]
                                         return (
                                           <li key={field}>
-                                            <span className="font-medium">
-                                              Image:
+                                            <span className="font-medium capitalize">
+                                              {field.replace(/_/g, ' ')}:
                                             </span>{' '}
-                                            changed
+                                            {oldV === null ||
+                                            oldV === undefined ||
+                                            oldV === ''
+                                              ? '—'
+                                              : String(oldV)}{' '}
+                                            {'->'}{' '}
+                                            {newV === null ||
+                                            newV === undefined ||
+                                            newV === ''
+                                              ? '—'
+                                              : String(newV)}
                                           </li>
                                         )
                                       }
-                                      const [oldV, newV] = pair as [any, any]
-                                      return (
-                                        <li key={field}>
-                                          <span className="font-medium capitalize">
-                                            {field.replace(/_/g, ' ')}:
-                                          </span>{' '}
-                                          {oldV === null ||
-                                          oldV === undefined ||
-                                          oldV === ''
-                                            ? '—'
-                                            : String(oldV)}{' '}
-                                          {'->'}{' '}
-                                          {newV === null ||
-                                          newV === undefined ||
-                                          newV === ''
-                                            ? '—'
-                                            : String(newV)}
-                                        </li>
-                                      )
-                                    }
-                                  )}
-                                </ul>
-                              </div>
-                            ) : (
-                              <div className="mt-2 text-gray-500">
-                                No field changes
-                              </div>
-                            )}
-                          </div>
-                        </PopoverContent>
-                      </Popover>
-                    </TableCell>
-                    <TableCell className="px-4 py-2">
-                      {(() => {
-                        const name =
-                          (l.updated_by_name && l.updated_by_name.trim()) ||
-                          l.updated_by_username
-                        if (name) return name
-                        return l.updated_by != null ? `#${l.updated_by}` : '—'
-                      })()}
-                    </TableCell>
-                    <TableCell className="px-4 py-2">
-                      {new Date(l.updated_at).toLocaleString()}
-                    </TableCell>
-                    <TableCell className="px-4 py-2">
-                      <button
-                        type="button"
-                        title="Edit log (not implemented)"
-                        onClick={() => {}}
-                      >
-                        <Pencil></Pencil>
-                      </button>
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </div>
+                                    )}
+                                  </ul>
+                                  {/* Additional Notes display */}
+                                  <div className="mt-2">
+                                    <div className="font-medium mb-0.5">
+                                      Additional Notes:
+                                    </div>
+                                    <div className="whitespace-pre-wrap break-words text-gray-700 text-[11px] leading-snug min-h-[0.75rem]">
+                                      {l.additional_notes &&
+                                      l.additional_notes.trim() !== '' ? (
+                                        l.additional_notes
+                                      ) : (
+                                        <span className="text-gray-400">
+                                          (none)
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="mt-2 text-gray-500">
+                                  No field changes
+                                </div>
+                              )}
+                            </div>
+                          </PopoverContent>
+                        </Popover>
+                      </TableCell>
+                      <TableCell className="px-4 py-2">
+                        {(() => {
+                          const name =
+                            (l.updated_by_name && l.updated_by_name.trim()) ||
+                            l.updated_by_username
+                          if (name) return name
+                          return l.updated_by != null ? `#${l.updated_by}` : '—'
+                        })()}
+                      </TableCell>
+                      <TableCell className="px-4 py-2">
+                        {new Date(l.updated_at).toLocaleString()}
+                      </TableCell>
+                      <TableCell className="px-4 py-2">
+                        <button
+                          type="button"
+                          title="Edit additional notes"
+                          onClick={() => {
+                            setEditingLog(l)
+                            setEditAdditionalNotes(l.additional_notes || '')
+                            setEditNotesOpen(true)
+                          }}
+                          className="inline-flex items-center justify-center rounded-full hover:text-black text-litratoblack"
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </button>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
 
-        {/* Pagination pinned at bottom */}
-        <div className="mt-auto pt-2">
-          <Pagination>
-            <PaginationContent>
-              <PaginationItem>
-                <PaginationPrevious
-                  href="#"
-                  className="text-black no-underline hover:no-underline hover:text-black"
-                  style={{ textDecoration: 'none' }}
-                  onClick={(e) => {
-                    e.preventDefault()
-                    setLogsPage((p) => Math.max(1, p - 1))
-                  }}
-                />
-              </PaginationItem>
-
-              {logsWindowPages.map((n) => (
-                <PaginationItem key={n}>
-                  <PaginationLink
+          {/* Pagination pinned at bottom */}
+          <div className="mt-auto pt-2">
+            <Pagination>
+              <PaginationContent>
+                <PaginationItem>
+                  <PaginationPrevious
                     href="#"
-                    isActive={n === logsPage}
                     className="text-black no-underline hover:no-underline hover:text-black"
                     style={{ textDecoration: 'none' }}
                     onClick={(e) => {
                       e.preventDefault()
-                      setLogsPage(n)
+                      setLogsPage((p) => Math.max(1, p - 1))
                     }}
-                  >
-                    {n}
-                  </PaginationLink>
+                  />
                 </PaginationItem>
-              ))}
 
-              <PaginationItem>
-                <PaginationNext
-                  href="#"
-                  className="text-black no-underline hover:no-underline hover:text-black"
-                  style={{ textDecoration: 'none' }}
-                  onClick={(e) => {
-                    e.preventDefault()
-                    setLogsPage((p) => Math.min(logsTotalPages, p + 1))
-                  }}
-                />
-              </PaginationItem>
-            </PaginationContent>
-          </Pagination>
+                {logsWindowPages.map((n) => (
+                  <PaginationItem key={n}>
+                    <PaginationLink
+                      href="#"
+                      isActive={n === logsPage}
+                      className="text-black no-underline hover:no-underline hover:text-black"
+                      style={{ textDecoration: 'none' }}
+                      onClick={(e) => {
+                        e.preventDefault()
+                        setLogsPage(n)
+                      }}
+                    >
+                      {n}
+                    </PaginationLink>
+                  </PaginationItem>
+                ))}
+
+                <PaginationItem>
+                  <PaginationNext
+                    href="#"
+                    className="text-black no-underline hover:no-underline hover:text-black"
+                    style={{ textDecoration: 'none' }}
+                    onClick={(e) => {
+                      e.preventDefault()
+                      setLogsPage((p) => Math.min(logsTotalPages, p + 1))
+                    }}
+                  />
+                </PaginationItem>
+              </PaginationContent>
+            </Pagination>
+          </div>
         </div>
-      </div>
+        {/* Edit Additional Notes Dialog */}
+        <Dialog
+          open={editNotesOpen}
+          onOpenChange={(o) => {
+            if (!o) {
+              setEditNotesOpen(false)
+              setEditingLog(null)
+            }
+          }}
+        >
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Edit Additional Notes</DialogTitle>
+              <DialogDescription>
+                Add or update contextual notes for this log entry.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3 py-2">
+              <div className="text-xs text-gray-500">
+                Log ID: {editingLog?.log_id}
+              </div>
+              <Textarea
+                rows={5}
+                value={editAdditionalNotes}
+                onChange={(e) => setEditAdditionalNotes(e.target.value)}
+                placeholder="Enter additional notes..."
+                className="text-sm"
+              />
+            </div>
+            <DialogFooter>
+              <DialogClose asChild>
+                <Button type="button" variant="outline">
+                  Cancel
+                </Button>
+              </DialogClose>
+              <Button
+                type="button"
+                className="bg-litratoblack text-white"
+                onClick={async () => {
+                  if (!editingLog) return
+                  try {
+                    const res = await fetch(
+                      `${API_BASE}/inventory-status-log/${editingLog.log_id}`,
+                      {
+                        method: 'PATCH',
+                        headers: {
+                          'Content-Type': 'application/json',
+                          ...getAuthHeaders(),
+                        },
+                        body: JSON.stringify({
+                          entity_type: editingLog.entity_type,
+                          entity_id: editingLog.entity_id,
+                          status: editingLog.status,
+                          notes: editingLog.notes, // keep original structured JSON in notes
+                          additional_notes: editAdditionalNotes || null,
+                        }),
+                      }
+                    )
+                    if (!res.ok) throw new Error(await res.text())
+                    // optimistic local update
+                    setLogs((prev) =>
+                      prev.map((log) =>
+                        log.log_id === editingLog.log_id
+                          ? {
+                              ...log,
+                              additional_notes: editAdditionalNotes || null,
+                            }
+                          : log
+                      )
+                    )
+                    setEditNotesOpen(false)
+                    setEditingLog(null)
+                  } catch (e) {
+                    console.error('Update additional notes failed:', e)
+                  }
+                }}
+              >
+                Save
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </>
     )
   }
 

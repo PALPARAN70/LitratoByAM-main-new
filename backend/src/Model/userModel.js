@@ -121,6 +121,19 @@ async function updateUserPassword(id, newPassword) {
   return result.rows[0]
 }
 
+// Update a user's role (admin use only). Valid roles: admin, employee, customer
+async function updateUserRole(id, role) {
+  const allowedRoles = ['admin', 'employee', 'customer']
+  if (!allowedRoles.includes(role)) {
+    throw new Error('Invalid role')
+  }
+  const result = await pool.query(
+    'UPDATE users SET role = $1, last_updated = CURRENT_TIMESTAMP WHERE id = $2 RETURNING *',
+    [role, id]
+  )
+  return result.rows[0]
+}
+
 //------Confirmation Email------//
 async function setVerificationToken(userId, token) {
   await pool.query('UPDATE users SET verification_token = $1 WHERE id = $2', [
@@ -201,6 +214,7 @@ module.exports = {
   createUser,
   updateUserProfile,
   updateUserPassword,
+  updateUserRole,
   setVerificationToken,
   findUserByToken,
   verifyUser,

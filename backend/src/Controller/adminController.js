@@ -26,7 +26,10 @@ exports.listUsers = async (req, res) => {
       users = await userModel.listAllUsers()
     }
 
-    const data = users.map((u) => ({
+    // Only include verified users
+    const verified = users.filter((u) => u.is_verified === true)
+
+    const data = verified.map((u) => ({
       id: String(u.id),
       firstname: u.firstname || '',
       lastname: u.lastname || '',
@@ -35,7 +38,8 @@ exports.listUsers = async (req, res) => {
       role: u.role || '',
       last_login: u.last_login || null,
       last_updated: u.last_updated || null,
-      isactive: u.isactive === true, // added
+      isactive: u.isactive === true,
+      is_verified: u.is_verified === true,
     }))
 
     res.json({
@@ -134,12 +138,24 @@ exports.updateUserRole = async (req, res) => {
       return res.status(403).json({
         toast: { type: 'error', message: 'Admin users cannot change roles' },
       })
+    const allowedRoles = ['employee', 'customer'] // purposely exclude elevating to admin here
+    if (!role || !allowedRoles.includes(role)) {
+      return res.status(400).json({
+        toast: { type: 'error', message: 'Invalid role provided' },
+      })
+    }
+    if (user.role === role) {
+      return res.json({
+        toast: { type: 'success', message: 'No role change needed' },
+        user: { id: String(user.id), role },
+      })
+    }
 
-    await userModel.updateUserRole(id, role)
+    const updated = await userModel.updateUserRole(id, role)
 
     res.json({
       toast: { type: 'success', message: 'User role updated successfully' },
-      user: { id: String(user.id), role },
+      user: { id: String(updated.id), role: updated.role },
     })
   } catch (e) {
     console.error('Update User Role Error:', e)
