@@ -58,6 +58,14 @@ router.patch(
   adminController.unblockUser
 )
 
+// change user role
+router.patch(
+  '/user/:id/role',
+  authMiddleware,
+  roleMiddleware('admin'),
+  adminController.updateUserRole
+)
+
 // -------- inventory management routes -------- //
 //create inventory item
 router.post(

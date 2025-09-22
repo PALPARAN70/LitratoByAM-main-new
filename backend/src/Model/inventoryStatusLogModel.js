@@ -9,6 +9,7 @@ async function initInventoryStatusLogTable() {
     entity_id INT NOT NULL,
     status VARCHAR(50) NOT NULL,
     notes TEXT,
+    additional_notes TEXT,
     updated_by INT REFERENCES users(id) ON DELETE SET NULL,
     display BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -101,5 +102,5 @@ module.exports = {
   findLogsByEntity,
   getAllLogs,
   updateLog,
-  softDeleteLog, // <-- export
+  softDeleteLog,
 }
