@@ -1,5 +1,5 @@
 const express = require('express')
-const adminController = require('../Controller/adminController')
+const adminController = require('../Controller/adminControllers/adminController')
 const authMiddleware = require('../Middleware/authMiddleware')
 const roleMiddleware = require('../Middleware/roleMiddleware')
 const path = require('path')
