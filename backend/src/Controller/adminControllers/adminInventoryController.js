@@ -1,179 +1,14 @@
-//----------------User Management----------------//
-const userModel = require('../Model/userModel')
+// Inventory & Package Management Controller (split from adminController.js)
+// Contains endpoints related to inventory items, packages, package inventory junctions,
+// material types, and inventory status logs.
 
-exports.getDashboard = (req, res) => {
-  res.json({
-    toast: { type: 'success', message: 'Admin Dashboard' },
-    user: req.user,
-  })
-}
+const inventoryModel = require('../../Model/inventoryModel')
+const packageModel = require('../../Model/packageModel')
+const packageInventoryItemModel = require('../../Model/packageInventoryItemModel')
+const inventoryStatusLogModel = require('../../Model/inventoryStatusLogModel')
+const materialTypesModel = require('../../Model/materialTypesModel')
 
-exports.manageUsers = (req, res) => {
-  res.json({
-    toast: { type: 'success', message: 'Manage Users - Admin Only' },
-  })
-}
-
-// View List of Users
-exports.listUsers = async (req, res) => {
-  try {
-    const { role } = req.query
-    let users
-
-    if (role) {
-      users = await userModel.listUsersByRole(role)
-    } else {
-      users = await userModel.listAllUsers()
-    }
-
-    // Only include verified users
-    const verified = users.filter((u) => u.is_verified === true)
-
-    const data = verified.map((u) => ({
-      id: String(u.id),
-      firstname: u.firstname || '',
-      lastname: u.lastname || '',
-      email: u.username,
-      contact: u.contact || '',
-      role: u.role || '',
-      last_login: u.last_login || null,
-      last_updated: u.last_updated || null,
-      isactive: u.isactive === true,
-      is_verified: u.is_verified === true,
-    }))
-
-    res.json({
-      toast: { type: 'success', message: 'User list loaded' },
-      users: data,
-    })
-  } catch (e) {
-    console.error('List Users Error:', e)
-    res
-      .status(500)
-      .json({ toast: { type: 'error', message: 'Internal server error' } })
-  }
-}
-
-// block and unblock user functions
-exports.blockUser = async (req, res) => {
-  try {
-    const { id } = req.params
-    const user = await userModel.findUserById(id)
-
-    if (!user)
-      return res
-        .status(404)
-        .json({ toast: { type: 'error', message: 'User not found' } })
-    if (user.role === 'admin')
-      return res.status(403).json({
-        toast: { type: 'error', message: 'Admin users cannot be blocked' },
-      })
-
-    await userModel.isInActive(id)
-
-    // For customers, use error toast type on blocking; otherwise keep success.
-    if (user.role === 'customer') {
-      return res.json({
-        toast: { type: 'error', message: 'Customer blocked' },
-        isactive: false,
-      })
-    }
-
-    return res.json({
-      toast: { type: 'success', message: 'User blocked' },
-      isactive: false,
-    })
-  } catch (e) {
-    console.error('Block User Error:', e)
-    return res
-      .status(500)
-      .json({ toast: { type: 'error', message: 'Internal server error' } })
-  }
-}
-exports.unblockUser = async (req, res) => {
-  try {
-    const { id } = req.params
-    const user = await userModel.findUserById(id)
-
-    if (!user)
-      return res
-        .status(404)
-        .json({ toast: { type: 'error', message: 'User not found' } })
-
-    await userModel.isActive(id)
-
-    // For customers, explicitly return success toast message for unblocking.
-    if (user.role === 'customer') {
-      return res.json({
-        toast: { type: 'success', message: 'Customer unblocked' },
-        isactive: true,
-      })
-    }
-
-    return res.json({
-      toast: { type: 'success', message: 'User unblocked' },
-      isactive: true,
-    })
-  } catch (e) {
-    console.error('Unblock User Error:', e)
-    return res
-      .status(500)
-      .json({ toast: { type: 'error', message: 'Internal server error' } })
-  }
-}
-// end of block and unblock user functions
-
-//update user role
-exports.updateUserRole = async (req, res) => {
-  try {
-    const { id } = req.params
-    const { role } = req.body
-    const user = await userModel.findUserById(id)
-
-    if (!user)
-      return res
-        .status(404)
-        .json({ toast: { type: 'error', message: 'User not found' } })
-    if (user.role === 'admin')
-      return res.status(403).json({
-        toast: { type: 'error', message: 'Admin users cannot change roles' },
-      })
-    const allowedRoles = ['employee', 'customer'] // purposely exclude elevating to admin here
-    if (!role || !allowedRoles.includes(role)) {
-      return res.status(400).json({
-        toast: { type: 'error', message: 'Invalid role provided' },
-      })
-    }
-    if (user.role === role) {
-      return res.json({
-        toast: { type: 'success', message: 'No role change needed' },
-        user: { id: String(user.id), role },
-      })
-    }
-
-    const updated = await userModel.updateUserRole(id, role)
-
-    res.json({
-      toast: { type: 'success', message: 'User role updated successfully' },
-      user: { id: String(updated.id), role: updated.role },
-    })
-  } catch (e) {
-    console.error('Update User Role Error:', e)
-    res
-      .status(500)
-      .json({ toast: { type: 'error', message: 'Internal server error' } })
-  }
-}
-//---------------End User Management------------------//
-
-//----------------Inventory Management----------------//
-const inventoryModel = require('../Model/inventoryModel')
-const packageModel = require('../Model/packageModel')
-const packageInventoryItemModel = require('../Model/packageInventoryItemModel')
-const inventoryStatusLogModel = require('../Model/inventoryStatusLogModel')
-const materialTypesModel = require('../Model/materialTypesModel')
-
-//create inventory item -C
+// -------- Inventory Items -------- //
 exports.createInventoryItem = async (req, res) => {
   try {
     const {
@@ -196,7 +31,7 @@ exports.createInventoryItem = async (req, res) => {
       display
     )
 
-    // auto log: equipment created
+    // auto log
     try {
       await inventoryStatusLogModel.createStatusLog(
         'Inventory',
@@ -231,37 +66,7 @@ exports.createInventoryItem = async (req, res) => {
   }
 }
 
-// -------- material types management -------- //
-exports.listMaterialTypes = async (_req, res) => {
-  try {
-    const rows = await materialTypesModel.listMaterialTypes()
-    res.json({ materialTypes: rows })
-  } catch (e) {
-    console.error('List material types error:', e)
-    res.status(500).json({ error: 'Internal server error' })
-  }
-}
-
-exports.createMaterialType = async (req, res) => {
-  try {
-    const { name } = req.body || {}
-    if (!name || !String(name).trim()) {
-      return res.status(400).json({ error: 'Name is required' })
-    }
-    const row = await materialTypesModel.createMaterialType(String(name).trim())
-    res.json({ materialType: row })
-  } catch (e) {
-    console.error('Create material type error:', e)
-    if (e.code === '23505') {
-      // unique violation
-      return res.status(409).json({ error: 'Type already exists' })
-    }
-    res.status(500).json({ error: 'Internal server error' })
-  }
-}
-//used for creating inventory items
-//list all inventory items -R
-exports.listInventory = async (req, res) => {
+exports.listInventory = async (_req, res) => {
   try {
     const items = await inventoryModel.getAllInventory()
     res.json({
@@ -278,13 +83,11 @@ exports.listInventory = async (req, res) => {
       .json({ toast: { type: 'error', message: 'Internal server error' } })
   }
 }
-//update inventory item -U
+
 exports.updateInventoryItem = async (req, res) => {
   try {
     const { inventoryID } = req.params
     const updates = req.body
-
-    // fetch current to compare status
     const current = await inventoryModel.findInventoryById(inventoryID)
     if (!current) {
       return res
@@ -294,7 +97,7 @@ exports.updateInventoryItem = async (req, res) => {
 
     const updated = await inventoryModel.updateInventory(inventoryID, updates)
 
-    // build change diff (only relevant fields)
+    // build diff
     const diff = {}
     const trackFields = [
       'material_name',
@@ -307,7 +110,6 @@ exports.updateInventoryItem = async (req, res) => {
         const oldVal = current[f]
         const newVal = updated ? updated[f] : undefined
         if (oldVal !== newVal) {
-          // normalize status boolean to labels
           const normalize = (field, val) => {
             if (field === 'status') return val ? 'available' : 'unavailable'
             return val === null || val === undefined ? null : String(val)
@@ -330,25 +132,6 @@ exports.updateInventoryItem = async (req, res) => {
       }
     }
 
-    // // if status changed, create a status log (server-side auditing)
-    // if (Object.prototype.hasOwnProperty.call(updates, 'status')) {
-    //   const prev = current.status === true
-    //   const next = !!updates.status
-    //   if (prev !== next) {
-    //     try {
-    //       await inventoryStatusLogModel.createStatusLog(
-    //         'Inventory',
-    //         Number(inventoryID),
-    //         next ? 'available' : 'unavailable',
-    //         updates.notes || null,
-    //         req.user?.id || 0
-    //       )
-    //     } catch (e) {
-    //       console.error('Create status log failed:', e)
-    //     }
-    //   }
-    // }
-
     res.json({
       toast: {
         type: 'success',
@@ -364,7 +147,6 @@ exports.updateInventoryItem = async (req, res) => {
   }
 }
 
-//delete inventory item by making display false -D
 exports.deleteInventoryItem = async (req, res) => {
   try {
     const { inventoryID } = req.params
@@ -383,8 +165,35 @@ exports.deleteInventoryItem = async (req, res) => {
   }
 }
 
-//used for creating packages which will be used in booking
-//create package -C
+// -------- Material Types -------- //
+exports.listMaterialTypes = async (_req, res) => {
+  try {
+    const rows = await materialTypesModel.listMaterialTypes()
+    res.json({ materialTypes: rows })
+  } catch (e) {
+    console.error('List material types error:', e)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+exports.createMaterialType = async (req, res) => {
+  try {
+    const { name } = req.body || {}
+    if (!name || !String(name).trim()) {
+      return res.status(400).json({ error: 'Name is required' })
+    }
+    const row = await materialTypesModel.createMaterialType(String(name).trim())
+    res.json({ materialType: row })
+  } catch (e) {
+    console.error('Create material type error:', e)
+    if (e.code === '23505') {
+      return res.status(409).json({ error: 'Type already exists' })
+    }
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// -------- Packages -------- //
 exports.createPackage = async (req, res) => {
   try {
     const { package_name, description, price, status, display, image_url } =
@@ -397,7 +206,6 @@ exports.createPackage = async (req, res) => {
       display,
       image_url
     )
-    // auto log: package created
     try {
       await inventoryStatusLogModel.createStatusLog(
         'Package',
@@ -427,8 +235,8 @@ exports.createPackage = async (req, res) => {
       .json({ toast: { type: 'error', message: 'Internal server error' } })
   }
 }
-//list all packages -R
-exports.listPackages = async (req, res) => {
+
+exports.listPackages = async (_req, res) => {
   try {
     const packages = await packageModel.getAllPackages()
     res.json({
@@ -442,7 +250,7 @@ exports.listPackages = async (req, res) => {
       .json({ toast: { type: 'error', message: 'Internal server error' } })
   }
 }
-// list archived (hidden) packages
+
 exports.listArchivedPackages = async (_req, res) => {
   try {
     const packages = await packageModel.getArchivedPackages()
@@ -460,7 +268,7 @@ exports.listArchivedPackages = async (_req, res) => {
       .json({ toast: { type: 'error', message: 'Internal server error' } })
   }
 }
-//update package -U
+
 exports.updatePackage = async (req, res) => {
   try {
     const { package_id } = req.params
@@ -471,7 +279,6 @@ exports.updatePackage = async (req, res) => {
         .json({ toast: { type: 'error', message: 'Invalid package id' } })
     }
 
-    // Load current package (ALLOW hidden too)
     const existing = await packageModel.getPackageByIdAny(id)
     if (!existing) {
       return res
@@ -479,14 +286,6 @@ exports.updatePackage = async (req, res) => {
         .json({ toast: { type: 'error', message: 'Package not found' } })
     }
 
-    // Whitelist fields we allow to change
-    const allowed = [
-      'package_name',
-      'description',
-      'price',
-      'image_url',
-      'display',
-    ]
     const body = req.body || {}
     const updates = {}
 
@@ -516,12 +315,18 @@ exports.updatePackage = async (req, res) => {
       })
     }
 
-    // Compute changes for logging (old -> new)
     const changes = {}
+    const allowed = [
+      'package_name',
+      'description',
+      'price',
+      'image_url',
+      'display',
+    ]
     for (const k of allowed) {
       if (!(k in updates)) continue
       const oldV = existing[k]
-      let newV = updates[k]
+      const newV = updates[k]
       if (k === 'display') {
         const oldDisp = !!oldV
         const newDisp = !!newV
@@ -535,7 +340,6 @@ exports.updatePackage = async (req, res) => {
         const oldStr = oldV == null ? '' : String(oldV)
         const newStr = newV == null ? '' : String(newV)
         if (oldStr !== newStr) {
-          // mask long URLs in logs; UI can show "Image changed"
           if (k === 'image_url') {
             changes[k] = ['changed', 'changed']
           } else {
@@ -545,10 +349,8 @@ exports.updatePackage = async (req, res) => {
       }
     }
 
-    // Persist update
     const updated = await packageModel.updatePackage(id, updates)
 
-    // Determine log status
     let logStatus = 'updated'
     if ('display' in updates) {
       const was = !!existing.display
@@ -557,9 +359,7 @@ exports.updatePackage = async (req, res) => {
       else if (was === true && now === false) logStatus = 'archived'
     }
 
-    // Only write a log if something actually changed (including image_url)
-    const hasChanges = Object.keys(changes).length > 0
-    if (hasChanges) {
+    if (Object.keys(changes).length > 0) {
       await inventoryStatusLogModel.createStatusLog(
         'Package',
         id,
@@ -580,16 +380,13 @@ exports.updatePackage = async (req, res) => {
       .json({ toast: { type: 'error', message: 'Internal server error' } })
   }
 }
-//delete package by making display false -D
+
 exports.deletePackage = async (req, res) => {
   try {
     const { package_id } = req.params
     await packageModel.updatePackage(package_id, { display: false })
     res.json({
-      toast: {
-        type: 'success',
-        message: 'Package deleted successfully',
-      },
+      toast: { type: 'success', message: 'Package deleted successfully' },
     })
   } catch (e) {
     console.error('Delete Package Error:', e)
@@ -599,19 +396,20 @@ exports.deletePackage = async (req, res) => {
   }
 }
 
-//used for creating inventory items needed for packages
-//create package inventory item -C
+// -------- Package Inventory Items -------- //
 exports.createPackageInventoryItem = async (req, res) => {
   try {
     const { package_id, inventory_id, quantity } = req.body
 
     if (!package_id || !inventory_id || quantity == null) {
-      return res.status(400).json({
-        toast: {
-          type: 'error',
-          message: 'package_id, inventory_id, quantity required',
-        },
-      })
+      return res
+        .status(400)
+        .json({
+          toast: {
+            type: 'error',
+            message: 'package_id, inventory_id, quantity required',
+          },
+        })
     }
     if (quantity <= 0) {
       return res
@@ -619,7 +417,6 @@ exports.createPackageInventoryItem = async (req, res) => {
         .json({ toast: { type: 'error', message: 'Quantity must be > 0' } })
     }
 
-    // ALLOW hidden packages
     const pkg = await packageModel.getPackageByIdAny(package_id)
     if (!pkg) {
       return res
@@ -635,17 +432,15 @@ exports.createPackageInventoryItem = async (req, res) => {
     }
 
     const junction = await packageInventoryItemModel.createPackageInventoryItem(
-      {
-        package_id,
-        inventory_id,
-        quantity,
-      }
+      { package_id, inventory_id, quantity }
     )
 
-    res.status(201).json({
-      toast: { type: 'success', message: 'Package inventory item created' },
-      packageInventoryItem: junction,
-    })
+    res
+      .status(201)
+      .json({
+        toast: { type: 'success', message: 'Package inventory item created' },
+        packageInventoryItem: junction,
+      })
   } catch (error) {
     console.error('Create Package Inventory Item Error:', error)
     res
@@ -653,8 +448,8 @@ exports.createPackageInventoryItem = async (req, res) => {
       .json({ toast: { type: 'error', message: 'Internal server error' } })
   }
 }
-//list all package inventory items -R
-exports.listPackageInventoryItems = async (req, res) => {
+
+exports.listPackageInventoryItems = async (_req, res) => {
   try {
     const packageInventoryItems =
       await packageInventoryItemModel.getAllPackageInventoryItems()
@@ -672,7 +467,7 @@ exports.listPackageInventoryItems = async (req, res) => {
       .json({ toast: { type: 'error', message: 'Internal server error' } })
   }
 }
-//update package inventory item -U
+
 exports.updatePackageInventoryItem = async (req, res) => {
   try {
     const { package_inventory_item_id } = req.params
@@ -696,9 +491,11 @@ exports.updatePackageInventoryItem = async (req, res) => {
       updates
     )
     if (!updated) {
-      return res.status(404).json({
-        toast: { type: 'error', message: 'Package inventory item not found' },
-      })
+      return res
+        .status(404)
+        .json({
+          toast: { type: 'error', message: 'Package inventory item not found' },
+        })
     }
 
     res.json({
@@ -716,7 +513,6 @@ exports.updatePackageInventoryItem = async (req, res) => {
   }
 }
 
-// delete package inventory item (soft delete) -D
 exports.deletePackageInventoryItem = async (req, res) => {
   try {
     const { package_inventory_item_id } = req.params
@@ -725,9 +521,11 @@ exports.deletePackageInventoryItem = async (req, res) => {
       { display: false }
     )
     if (!updated) {
-      return res.status(404).json({
-        toast: { type: 'error', message: 'Package inventory item not found' },
-      })
+      return res
+        .status(404)
+        .json({
+          toast: { type: 'error', message: 'Package inventory item not found' },
+        })
     }
     res.json({
       toast: {
@@ -743,11 +541,10 @@ exports.deletePackageInventoryItem = async (req, res) => {
   }
 }
 
-//used for creating inventory status logs
-//create inventory status log -C
+// -------- Inventory Status Logs -------- //
 exports.createInventoryStatusLog = async (req, res) => {
   try {
-    const { entity_type, entity_id, status, notes, updated_by } = req.body
+    const { entity_type, entity_id, status, notes } = req.body
     if (!entity_type || entity_id == null || !status) {
       return res
         .status(400)
@@ -775,8 +572,7 @@ exports.createInventoryStatusLog = async (req, res) => {
   }
 }
 
-//list all inventory status logs -R
-exports.listInventoryStatusLogs = async (req, res) => {
+exports.listInventoryStatusLogs = async (_req, res) => {
   try {
     const rows = await inventoryStatusLogModel.getAllLogs()
     res.json({
@@ -794,14 +590,18 @@ exports.listInventoryStatusLogs = async (req, res) => {
   }
 }
 
-// NEW: list logs by entity
 exports.listInventoryStatusLogsByEntity = async (req, res) => {
   try {
     const { entity_type, entity_id } = req.query
     if (!entity_type || !entity_id) {
-      return res.status(400).json({
-        toast: { type: 'error', message: 'entity_type and entity_id required' },
-      })
+      return res
+        .status(400)
+        .json({
+          toast: {
+            type: 'error',
+            message: 'entity_type and entity_id required',
+          },
+        })
     }
     const rows = await inventoryStatusLogModel.findLogsByEntity(
       String(entity_type),
@@ -822,7 +622,6 @@ exports.listInventoryStatusLogsByEntity = async (req, res) => {
   }
 }
 
-// update inventory status log -U
 exports.updateInventoryStatusLog = async (req, res) => {
   try {
     const { log_id } = req.params
@@ -833,12 +632,14 @@ exports.updateInventoryStatusLog = async (req, res) => {
         .json({ toast: { type: 'error', message: 'log_id is required' } })
     }
     if (!entity_type || entity_id == null || !status) {
-      return res.status(400).json({
-        toast: {
-          type: 'error',
-          message: 'entity_type, entity_id, and status are required',
-        },
-      })
+      return res
+        .status(400)
+        .json({
+          toast: {
+            type: 'error',
+            message: 'entity_type, entity_id, and status are required',
+          },
+        })
     }
     const updater = req.user?.id ?? null
     await inventoryStatusLogModel.updateLog(
@@ -863,7 +664,6 @@ exports.updateInventoryStatusLog = async (req, res) => {
   }
 }
 
-//delete inventory status log by making display false -D
 exports.deleteInventoryStatusLog = async (req, res) => {
   try {
     const { log_id } = req.params
@@ -882,27 +682,25 @@ exports.deleteInventoryStatusLog = async (req, res) => {
   }
 }
 
-// NEW: list package items for a specific package
+// -------- Package Items for Package + Replacement -------- //
 exports.listPackageItemsForPackage = async (req, res) => {
   try {
     const { package_id } = req.params
     const packageId = Number(package_id)
 
     if (!Number.isFinite(packageId)) {
-      return res.status(400).json({
-        toast: { type: 'error', message: 'Invalid package ID' },
-      })
+      return res
+        .status(400)
+        .json({ toast: { type: 'error', message: 'Invalid package ID' } })
     }
 
-    // ALLOW hidden packages
     const pkg = await packageModel.getPackageByIdAny(packageId)
     if (!pkg) {
-      return res.status(404).json({
-        toast: { type: 'error', message: 'Package not found' },
-      })
+      return res
+        .status(404)
+        .json({ toast: { type: 'error', message: 'Package not found' } })
     }
 
-    // Get package items from existing model API
     const all = await packageInventoryItemModel.getAllPackageInventoryItems()
     const items = all.filter(
       (it) => Number(it.package_id) === packageId && it.display !== false
@@ -923,228 +721,6 @@ exports.listPackageItemsForPackage = async (req, res) => {
   }
 }
 
-// NEW: list packages by user (bookings)
-exports.listPackagesByUser = async (req, res) => {
-  try {
-    const userId = req.user?.id
-    if (!userId) {
-      return res.status(401).json({
-        toast: { type: 'error', message: 'Unauthorized' },
-      })
-    }
-
-    // Get package IDs from user bookings
-    const bookings = await bookingModel.findBookingsByUser(userId)
-    const packageIds = [...new Set(bookings.map((b) => b.package_id))]
-
-    // Fetch packages by IDs
-    const packages = await packageModel.findPackagesByIds(packageIds)
-
-    res.json({
-      toast: {
-        type: 'success',
-        message: 'Packages retrieved successfully',
-      },
-      packages,
-    })
-  } catch (e) {
-    console.error('List Packages By User Error:', e)
-    res
-      .status(500)
-      .json({ toast: { type: 'error', message: 'Internal server error' } })
-  }
-}
-
-// NEW: book package (create booking)
-exports.bookPackage = async (req, res) => {
-  try {
-    const userId = req.user?.id
-    const { package_id, schedule_id, guests, notes } = req.body
-
-    if (!userId) {
-      return res.status(401).json({
-        toast: { type: 'error', message: 'Unauthorized' },
-      })
-    }
-    if (!package_id || !schedule_id || !guests) {
-      return res.status(400).json({
-        toast: {
-          type: 'error',
-          message: 'package_id, schedule_id, guests are required',
-        },
-      })
-    }
-
-    // Check if package exists and is active
-    const pkg = await packageModel.getPackageById(package_id)
-    if (!pkg || !pkg.display) {
-      return res.status(404).json({
-        toast: { type: 'error', message: 'Package not found or inactive' },
-      })
-    }
-
-    // Create the booking
-    const booking = await bookingModel.createBooking({
-      user_id: userId,
-      package_id,
-      schedule_id,
-      guests,
-      notes,
-    })
-
-    res.status(201).json({
-      toast: { type: 'success', message: 'Package booked successfully' },
-      booking,
-    })
-  } catch (e) {
-    console.error('Book Package Error:', e)
-    res
-      .status(500)
-      .json({ toast: { type: 'error', message: 'Internal server error' } })
-  }
-}
-
-// NEW: cancel booking
-exports.cancelBooking = async (req, res) => {
-  try {
-    const { booking_id } = req.params
-
-    // Soft delete the booking
-    await bookingModel.cancelBooking(booking_id)
-
-    res.json({
-      toast: { type: 'success', message: 'Booking canceled successfully' },
-    })
-  } catch (e) {
-    console.error('Cancel Booking Error:', e)
-    res
-      .status(500)
-      .json({ toast: { type: 'error', message: 'Internal server error' } })
-  }
-}
-
-// NEW: list user bookings
-exports.listUserBookings = async (req, res) => {
-  try {
-    const userId = req.user?.id
-    if (!userId) {
-      return res.status(401).json({
-        toast: { type: 'error', message: 'Unauthorized' },
-      })
-    }
-
-    const bookings = await bookingModel.findBookingsByUser(userId)
-
-    res.json({
-      toast: { type: 'success', message: 'Bookings retrieved successfully' },
-      bookings,
-    })
-  } catch (e) {
-    console.error('List User Bookings Error:', e)
-    res
-      .status(500)
-      .json({ toast: { type: 'error', message: 'Internal server error' } })
-  }
-}
-
-// NEW: update booking
-exports.updateBooking = async (req, res) => {
-  try {
-    const { booking_id } = req.params
-    const updates = req.body
-
-    // Whitelist fields we allow to change
-    const allowed = ['guests', 'notes']
-    const filteredUpdates = Object.keys(updates)
-      .filter((key) => allowed.includes(key))
-      .reduce((obj, key) => {
-        obj[key] = updates[key]
-        return obj
-      }, {})
-
-    if (Object.keys(filteredUpdates).length === 0) {
-      return res.json({
-        toast: { type: 'success', message: 'No changes detected' },
-      })
-    }
-
-    // Update the booking
-    await bookingModel.updateBooking(booking_id, filteredUpdates)
-
-    res.json({
-      toast: { type: 'success', message: 'Booking updated successfully' },
-    })
-  } catch (e) {
-    console.error('Update Booking Error:', e)
-    res
-      .status(500)
-      .json({ toast: { type: 'error', message: 'Internal server error' } })
-  }
-}
-
-// NEW: admin - list all bookings
-exports.listAllBookings = async (req, res) => {
-  try {
-    const bookings = await bookingModel.getAllBookings()
-
-    res.json({
-      toast: {
-        type: 'success',
-        message: 'All bookings retrieved successfully',
-      },
-      bookings,
-    })
-  } catch (e) {
-    console.error('List All Bookings Error:', e)
-    res
-      .status(500)
-      .json({ toast: { type: 'error', message: 'Internal server error' } })
-  }
-}
-
-// NEW: admin - update booking status
-exports.updateBookingStatus = async (req, res) => {
-  try {
-    const { booking_id } = req.params
-    const { status } = req.body
-
-    // Update the booking status
-    await bookingModel.updateBooking(booking_id, { status })
-
-    res.json({
-      toast: {
-        type: 'success',
-        message: 'Booking status updated successfully',
-      },
-    })
-  } catch (e) {
-    console.error('Update Booking Status Error:', e)
-    res
-      .status(500)
-      .json({ toast: { type: 'error', message: 'Internal server error' } })
-  }
-}
-
-// NEW: admin - delete booking
-exports.deleteBooking = async (req, res) => {
-  try {
-    const { booking_id } = req.params
-
-    // Soft delete the booking
-    await bookingModel.cancelBooking(booking_id)
-
-    res.json({
-      toast: { type: 'success', message: 'Booking deleted successfully' },
-    })
-  } catch (e) {
-    console.error('Delete Booking Error:', e)
-    res
-      .status(500)
-      .json({ toast: { type: 'error', message: 'Internal server error' } })
-  }
-}
-
-// NEW: replace package items
 exports.replacePackageItems = async (req, res) => {
   try {
     const { package_id } = req.params
@@ -1152,17 +728,16 @@ exports.replacePackageItems = async (req, res) => {
     const items = Array.isArray(req.body?.items) ? req.body.items : null
 
     if (!Number.isFinite(packageId)) {
-      return res.status(400).json({
-        toast: { type: 'error', message: 'Invalid package ID' },
-      })
+      return res
+        .status(400)
+        .json({ toast: { type: 'error', message: 'Invalid package ID' } })
     }
     if (!items) {
-      return res.status(400).json({
-        toast: { type: 'error', message: 'Items array is required' },
-      })
+      return res
+        .status(400)
+        .json({ toast: { type: 'error', message: 'Items array is required' } })
     }
 
-    // ALLOW hidden packages
     const pkg = await packageModel.getPackageByIdAny(packageId)
     if (!pkg) {
       return res
@@ -1170,7 +745,6 @@ exports.replacePackageItems = async (req, res) => {
         .json({ toast: { type: 'error', message: 'Package not found' } })
     }
 
-    // Soft-delete existing junctions for this package
     const all = await packageInventoryItemModel.getAllPackageInventoryItems()
     const existing = all.filter(
       (it) => Number(it.package_id) === packageId && it.display !== false
@@ -1181,17 +755,18 @@ exports.replacePackageItems = async (req, res) => {
       })
     }
 
-    // Add new junctions
     const newItems = []
     for (const item of items) {
       const { inventory_id, quantity } = item
       if (!inventory_id || quantity == null) {
-        return res.status(400).json({
-          toast: {
-            type: 'error',
-            message: 'inventory_id and quantity are required',
-          },
-        })
+        return res
+          .status(400)
+          .json({
+            toast: {
+              type: 'error',
+              message: 'inventory_id and quantity are required',
+            },
+          })
       }
       if (quantity <= 0) {
         return res
@@ -1201,9 +776,11 @@ exports.replacePackageItems = async (req, res) => {
 
       const inv = await inventoryModel.findInventoryById(inventory_id)
       if (!inv) {
-        return res.status(404).json({
-          toast: { type: 'error', message: 'Inventory item not found' },
-        })
+        return res
+          .status(404)
+          .json({
+            toast: { type: 'error', message: 'Inventory item not found' },
+          })
       }
 
       const junction =
