@@ -16,18 +16,83 @@ Content-Type: application/json
 "postal_code": "8000"
 }
 
+@BASE=http://localhost:5000
+//copy paste the token you get from login response after sending login request
+@TOKEN=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Miwicm9sZSI6ImN1c3RvbWVyIiwiaWF0IjoxNzU5NzYxNjYxLCJleHAiOjE3NTk3NjUyNjF9.0t5809w9UjXqlUmHW6vCkVe4j1_nb7hhst0nvLPNwK8
 ### Login 
-POST http://localhost:5000/api/auth/login 
+POST {{BASE}}/api/auth/login 
 Content-Type: application/json
 
 {
-"username": "johndoe@example.com", "password": "password123"
+	"username": "luispalparan70@gmail.com", 
+	"password": "luis123"
 }
 
+
 ### Change Password 
-PUT http://localhost:5000/api/auth/updatePassword 
-Content-Type: application/json Authorization: Bearer <token>
+PUT {{BASE}}/api/auth/changePassword 
+Content-Type: application/json 
+Authorization: Bearer {{TOKEN}}
 
 {
 "oldPassword": "password123", "newPassword": "newpassword456"
 }
+
+### -------------------------------------------------------------
+### BOOKING TESTS (Customer)
+### Requires: {{TOKEN}} to be a valid, unexpired JWT for a user with role 'customer'
+### -------------------------------------------------------------
+
+@bookingId=0
+
+### (1) Create Booking
+POST {{BASE}}/api/customer/booking
+Content-Type: application/json
+Authorization: Bearer {{TOKEN}}
+
+{
+	"packageid": 3,
+	"eventdate": "2027-12-25",
+	"eventtime": "10:30:00",
+	"eventaddress": "123 Test Avenue, Sample City",
+	"contact_info": "09171234567",
+	"notes": "Christmas shoot"
+}
+
+
+
+### (2) Edit Booking (allowed fields: packageid, eventaddress, contact_info, notes)
+###change 4 to actual bookingId from response of (1) above
+PATCH {{BASE}}/api/customer/booking/4
+Content-Type: application/json
+Authorization: Bearer {{TOKEN}}
+
+{
+	"packageid": 4,
+	"eventaddress": "456 Updated Venue Road, New City",
+	"contact_info": "09179876543",
+	"notes": "Updated: indoor studio instead"
+}
+
+### (3) Cancel Booking
+DELETE {{BASE}}/api/customer/booking/{{bookingId}}
+Authorization: Bearer {{TOKEN}}
+
+### (4) Negative Test - Attempt to edit cancelled booking (should fail)
+PATCH {{BASE}}/api/customer/booking/{{bookingId}}
+Content-Type: application/json
+Authorization: Bearer {{TOKEN}}
+
+{
+	"notes": "Trying to edit after cancel"
+}
+
+### (5) Conflict Test (Manual Instructions)
+### - Before cancelling booking, duplicate step (1) with the SAME eventdate + eventtime -> expect 409 conflict
+### - Change time to see successful creation (different slot)
+
+### Plain Variant (No Scripts) - Uncomment & set @bookingId manually if scripts cause issues
+### @bookingId=0
+### POST {{BASE}}/api/customer/booking
+### ... (same body as above) then copy requestid into @bookingId and run edit/cancel
+
