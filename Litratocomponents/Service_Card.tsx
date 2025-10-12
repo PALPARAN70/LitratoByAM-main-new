@@ -5,12 +5,29 @@ type PromoCardProps = {
   title: string;
   price: string;
   descriptions: string[];
+  // New optional props for selection
+  selected?: boolean;
+  onSelect?: () => void;
 };
 
-function PromoCard({ imageSrc, title, price, descriptions }: PromoCardProps) {
+function PromoCard({
+  imageSrc,
+  title,
+  price,
+  descriptions,
+  selected,
+  onSelect,
+}: PromoCardProps) {
   return (
     <div className="flex flex-row gap-14 mb-12 justify-center">
-      <div className="flex flex-col rounded-t-xl w-[270px] max-h-[85vh] border-white shadow-neutral-200 shadow-md overflow-hidden">
+      <button
+        type="button"
+        onClick={onSelect}
+        aria-pressed={!!selected}
+        className={`flex flex-col rounded-t-xl w-[270px] max-h-[85vh] border-white shadow-neutral-200 shadow-md overflow-hidden focus:outline-none focus-visible:ring-2 focus-visible:ring-litratored ${
+          selected ? "ring-2 ring-litratored ring-offset-2" : ""
+        }`}
+      >
         {/* Header section */}
         <div className="bg-[#1E1E1E] flex flex-col rounded-t-[48px] relative">
           <div className="p-2 bg-[#1E1E1E] rounded-t-4xl shadow-md shadow-litratoblack">
@@ -56,7 +73,7 @@ function PromoCard({ imageSrc, title, price, descriptions }: PromoCardProps) {
             </div>
           ))}
         </div>
-      </div>
+      </button>
     </div>
   );
 }
