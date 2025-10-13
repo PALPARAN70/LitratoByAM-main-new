@@ -12,11 +12,13 @@ type CreateBookingInput = {
 
 type CreateBookingPayload = {
   packageid: number
-  eventdate: string // YYYY-MM-DD
-  eventtime: string // HH:mm:ss
-  eventaddress: string
+  event_date: string // YYYY-MM-DD
+  event_time: string // HH:mm:ss
+  event_address: string
   contact_info?: string | null
   notes?: string | null
+  event_name?: string | null
+  strongest_signal?: string | null
 }
 
 type CreateBookingResponse = {
@@ -96,11 +98,13 @@ export async function createBookingRequest({
 
   const payload: CreateBookingPayload = {
     packageid: resolvedPackageId,
-    eventdate: fmtDate(form.eventDate),
-    eventtime: toTimeWithSeconds(form.eventTime),
-    eventaddress: form.eventLocation,
+    event_date: fmtDate(form.eventDate),
+    event_time: toTimeWithSeconds(form.eventTime),
+    event_address: form.eventLocation,
     contact_info: buildContactInfo(form),
     notes: buildNotes(form),
+    event_name: form.eventName || null,
+    strongest_signal: form.signal || null,
   }
 
   // Match backend route: backend/src/Routes/customerRoutes.js => POST /api/customer/booking

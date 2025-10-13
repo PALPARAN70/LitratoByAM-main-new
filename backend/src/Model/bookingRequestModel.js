@@ -7,9 +7,11 @@ async function initBookingRequestTable() {
       requestid SERIAL PRIMARY KEY,
       packageid INTEGER NOT NULL,
       userid INTEGER NOT NULL,
-      eventdate DATE NOT NULL,
-      eventtime TIME NOT NULL,
-      eventaddress TEXT NOT NULL,
+      event_date DATE NOT NULL,
+      event_time TIME NOT NULL,
+      event_address TEXT NOT NULL,
+      event_name TEXT,
+      strongest_signal TEXT,
       contact_info TEXT,
       last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       notes TEXT,
@@ -19,6 +21,35 @@ async function initBookingRequestTable() {
       FOREIGN KEY (userid) REFERENCES users(id) ON DELETE CASCADE
     )
   `)
+
+  // Best-effort migrations for older column names and new attributes
+  // Rename legacy columns if present (ignore errors if already renamed)
+  try {
+    await pool.query(
+      'ALTER TABLE booking_requests RENAME COLUMN eventdate TO event_date'
+    )
+  } catch {}
+  try {
+    await pool.query(
+      'ALTER TABLE booking_requests RENAME COLUMN eventtime TO event_time'
+    )
+  } catch {}
+  try {
+    await pool.query(
+      'ALTER TABLE booking_requests RENAME COLUMN eventaddress TO event_address'
+    )
+  } catch {}
+  // Add new columns if they don't exist
+  await pool
+    .query(
+      'ALTER TABLE booking_requests ADD COLUMN IF NOT EXISTS event_name TEXT'
+    )
+    .catch(() => {})
+  await pool
+    .query(
+      'ALTER TABLE booking_requests ADD COLUMN IF NOT EXISTS strongest_signal TEXT'
+    )
+    .catch(() => {})
 }
 
 // Create a new booking request
@@ -28,14 +59,25 @@ async function createBookingRequest(
   eventdate,
   eventtime,
   eventaddress,
-  notes = null
+  notes = null,
+  event_name = null,
+  strongest_signal = null
 ) {
   const query = `
-    INSERT INTO booking_requests (packageid, userid, eventdate, eventtime, eventaddress, notes)
-    VALUES ($1, $2, $3, $4, $5, $6)
+    INSERT INTO booking_requests (packageid, userid, event_date, event_time, event_address, notes, event_name, strongest_signal)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
     RETURNING *
   `
-  const values = [packageid, userid, eventdate, eventtime, eventaddress, notes]
+  const values = [
+    packageid,
+    userid,
+    eventdate,
+    eventtime,
+    eventaddress,
+    notes,
+    event_name,
+    strongest_signal,
+  ]
   const { rows } = await pool.query(query, values)
   return rows[0]
 }
@@ -143,7 +185,7 @@ async function updateBookingRequest(
 ) {
   const query = `
     UPDATE booking_requests 
-    SET eventdate = $1, eventtime = $2, eventaddress = $3, notes = $4, last_updated = CURRENT_TIMESTAMP
+    SET event_date = $1, event_time = $2, event_address = $3, notes = $4, last_updated = CURRENT_TIMESTAMP
     WHERE requestid = $5
     RETURNING *
   `
@@ -181,24 +223,28 @@ async function getBookingRequestsByDateRange(startDate, endDate) {
     FROM booking_requests br
     JOIN packages p ON br.packageid = p.id
     JOIN users u ON br.userid = u.id
-    WHERE br.eventdate BETWEEN $1 AND $2
-    ORDER BY br.eventdate ASC, br.eventtime ASC
+    WHERE br.event_date BETWEEN $1 AND $2
+    ORDER BY br.event_date ASC, br.event_time ASC
   `
   const result = await pool.query(query, [startDate, endDate])
   return result.rows
 }
 
 // Check if a date/time slot is already taken (pending or accepted)
-async function checkBookingConflicts({ eventdate, eventtime }) {
+async function checkBookingConflicts(params) {
+  const event_date =
+    params.event_date ?? params.eventdate ?? params.eventDate ?? null
+  const event_time =
+    params.event_time ?? params.eventtime ?? params.eventTime ?? null
   const q = `
     SELECT requestid
     FROM booking_requests
-    WHERE eventdate = $1
-      AND eventtime = $2
+    WHERE event_date = $1
+      AND event_time = $2
       AND status IN ('pending','accepted')
     LIMIT 1
   `
-  const { rows } = await pool.query(q, [eventdate, eventtime])
+  const { rows } = await pool.query(q, [event_date, event_time])
   return rows // empty = no conflict
 }
 

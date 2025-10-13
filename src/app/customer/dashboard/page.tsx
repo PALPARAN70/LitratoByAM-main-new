@@ -6,6 +6,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import MotionDiv from '../../../../Litratocomponents/MotionDiv'
+import { cancelBookingRequest as cancelReq } from '../../../../schemas/functions/BookingRequest/cancelBookingRequest'
 import {
   Pagination,
   PaginationContent,
@@ -255,6 +256,29 @@ export default function DashboardPage() {
     router.push(`/customer/booking?requestid=${row.requestid}`)
   }
 
+  const handleCancel = async (row: Row) => {
+    if (!row.requestid) {
+      toast.error('Cannot cancel this entry. Missing request id.')
+      return
+    }
+    try {
+      await cancelReq(row.requestid)
+      // Update local state/status to Declined (or Cancelled) and persist to localStorage
+      const updated: Row[] = rows.map((r) =>
+        r.requestid === row.requestid
+          ? { ...r, status: 'Declined' as 'Declined' }
+          : r
+      )
+      setRows(updated)
+      try {
+        localStorage.setItem(DASHBOARD_KEY, JSON.stringify(updated))
+      } catch {}
+      toast.success('Booking cancelled')
+    } catch (e: any) {
+      toast.error(e?.message || 'Failed to cancel booking')
+    }
+  }
+
   return (
     <MotionDiv>
       <div className="min-h-screen w-full overflow-x-hidden">
@@ -391,9 +415,7 @@ export default function DashboardPage() {
                                 <div className="flex flex-wrap items-center gap-2">
                                   <button
                                     className="bg-litratoblack text-white rounded px-2 py-1 text-xs sm:text-sm"
-                                    onClick={() =>
-                                      toast.message('Cancel not wired yet')
-                                    }
+                                    onClick={() => handleCancel(data)}
                                   >
                                     {data.action[0]}
                                   </button>
