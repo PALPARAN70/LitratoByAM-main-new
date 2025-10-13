@@ -4,6 +4,7 @@ const {
   getBookingRequestById: getBookingRequestByIdModel,
   getBookingRequestsByUserId,
   checkBookingConflicts: checkBookingConflictsModel,
+  cancelBookingRequest: cancelBookingRequestModel,
 } = require('../Model/bookingRequestModel')
 
 // ADD THIS if you call pool.query(...) in this file
@@ -13,7 +14,7 @@ const { pool } = require('../Config/db')
 function buildCustomerBookingUpdate(updates = {}) {
   const allowed = {
     packageid: true,
-    eventaddress: true,
+    event_address: true,
     contact_info: true,
     notes: true,
   }
@@ -35,24 +36,26 @@ async function createBooking(req, res) {
     const userid = req.user.id
     const {
       packageid,
-      eventdate,
-      eventtime,
-      eventaddress,
+      event_date,
+      event_time,
+      event_address,
       contact_info = null,
       notes = null,
+      event_name = null,
+      strongest_signal = null,
     } = req.body || {}
 
-    if (!packageid || !eventdate || !eventtime || !eventaddress) {
+    if (!packageid || !event_date || !event_time || !event_address) {
       return res.status(400).json({
         message:
-          'packageid, eventdate, eventtime and eventaddress are required',
+          'packageid, event_date, event_time and event_address are required',
       })
     }
 
     // Conflict check (same date & time with pending/accepted)
     const conflicts = await checkBookingConflictsModel({
-      eventdate,
-      eventtime,
+      event_date,
+      event_time,
     })
     if (conflicts.length) {
       return res.status(409).json({ message: 'Timeslot not available' })
@@ -62,10 +65,12 @@ async function createBooking(req, res) {
     const booking = await createBookingRequestModel(
       packageid,
       userid,
-      eventdate,
-      eventtime,
-      eventaddress,
-      notes
+      event_date,
+      event_time,
+      event_address,
+      notes,
+      event_name,
+      strongest_signal
     )
 
     // Patch contact info if provided
@@ -109,10 +114,10 @@ async function editBookingRequest(req, res) {
         .json({ message: 'Only pending bookings can be edited' })
     }
 
-    const { packageid, eventaddress, contact_info, notes } = req.body || {}
+    const { packageid, event_address, contact_info, notes } = req.body || {}
     const { sets, values } = buildCustomerBookingUpdate({
       packageid,
-      eventaddress,
+      event_address,
       contact_info,
       notes,
     })

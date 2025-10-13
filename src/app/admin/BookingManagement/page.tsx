@@ -1,170 +1,216 @@
-"use client";
-import Image from "next/image";
-import PromoCard from "../../../../Litratocomponents/Service_Card";
-import Calendar from "../../../../Litratocomponents/LitratoCalendar";
-import Timepicker from "../../../../Litratocomponents/Timepicker";
-import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
-import { toast } from "sonner";
-import PhotoGrids from "../../../../Litratocomponents/PhotoGrids";
-import MotionDiv from "../../../../Litratocomponents/MotionDiv";
+'use client'
+import Image from 'next/image'
+import PromoCard from '../../../../Litratocomponents/Service_Card'
+import Calendar from '../../../../Litratocomponents/LitratoCalendar'
+import Timepicker from '../../../../Litratocomponents/Timepicker'
+import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
+import { toast } from 'sonner'
+import PhotoGrids from '../../../../Litratocomponents/PhotoGrids'
+import MotionDiv from '../../../../Litratocomponents/MotionDiv'
 import {
   bookingFormSchema,
   type BookingForm,
-} from "../../../../schemas/schema/requestvalidation";
+} from '../../../../schemas/schema/requestvalidation'
+import {
+  loadPackages,
+  type PackageDto,
+} from '../../../../schemas/functions/BookingRequest/loadPackages'
 const API_BASE =
-  (process.env.NEXT_PUBLIC_API_BASE?.replace(/\/$/, "") ||
-    "http://localhost:5000") + "/api/auth/getProfile";
+  (process.env.NEXT_PUBLIC_API_BASE?.replace(/\/$/, '') ||
+    'http://localhost:5000') + '/api/auth/getProfile'
 
 export default function BookingPage() {
-  const router = useRouter();
-  const [isEditable, setIsEditable] = useState(false);
+  const router = useRouter()
+  const [isEditable, setIsEditable] = useState(false)
   const [personalForm, setPersonalForm] = useState({
-    Firstname: "",
-    Lastname: "",
-  });
+    Firstname: '',
+    Lastname: '',
+  })
 
   const [profile, setProfile] = useState<{
-    username: string;
-    email: string;
-    role: string;
-    url?: string;
-    firstname?: string;
-    lastname?: string;
-  } | null>(null);
+    username: string
+    email: string
+    role: string
+    url?: string
+    firstname?: string
+    lastname?: string
+  } | null>(null)
 
   // Controlled booking form state + errors
   const initialForm: BookingForm = {
-    email: "",
-    facebook: "",
-    completeName: "",
-    contactNumber: "",
-    contactPersonAndNumber: "",
-    eventName: "",
-    eventLocation: "",
+    email: '',
+    facebook: '',
+    completeName: '',
+    contactNumber: '',
+    contactPersonAndNumber: '',
+    eventName: '',
+    eventLocation: '',
     extensionHours: 0,
-    boothPlacement: "Indoor",
-    signal: "",
-    package: "The Hanz",
+    boothPlacement: 'Indoor',
+    signal: '',
+    package: 'The Hanz',
     selectedGrids: [],
     eventDate: new Date(),
-    eventTime: "12:00",
-    eventEndTime: "14:00",
-  };
-  const [form, setForm] = useState<BookingForm>(initialForm);
+    eventTime: '12:00',
+    eventEndTime: '14:00',
+  }
+  const [form, setForm] = useState<BookingForm>(initialForm)
   const [errors, setErrors] = useState<
     Partial<Record<keyof BookingForm, string>>
-  >({});
+  >({})
+
+  // Packages (dynamic from DB)
+  const [packages, setPackages] = useState<PackageDto[]>([])
+  const [selectedPackageId, setSelectedPackageId] = useState<number | null>(
+    null
+  )
+
+  // BookingForm['package'] is a union; guard before setting from DB names
+  type PkgName = BookingForm['package']
+  const KNOWN_PKG_NAMES: readonly PkgName[] = [
+    'The Hanz',
+    'The Corrupt',
+    'The AI',
+    'The OG',
+  ] as const
+  const isPkgName = (v: string): v is PkgName =>
+    (KNOWN_PKG_NAMES as readonly string[]).includes(v)
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    const token = localStorage.getItem("access_token");
+    if (typeof window === 'undefined') return
+    const token = localStorage.getItem('access_token')
     if (!token) {
-      router.replace("/login");
-      return;
+      router.replace('/login')
+      return
     }
-    const ac = new AbortController();
+    const ac = new AbortController()
 
-    (async () => {
+    ;(async () => {
       try {
         const res = await fetch(`${API_BASE}`, {
-          method: "GET",
+          method: 'GET',
           headers: {
-            "Content-Type": "application/json",
+            'Content-Type': 'application/json',
             Authorization: `Bearer ${token}`,
           },
           signal: ac.signal,
-        });
+        })
 
         if (res.status === 401) {
           try {
-            localStorage.removeItem("access_token");
+            localStorage.removeItem('access_token')
           } catch {}
-          router.replace("/login");
-          return;
+          router.replace('/login')
+          return
         }
-        if (!res.ok) throw new Error("Failed to fetch profile");
+        if (!res.ok) throw new Error('Failed to fetch profile')
 
-        const data = await res.json();
-        setProfile(data);
+        const data = await res.json()
+        setProfile(data)
         setPersonalForm({
-          Firstname: data.firstname || "",
-          Lastname: data.lastname || "",
-        });
+          Firstname: data.firstname || '',
+          Lastname: data.lastname || '',
+        })
         setForm((prev) => ({
           ...prev,
           email: data.email || prev.email,
           completeName:
-            `${data.firstname ?? ""} ${data.lastname ?? ""}`.trim() ||
+            `${data.firstname ?? ''} ${data.lastname ?? ''}`.trim() ||
             prev.completeName,
-        }));
+        }))
       } catch (err: any) {
-        if (err?.name === "AbortError") return;
-        toast.error("Error fetching profile");
+        if (err?.name === 'AbortError') return
+        toast.error('Error fetching profile')
       }
-    })();
+    })()
 
-    return () => ac.abort();
-  }, [router]);
+    return () => ac.abort()
+  }, [router])
+
+  // Load packages visible to admin (display=true via API)
+  useEffect(() => {
+    ;(async () => {
+      try {
+        const list = await loadPackages()
+        // Ensure only display=true packages are shown
+        setPackages(Array.isArray(list) ? list.filter((p) => p.display) : [])
+        if (!selectedPackageId && list.length) {
+          const first = list[0]
+          setSelectedPackageId(first.id)
+          if (isPkgName(first.package_name)) {
+            setForm((p) => ({
+              ...p,
+              package: first.package_name as BookingForm['package'],
+            }))
+          }
+        }
+      } catch (e) {
+        // Optional: show a toast, but avoid spamming admin
+        // toast.error('Failed to load packages');
+      }
+    })()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedPackageId])
 
   // Helpers
   const setField = <K extends keyof BookingForm>(
     key: K,
     value: BookingForm[K]
   ) => {
-    setForm((prev) => ({ ...prev, [key]: value }));
+    setForm((prev) => ({ ...prev, [key]: value }))
     if (
       [
-        "email",
-        "contactNumber",
-        "eventTime",
-        "eventEndTime",
-        "extensionHours",
+        'email',
+        'contactNumber',
+        'eventTime',
+        'eventEndTime',
+        'extensionHours',
       ].includes(key as string)
     ) {
-      const parsed = bookingFormSchema.safeParse({ ...form, [key]: value });
+      const parsed = bookingFormSchema.safeParse({ ...form, [key]: value })
       const fieldIssues = parsed.success
         ? []
-        : parsed.error.issues.filter((i) => i.path[0] === key);
-      setErrors((e) => ({ ...e, [key]: fieldIssues[0]?.message }));
+        : parsed.error.issues.filter((i) => i.path[0] === key)
+      setErrors((e) => ({ ...e, [key]: fieldIssues[0]?.message }))
     }
-  };
+  }
 
   const handleSubmit = () => {
-    setErrors({});
-    const result = bookingFormSchema.safeParse(form);
+    setErrors({})
+    const result = bookingFormSchema.safeParse(form)
     if (!result.success) {
-      const fieldErrors: Partial<Record<keyof BookingForm, string>> = {};
+      const fieldErrors: Partial<Record<keyof BookingForm, string>> = {}
       for (const issue of result.error.issues) {
-        const key = issue.path[0] as keyof BookingForm;
-        if (!fieldErrors[key]) fieldErrors[key] = issue.message;
+        const key = issue.path[0] as keyof BookingForm
+        if (!fieldErrors[key]) fieldErrors[key] = issue.message
       }
-      setErrors(fieldErrors);
-      toast.error("Please fill in all required fields.");
-      return;
+      setErrors(fieldErrors)
+      toast.error('Please fill in all required fields.')
+      return
     }
     // You can send result.data to your backend here
-    toast.success("Form submitted! Please wait for the admin's response.");
-  };
+    toast.success("Form submitted! Please wait for the admin's response.")
+  }
 
   const handleClear = () => {
-    setForm(initialForm);
-    setErrors({});
-    toast.message("Form cleared.");
-  };
+    setForm(initialForm)
+    setErrors({})
+    toast.message('Form cleared.')
+  }
 
   const formFields = [
-    "Email:",
-    "Facebook:",
-    "Complete name:",
-    "Contact #:",
-    "Contact Person & Number:",
-    "Name of event (Ex. Maria & Jose Wedding):",
-    "Location of event:",
-    "Extension? (Our Minimum is 2hrs. Additional hour is Php2000):",
-    "Placement of booth (Indoor/Outdoor):",
-    "What signal is currently strong in the event area?:",
-  ];
+    'Email:',
+    'Facebook:',
+    'Complete name:',
+    'Contact #:',
+    'Contact Person & Number:',
+    'Name of event (Ex. Maria & Jose Wedding):',
+    'Location of event:',
+    'Extension? (Our Minimum is 2hrs. Additional hour is Php2000):',
+    'Placement of booth (Indoor/Outdoor):',
+    'What signal is currently strong in the event area?:',
+  ]
 
   return (
     <MotionDiv>
@@ -172,7 +218,7 @@ export default function BookingPage() {
         <div className="w-full">
           <div className="relative h-[160px]">
             <Image
-              src={"/Images/litratobg.jpg"}
+              src={'/Images/litratobg.jpg'}
               alt="Booking Header"
               fill
               className="object-cover rounded-b-lg"
@@ -196,8 +242,8 @@ export default function BookingPage() {
               placeholder="Enter here:"
               className="w-full bg-gray-200 rounded-md px-3 py-2 text-sm focus:outline-none"
               value={form.email}
-              onChange={(e) => setField("email", e.target.value)}
-              onBlur={(e) => setField("email", e.target.value)}
+              onChange={(e) => setField('email', e.target.value)}
+              onBlur={(e) => setField('email', e.target.value)}
             />
             {errors.email && (
               <p className="text-red-600 text-sm mt-1">{errors.email}</p>
@@ -212,7 +258,7 @@ export default function BookingPage() {
               placeholder="Enter here:"
               className="w-full bg-gray-200 rounded-md px-3 py-2 text-sm focus:outline-none"
               value={form.facebook}
-              onChange={(e) => setField("facebook", e.target.value)}
+              onChange={(e) => setField('facebook', e.target.value)}
             />
             {errors.facebook && (
               <p className="text-red-600 text-sm mt-1">{errors.facebook}</p>
@@ -227,7 +273,7 @@ export default function BookingPage() {
               placeholder="Enter here:"
               className="w-full bg-gray-200 rounded-md px-3 py-2 text-sm focus:outline-none"
               value={form.completeName}
-              onChange={(e) => setField("completeName", e.target.value)}
+              onChange={(e) => setField('completeName', e.target.value)}
             />
             {errors.completeName && (
               <p className="text-red-600 text-sm mt-1">{errors.completeName}</p>
@@ -242,8 +288,8 @@ export default function BookingPage() {
               placeholder="e.g. +639171234567"
               className="w-full bg-gray-200 rounded-md px-3 py-2 text-sm focus:outline-none"
               value={form.contactNumber}
-              onChange={(e) => setField("contactNumber", e.target.value)}
-              onBlur={(e) => setField("contactNumber", e.target.value)}
+              onChange={(e) => setField('contactNumber', e.target.value)}
+              onBlur={(e) => setField('contactNumber', e.target.value)}
             />
             {errors.contactNumber && (
               <p className="text-red-600 text-sm mt-1">
@@ -263,7 +309,7 @@ export default function BookingPage() {
               className="w-full bg-gray-200 rounded-md px-3 py-2 text-sm focus:outline-none"
               value={form.contactPersonAndNumber}
               onChange={(e) =>
-                setField("contactPersonAndNumber", e.target.value)
+                setField('contactPersonAndNumber', e.target.value)
               }
             />
             {errors.contactPersonAndNumber && (
@@ -283,7 +329,7 @@ export default function BookingPage() {
               placeholder="Enter here:"
               className="w-full bg-gray-200 rounded-md px-3 py-2 text-sm focus:outline-none"
               value={form.eventName}
-              onChange={(e) => setField("eventName", e.target.value)}
+              onChange={(e) => setField('eventName', e.target.value)}
             />
             {errors.eventName && (
               <p className="text-red-600 text-sm mt-1">{errors.eventName}</p>
@@ -298,7 +344,7 @@ export default function BookingPage() {
               placeholder="Enter here:"
               className="w-full bg-gray-200 rounded-md px-3 py-2 text-sm focus:outline-none"
               value={form.eventLocation}
-              onChange={(e) => setField("eventLocation", e.target.value)}
+              onChange={(e) => setField('eventLocation', e.target.value)}
             />
             {errors.eventLocation && (
               <p className="text-red-600 text-sm mt-1">
@@ -321,9 +367,9 @@ export default function BookingPage() {
               className="w-full bg-gray-200 rounded-md px-3 py-2 text-sm focus:outline-none"
               value={form.extensionHours}
               onChange={(e) =>
-                setField("extensionHours", Number(e.target.value))
+                setField('extensionHours', Number(e.target.value))
               }
-              onBlur={(e) => setField("extensionHours", Number(e.target.value))}
+              onBlur={(e) => setField('extensionHours', Number(e.target.value))}
             />
             {errors.extensionHours && (
               <p className="text-red-600 text-sm mt-1">
@@ -340,8 +386,8 @@ export default function BookingPage() {
                 <input
                   type="radio"
                   name="boothPlacement"
-                  checked={form.boothPlacement === "Indoor"}
-                  onChange={() => setField("boothPlacement", "Indoor")}
+                  checked={form.boothPlacement === 'Indoor'}
+                  onChange={() => setField('boothPlacement', 'Indoor')}
                 />
                 Indoor
               </label>
@@ -349,8 +395,8 @@ export default function BookingPage() {
                 <input
                   type="radio"
                   name="boothPlacement"
-                  checked={form.boothPlacement === "Outdoor"}
-                  onChange={() => setField("boothPlacement", "Outdoor")}
+                  checked={form.boothPlacement === 'Outdoor'}
+                  onChange={() => setField('boothPlacement', 'Outdoor')}
                 />
                 Outdoor
               </label>
@@ -372,93 +418,38 @@ export default function BookingPage() {
               placeholder="Enter here:"
               className="w-full bg-gray-200 rounded-md px-3 py-2 text-sm focus:outline-none"
               value={form.signal}
-              onChange={(e) => setField("signal", e.target.value)}
+              onChange={(e) => setField('signal', e.target.value)}
             />
             {errors.signal && (
               <p className="text-red-600 text-sm mt-1">{errors.signal}</p>
             )}
           </div>
 
-          {/* Packages */}
+          {/* Packages (dynamic) */}
           <div className="flex flex-col justify-center mt-8">
             <p className="font-semibold text-xl">Select A Package:</p>
-            <div className="flex flex-row gap-4 justify-center">
-              <PromoCard
-                imageSrc="/Images/hanz.png"
-                title="The Hanz"
-                price="₱8,000"
-                descriptions={[
-                  "2 hours photo booth operation",
-                  "Vintage TV with video camera",
-                  "Unlimited shots",
-                  "High quality photo strips",
-                  "High quality of real time digital copy & GIFs",
-                  "Compiled soft copies of picture & GIF (via Gdrive)",
-                  "Customized welcome layout & photo strip",
-                  "6 photo grids to choose from (two free grids)",
-                  "Free transportation within DVO City",
-                  "On-site staff",
-                ]}
-                selected={form.package === "The Hanz"}
-                onSelect={() => setField("package", "The Hanz")}
-              />
-              <PromoCard
-                imageSrc="/Images/Gallery6.jpg"
-                title="The Corrupt"
-                price="₱8,000"
-                descriptions={[
-                  "2 hours photo booth operation",
-                  "Vintage TV with video camera",
-                  "Unlimited shots",
-                  "High quality photo strips",
-                  "High quality of real time digital copy & GIFs",
-                  "Compiled soft copies of picture & GIF (via Gdrive)",
-                  "Customized welcome layout & photo strip",
-                  "6 photo grids to choose from (two free grids)",
-                  "Free transportation within DVO City",
-                  "On-site staff",
-                ]}
-                selected={form.package === "The Corrupt"}
-                onSelect={() => setField("package", "The Corrupt")}
-              />
-              <PromoCard
-                imageSrc="/Images/gallery1.jpg"
-                title="The AI"
-                price="₱8,000"
-                descriptions={[
-                  "2 hours photo booth operation",
-                  "Vintage TV with video camera",
-                  "Unlimited shots",
-                  "High quality photo strips",
-                  "High quality of real time digital copy & GIFs",
-                  "Compiled soft copies of picture & GIF (via Gdrive)",
-                  "Customized welcome layout & photo strip",
-                  "6 photo grids to choose from (two free grids)",
-                  "Free transportation within DVO City",
-                  "On-site staff",
-                ]}
-                selected={form.package === "The AI"}
-                onSelect={() => setField("package", "The AI")}
-              />
-              <PromoCard
-                imageSrc="/Images/litratobg.jpg"
-                title="The OG"
-                price="₱8,000"
-                descriptions={[
-                  "2 hours photo booth operation",
-                  "Vintage TV with video camera",
-                  "Unlimited shots",
-                  "High quality photo strips",
-                  "High quality of real time digital copy & GIFs",
-                  "Compiled soft copies of picture & GIF (via Gdrive)",
-                  "Customized welcome layout & photo strip",
-                  "6 photo grids to choose from (two free grids)",
-                  "Free transportation within DVO City",
-                  "On-site staff",
-                ]}
-                selected={form.package === "The OG"}
-                onSelect={() => setField("package", "The OG")}
-              />
+            <div className="flex flex-row gap-4 justify-center flex-wrap">
+              {packages.length === 0 && (
+                <p className="text-sm text-gray-500">No packages to display.</p>
+              )}
+              {packages.map((pkg) => (
+                <PromoCard
+                  key={pkg.id}
+                  imageSrc={pkg.image_url || '/Images/litratobg.jpg'}
+                  title={pkg.package_name}
+                  price={`₱${Number(pkg.price).toLocaleString()}`}
+                  descriptions={[pkg.description || 'Package']}
+                  selected={selectedPackageId === pkg.id}
+                  onSelect={() => {
+                    setSelectedPackageId(pkg.id)
+                    if (isPkgName(pkg.package_name))
+                      setField(
+                        'package',
+                        pkg.package_name as BookingForm['package']
+                      )
+                  }}
+                />
+              ))}
             </div>
             {errors.package && (
               <p className="text-red-600 text-sm mt-1 text-center">
@@ -475,7 +466,7 @@ export default function BookingPage() {
             <div>
               <PhotoGrids
                 value={form.selectedGrids}
-                onChange={(arr) => setField("selectedGrids", arr)}
+                onChange={(arr) => setField('selectedGrids', arr)}
               />
             </div>
             {errors.selectedGrids && (
@@ -504,8 +495,8 @@ export default function BookingPage() {
                   start={form.eventTime}
                   end={form.eventEndTime}
                   onChange={({ start, end }) => {
-                    setField("eventTime", start);
-                    setField("eventEndTime", end);
+                    setField('eventTime', start)
+                    setField('eventEndTime', end)
                   }}
                 />
                 {errors.eventTime && (
@@ -541,5 +532,5 @@ export default function BookingPage() {
         </div>
       </div>
     </MotionDiv>
-  );
+  )
 }

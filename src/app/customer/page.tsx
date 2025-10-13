@@ -1,6 +1,5 @@
-"use client";
-import DashboardPage from "./dashboard/page";
-import Image from "next/image";
+'use client'
+import DashboardPage from './dashboard/page'
 export default function CustomerPage() {
-  return <DashboardPage />;
+  return <DashboardPage />
 }
