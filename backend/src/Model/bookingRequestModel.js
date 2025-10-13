@@ -188,33 +188,18 @@ async function getBookingRequestsByDateRange(startDate, endDate) {
   return result.rows
 }
 
-// Check for conflicting bookings (same date and overlapping time)
-async function checkBookingConflicts(
-  eventdate,
-  eventtime,
-  excludeRequestId = null
-) {
-  let query = `
-    SELECT 
-      br.*,
-      p.package_name,
-      u.username
-    FROM booking_requests br
-    JOIN packages p ON br.packageid = p.id
-    JOIN users u ON br.userid = u.id
-    WHERE br.eventdate = $1 
-    AND br.eventtime = $2
-    AND br.status IN ('pending', 'accepted')
+// Check if a date/time slot is already taken (pending or accepted)
+async function checkBookingConflicts({ eventdate, eventtime }) {
+  const q = `
+    SELECT requestid
+    FROM booking_requests
+    WHERE eventdate = $1
+      AND eventtime = $2
+      AND status IN ('pending','accepted')
+    LIMIT 1
   `
-  const values = [eventdate, eventtime]
-
-  if (excludeRequestId) {
-    query += ' AND br.requestid != $3'
-    values.push(excludeRequestId)
-  }
-
-  const result = await pool.query(query, values)
-  return result.rows
+  const { rows } = await pool.query(q, [eventdate, eventtime])
+  return rows // empty = no conflict
 }
 
 module.exports = {

@@ -7,30 +7,46 @@ const router = express.Router()
 
 // Booking request routes (customer side)
 router.post(
-  '/booking',
+  '/bookingRequest',
   authMiddleware,
   roleMiddleware('customer'),
   customerController.createBooking
 )
 
 router.patch(
-  '/booking/:id',
+  '/bookingRequest/:id',
   authMiddleware,
   roleMiddleware('customer'),
-  customerController.editBooking
+  customerController.editBookingRequest
 )
 router.put(
-  '/booking/:id',
+  '/bookingRequest/:id',
   authMiddleware,
   roleMiddleware('customer'),
-  customerController.editBooking
+  customerController.editBookingRequest
 )
 
 router.delete(
-  '/booking/:id',
+  '/bookingRequest/:id',
   authMiddleware,
   roleMiddleware('customer'),
-  customerController.cancelBooking
+  customerController.cancelBookingRequest
+)
+
+// GET list for current user
+router.get(
+  '/bookingRequest',
+  authMiddleware,
+  roleMiddleware('customer'),
+  customerController.getMyBookingRequests
+)
+
+// GET single by requestid
+router.get(
+  '/bookingRequest/:id',
+  authMiddleware,
+  roleMiddleware('customer'),
+  customerController.getBookingRequest
 )
 
 module.exports = router

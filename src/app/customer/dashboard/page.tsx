@@ -1,11 +1,11 @@
-"use client";
-import { HiOutlineExternalLink, HiOutlinePlusCircle } from "react-icons/hi";
-import { FaRegFileAlt } from "react-icons/fa";
-import { Card, CardHeader, CardContent } from "@/components/ui/card";
-import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
-import { toast } from "sonner";
-import MotionDiv from "../../../../Litratocomponents/MotionDiv";
+'use client'
+import { HiOutlineExternalLink, HiOutlinePlusCircle } from 'react-icons/hi'
+import { FaRegFileAlt } from 'react-icons/fa'
+import { Card, CardHeader, CardContent } from '@/components/ui/card'
+import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
+import { toast } from 'sonner'
+import MotionDiv from '../../../../Litratocomponents/MotionDiv'
 import {
   Pagination,
   PaginationContent,
@@ -13,166 +13,247 @@ import {
   PaginationItem,
   PaginationPrevious,
   PaginationNext,
-} from "@/components/ui/pagination";
+} from '@/components/ui/pagination'
 
 const API_BASE =
-  (process.env.NEXT_PUBLIC_API_BASE?.replace(/\/$/, "") ||
-    "http://localhost:5000") + "/api/auth/getProfile";
+  (process.env.NEXT_PUBLIC_API_BASE?.replace(/\/$/, '') ||
+    'http://localhost:5000') + '/api/auth/getProfile'
 
 export default function DashboardPage() {
-  const router = useRouter();
-  const [isEditable, setIsEditable] = useState(false);
+  const router = useRouter()
+  const [isEditable, setIsEditable] = useState(false)
   const [personalForm, setPersonalForm] = useState({
-    Firstname: "",
-    Lastname: "",
-  });
+    Firstname: '',
+    Lastname: '',
+  })
 
   const [profile, setProfile] = useState<{
-    username: string;
-    email: string;
-    role: string;
-    url?: string;
-    firstname?: string;
-    lastname?: string;
-  } | null>(null);
+    username: string
+    email: string
+    role: string
+    url?: string
+    firstname?: string
+    lastname?: string
+  } | null>(null)
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    const token = localStorage.getItem("access_token");
+    if (typeof window === 'undefined') return
+    const token = localStorage.getItem('access_token')
     if (!token) {
-      router.replace("/login");
-      return;
+      router.replace('/login')
+      return
     }
-    const ac = new AbortController();
+    const ac = new AbortController()
 
-    (async () => {
+    ;(async () => {
       try {
         const res = await fetch(`${API_BASE}`, {
-          method: "GET",
+          method: 'GET',
           headers: {
-            "Content-Type": "application/json",
+            'Content-Type': 'application/json',
             Authorization: `Bearer ${token}`,
           },
           signal: ac.signal,
-        });
+        })
 
         if (res.status === 401) {
           try {
-            localStorage.removeItem("access_token");
+            localStorage.removeItem('access_token')
           } catch {}
-          router.replace("/login");
-          return;
+          router.replace('/login')
+          return
         }
-        if (!res.ok) throw new Error("Failed to fetch profile");
+        if (!res.ok) throw new Error('Failed to fetch profile')
 
-        const data = await res.json();
-        setProfile(data);
+        const data = await res.json()
+        setProfile(data)
         setPersonalForm({
-          Firstname: data.firstname || "",
-          Lastname: data.lastname || "",
-        });
+          Firstname: data.firstname || '',
+          Lastname: data.lastname || '',
+        })
       } catch (err: any) {
-        if (err?.name === "AbortError") return;
-        toast.error("Error fetching profile");
+        if (err?.name === 'AbortError') return
+        toast.error('Error fetching profile')
       }
-    })();
+    })()
 
-    return () => ac.abort();
-  }, [router]);
+    return () => ac.abort()
+  }, [router])
 
   const Carddetails = [
-    { name: "Approved", content: "7" },
-    { name: "Declined", content: "3" },
-    { name: "Pending", content: "5" },
-  ];
+    { name: 'Approved', content: '7' },
+    { name: 'Declined', content: '3' },
+    { name: 'Pending', content: '5' },
+  ]
   const QuickActions = [
     {
-      name: "Add Organization",
+      name: 'Add Organization',
       icon: (
         <HiOutlinePlusCircle className="mr-2 text-base sm:text-lg md:text-xl" />
       ),
     },
     {
-      name: "View Logs",
+      name: 'View Logs',
       icon: <FaRegFileAlt className="mr-2 text-base sm:text-lg md:text-xl" />,
     },
-  ];
+  ]
   // Add: dashboard rows + pagination
   type Row = {
-    name: string;
-    date: string;
-    startTime: string;
-    endTime: string;
-    package: string;
-    place: string;
-    paymentStatus: string;
-    status?: "Approved" | "Declined" | "Pending";
-    action: string[];
-  };
-  const DASHBOARD_KEY = "litrato_dashboard_table";
-  const [rows, setRows] = useState<Row[]>([]);
-  const PER_PAGE = 5;
-  const [page, setPage] = useState(1);
+    name: string
+    date: string
+    startTime: string
+    endTime: string
+    package: string
+    place: string
+    paymentStatus: string
+    status?: 'Approved' | 'Declined' | 'Pending'
+    action: string[]
+    requestid?: number // add: used for update navigation
+  }
+  const DASHBOARD_KEY = 'litrato_dashboard_table'
+  const [rows, setRows] = useState<Row[]>([])
+  const PER_PAGE = 5
+  const [page, setPage] = useState(1)
   const pageWindow = (current: number, total: number, size = 3) => {
-    if (total <= 0) return [];
-    const start = Math.floor((Math.max(1, current) - 1) / size) * size + 1;
-    const end = Math.min(total, start + size - 1);
-    return Array.from({ length: end - start + 1 }, (_, i) => start + i);
-  };
+    if (total <= 0) return []
+    const start = Math.floor((Math.max(1, current) - 1) / size) * size + 1
+    const end = Math.min(total, start + size - 1)
+    return Array.from({ length: end - start + 1 }, (_, i) => start + i)
+  }
+
+  // Convert "hh:mm am/pm" to "HH:MM"
+  const to24h = (s: string) => {
+    if (!s) return ''
+    const m = s.trim().match(/^(\d{1,2}):(\d{2})\s*(am|pm)$/i)
+    if (!m) return s
+    let h = parseInt(m[1], 10)
+    const mm = m[2]
+    const ap = m[3].toLowerCase()
+    if (ap === 'pm' && h < 12) h += 12
+    if (ap === 'am' && h === 12) h = 0
+    return `${String(h).padStart(2, '0')}:${mm}`
+  }
+
+  // Fetch user's bookings and fill missing requestid in local rows
+  const hydrateRequestIds = async (currentRows: Row[]) => {
+    try {
+      const token =
+        (typeof window !== 'undefined' &&
+          localStorage.getItem('access_token')) ||
+        null
+      if (!token) return
+
+      const API_BASE =
+        (process.env.NEXT_PUBLIC_API_BASE?.replace(/\/$/, '') ||
+          'http://localhost:5000') + '/api/customer/bookingRequest'
+
+      const res = await fetch(API_BASE, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+      })
+      if (!res.ok) return
+      const data = await res.json().catch(() => ({}))
+      const bookings = Array.isArray(data?.bookings) ? data.bookings : []
+
+      // Build quick lookup by date|time|address|package
+      const keySrv = (b: any) =>
+        `${b.eventdate}|${String(b.eventtime).slice(0, 5)}|${(
+          b.eventaddress || ''
+        ).trim()}|${(b.package_name || '').trim()}`
+      const map = new Map<string, any>()
+      bookings.forEach((b: any) => map.set(keySrv(b), b))
+
+      let changed = false
+      const patched = currentRows.map((r) => {
+        if (r.requestid) return r
+        const k = `${r.date}|${to24h(r.startTime)}|${(r.place || '').trim()}|${(
+          r.package || ''
+        ).trim()}`
+        const hit = map.get(k)
+        if (hit?.requestid) {
+          changed = true
+          return { ...r, requestid: hit.requestid }
+        }
+        return r
+      })
+
+      if (changed) {
+        setRows(patched)
+        try {
+          localStorage.setItem(DASHBOARD_KEY, JSON.stringify(patched))
+        } catch {}
+      }
+    } catch {
+      // silent
+    }
+  }
+
   const loadRows = () => {
     try {
       const raw =
-        (typeof window !== "undefined" &&
+        (typeof window !== 'undefined' &&
           localStorage.getItem(DASHBOARD_KEY)) ||
-        "[]";
+        '[]'
       const arr = Array.isArray(JSON.parse(raw))
         ? (JSON.parse(raw) as Row[])
-        : [];
-      // Backfill missing status to "Pending"
+        : []
       const normalized = arr.map((r) => ({
         ...r,
-        status: (r.status ?? "Pending") as "Approved" | "Declined" | "Pending",
-      }));
-      setRows(normalized);
-      setPage(1);
+        status: (r.status ?? 'Pending') as 'Approved' | 'Declined' | 'Pending',
+      }))
+      setRows(normalized)
+      setPage(1)
+      // Try to backfill missing ids
+      hydrateRequestIds(normalized)
     } catch {
-      setRows([]);
-      setPage(1);
+      setRows([])
+      setPage(1)
     }
-  };
+  }
   useEffect(() => {
-    loadRows();
+    loadRows()
     const onStorage = (e: StorageEvent) => {
-      if (e.key === DASHBOARD_KEY) loadRows();
-    };
-    window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
-  }, []);
+      if (e.key === DASHBOARD_KEY) loadRows()
+    }
+    window.addEventListener('storage', onStorage)
+    return () => window.removeEventListener('storage', onStorage)
+  }, [])
 
-  const totalPages = Math.max(1, Math.ceil(rows.length / PER_PAGE));
-  const windowPages = pageWindow(page, totalPages, 3);
+  const totalPages = Math.max(1, Math.ceil(rows.length / PER_PAGE))
+  const windowPages = pageWindow(page, totalPages, 3)
   const paginated = rows.slice(
     (page - 1) * PER_PAGE,
     (page - 1) * PER_PAGE + PER_PAGE
-  );
+  )
 
   // Derive counts per status and card colors
   const counts = {
-    Approved: rows.filter((r) => r.status === "Approved").length,
-    Declined: rows.filter((r) => r.status === "Declined").length,
-    Pending: rows.filter((r) => (r.status ?? "Pending") === "Pending").length,
-  };
+    Approved: rows.filter((r) => r.status === 'Approved').length,
+    Declined: rows.filter((r) => r.status === 'Declined').length,
+    Pending: rows.filter((r) => (r.status ?? 'Pending') === 'Pending').length,
+  }
   const statusCards = [
-    { name: "Approved", content: String(counts.Approved), bg: "bg-green-800" },
-    { name: "Declined", content: String(counts.Declined), bg: "bg-litratored" },
-    { name: "Pending", content: String(counts.Pending), bg: "bg-gray-600" },
-  ];
+    { name: 'Approved', content: String(counts.Approved), bg: 'bg-green-800' },
+    { name: 'Declined', content: String(counts.Declined), bg: 'bg-litratored' },
+    { name: 'Pending', content: String(counts.Pending), bg: 'bg-gray-600' },
+  ]
 
-  const badgeClass = (s: Row["status"]) => {
-    if (s === "Approved")
-      return "bg-green-100 text-white border border-green-300";
-    if (s === "Declined") return "bg-red-100 text-white border border-red-300";
-    return "bg-gray-600 text-white border border-gray-300";
-  };
+  const badgeClass = (s: Row['status']) => {
+    if (s === 'Approved')
+      return 'bg-green-100 text-white border border-green-300'
+    if (s === 'Declined') return 'bg-red-100 text-white border border-red-300'
+    return 'bg-gray-600 text-white border border-gray-300'
+  }
+
+  const handleReschedule = (row: Row) => {
+    if (!row.requestid) {
+      toast.error('Cannot update this entry. Missing request id.')
+      return
+    }
+    router.push(`/customer/booking?requestid=${row.requestid}`)
+  }
 
   return (
     <MotionDiv>
@@ -238,21 +319,21 @@ export default function DashboardPage() {
                     <thead>
                       <tr className="bg-gray-300">
                         {[
-                          "Event Name",
-                          "Date",
-                          "Start Time",
-                          "End Time",
-                          "Package",
-                          "Place",
-                          "Status", // NEW
-                          "Payment Status",
-                          "Actions",
+                          'Event Name',
+                          'Date',
+                          'Start Time',
+                          'End Time',
+                          'Package',
+                          'Place',
+                          'Status', // NEW
+                          'Payment Status',
+                          'Actions',
                         ].map((title, i, arr) => (
                           <th
                             key={i}
                             className={`px-3 sm:px-4 py-2 text-left text-xs sm:text-sm md:text-base ${
-                              i === 0 ? "rounded-tl-xl" : ""
-                            } ${i === arr.length - 1 ? "rounded-tr-xl" : ""}`}
+                              i === 0 ? 'rounded-tl-xl' : ''
+                            } ${i === arr.length - 1 ? 'rounded-tr-xl' : ''}`}
                           >
                             {title}
                           </th>
@@ -296,10 +377,10 @@ export default function DashboardPage() {
                             <td className="px-3 sm:px-4 py-2 whitespace-nowrap">
                               <span
                                 className={`px-2 py-1 rounded-full text-xs sm:text-sm ${badgeClass(
-                                  data.status ?? "Pending"
+                                  data.status ?? 'Pending'
                                 )}`}
                               >
-                                {data.status ?? "Pending"}
+                                {data.status ?? 'Pending'}
                               </span>
                             </td>
                             <td className="px-3 sm:px-4 py-2 whitespace-nowrap">
@@ -308,10 +389,18 @@ export default function DashboardPage() {
                             <td className="px-3 sm:px-4 py-2">
                               {Array.isArray(data.action) && (
                                 <div className="flex flex-wrap items-center gap-2">
-                                  <button className="bg-litratoblack text-white rounded px-2 py-1 text-xs sm:text-sm">
+                                  <button
+                                    className="bg-litratoblack text-white rounded px-2 py-1 text-xs sm:text-sm"
+                                    onClick={() =>
+                                      toast.message('Cancel not wired yet')
+                                    }
+                                  >
                                     {data.action[0]}
                                   </button>
-                                  <button className="bg-litratored hover:bg-red-500 text-white rounded px-2 py-1 text-xs sm:text-sm">
+                                  <button
+                                    className="bg-litratored hover:bg-red-500 text-white rounded px-2 py-1 text-xs sm:text-sm"
+                                    onClick={() => handleReschedule(data)}
+                                  >
                                     {data.action[1]}
                                   </button>
                                 </div>
@@ -333,10 +422,10 @@ export default function DashboardPage() {
                       <PaginationPrevious
                         href="#"
                         className="text-black no-underline hover:no-underline hover:text-black"
-                        style={{ textDecoration: "none" }}
+                        style={{ textDecoration: 'none' }}
                         onClick={(e) => {
-                          e.preventDefault();
-                          setPage((p) => Math.max(1, p - 1));
+                          e.preventDefault()
+                          setPage((p) => Math.max(1, p - 1))
                         }}
                       />
                     </PaginationItem>
@@ -347,10 +436,10 @@ export default function DashboardPage() {
                           href="#"
                           isActive={n === page}
                           className="text-black no-underline hover:no-underline hover:text-black"
-                          style={{ textDecoration: "none" }}
+                          style={{ textDecoration: 'none' }}
                           onClick={(e) => {
-                            e.preventDefault();
-                            setPage(n);
+                            e.preventDefault()
+                            setPage(n)
                           }}
                         >
                           {n}
@@ -362,10 +451,10 @@ export default function DashboardPage() {
                       <PaginationNext
                         href="#"
                         className="text-black no-underline hover:no-underline hover:text-black"
-                        style={{ textDecoration: "none" }}
+                        style={{ textDecoration: 'none' }}
                         onClick={(e) => {
-                          e.preventDefault();
-                          setPage((p) => Math.min(totalPages, p + 1));
+                          e.preventDefault()
+                          setPage((p) => Math.min(totalPages, p + 1))
                         }}
                       />
                     </PaginationItem>
@@ -377,5 +466,5 @@ export default function DashboardPage() {
         </div>
       </div>
     </MotionDiv>
-  );
+  )
 }
