@@ -174,24 +174,60 @@ export default function DashboardPage() {
       const data = await res.json().catch(() => ({}))
       const bookings = Array.isArray(data?.bookings) ? data.bookings : []
 
-      // Build quick lookup by date|time|address|package
-      const keySrv = (b: any) =>
+      // Build quick lookups:
+      // 1) exact key: date|time|address|package
+      // 2) loose key: date|time|address (to tolerate local package name mismatches)
+      const keyExact = (b: any) =>
         `${b.eventdate}|${String(b.eventtime).slice(0, 5)}|${(
           b.eventaddress || ''
         ).trim()}|${(b.package_name || '').trim()}`
-      const map = new Map<string, any>()
-      bookings.forEach((b: any) => map.set(keySrv(b), b))
+      const keyLoose = (b: any) =>
+        `${b.eventdate}|${String(b.eventtime).slice(0, 5)}|${(
+          b.eventaddress || ''
+        ).trim()}`
+
+      const exactMap = new Map<string, any>()
+      const looseMap = new Map<string, any[]>()
+      bookings.forEach((b: any) => {
+        exactMap.set(keyExact(b), b)
+        const lk = keyLoose(b)
+        const arr = looseMap.get(lk) ?? []
+        arr.push(b)
+        looseMap.set(lk, arr)
+      })
 
       let changed = false
       const patched = currentRows.map((r) => {
-        if (r.requestid) return r
-        const k = `${r.date}|${to24h(r.startTime)}|${(r.place || '').trim()}|${(
-          r.package || ''
-        ).trim()}`
-        const hit = map.get(k)
+        // Always try to enrich, even if requestid exists but package label is wrong
+        const exactKey = `${r.date}|${to24h(r.startTime)}|${(
+          r.place || ''
+        ).trim()}|${(r.package || '').trim()}`
+        let hit = exactMap.get(exactKey)
+
+        if (!hit) {
+          // Fallback: ignore local package name; only match date|time|address
+          const looseKey = `${r.date}|${to24h(r.startTime)}|${(
+            r.place || ''
+          ).trim()}`
+          const candidates = looseMap.get(looseKey) ?? []
+          if (candidates.length === 1) {
+            hit = candidates[0]
+          }
+        }
+
         if (hit?.requestid) {
-          changed = true
-          return { ...r, requestid: hit.requestid }
+          // Update both requestid and package label from server
+          const newPackage = (hit.package_name || r.package || '').trim()
+          const next = {
+            ...r,
+            requestid: r.requestid ?? hit.requestid,
+            package: newPackage || r.package,
+          }
+          // Mark changed only if we actually modified the row
+          if (next.requestid !== r.requestid || next.package !== r.package) {
+            changed = true
+            return next
+          }
         }
         return r
       })

@@ -52,7 +52,7 @@ async function createBooking(req, res) {
       })
     }
 
-    // Conflict check (same date & time with pending/accepted)
+    // Conflict check (same date & time with accepted only)
     const conflicts = await checkBookingConflictsModel({
       event_date,
       event_time,
