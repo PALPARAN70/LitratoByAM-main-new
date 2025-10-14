@@ -80,9 +80,9 @@ async function getConfirmedBookingById(bookingid) {
     `
     SELECT 
       cb.*,
-      br.eventdate,
-      br.eventtime,
-      br.eventaddress,
+      br.event_date,
+      br.event_time,
+      br.event_address,
       p.package_name,
       p.price AS package_price,
       u.username,
@@ -112,9 +112,9 @@ async function listConfirmedBookings() {
     `
     SELECT 
       cb.*,
-      br.eventdate,
-      br.eventtime,
-      br.eventaddress,
+      br.event_date,
+      br.event_time,
+      br.event_address,
       p.package_name,
       p.price AS package_price,
       u.username,

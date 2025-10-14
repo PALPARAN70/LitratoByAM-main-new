@@ -2,6 +2,7 @@
 /**
  * Aggregated Admin Controller
  * This file now simply re-exports functions from the split controllers:
+ *  - adminBookingController.js (booking management)
  *  - adminUserController.js (user management)
  *  - adminInventoryController.js (inventory, packages, logs, material types)
  * Keeping the original export names to avoid touching route files immediately.
