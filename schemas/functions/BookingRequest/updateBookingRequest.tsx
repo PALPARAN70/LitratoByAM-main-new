@@ -16,14 +16,25 @@ export interface BookingRequest {
   requestid: number
   packageid: number
   userid: number
-  eventdate: string
-  eventtime: string
-  eventaddress: string
+  // Both legacy camelCase and new snake_case may appear from API
+  eventdate?: string
+  eventtime?: string
+  eventaddress?: string
+  event_date?: string
+  event_time?: string
+  event_address?: string
+  event_name?: string | null
+  strongest_signal?: string | null
   contact_info: string | null
   notes: string | null
   status: BookingStatus
   last_updated?: string
   package_name?: string // make sure backend returns this (join with packages)
+  // Optional user fields from JOIN
+  username?: string | null
+  firstname?: string | null
+  lastname?: string | null
+  contact?: string | null
 }
 
 export type UpdateBookingFields = Partial<{
@@ -77,10 +88,12 @@ export function buildUpdatePayload(
   form: BookingForm,
   selectedPackageId: number | null
 ): UpdateBookingFields {
-  const contact_info =
-    [form.contactPersonAndNumber, form.contactNumber]
-      .filter(Boolean)
-      .join(' | ') || undefined
+  // Keep contact_info format consistent with creation: "Primary: <num> | Contact Person: <value>"
+  const ciParts: string[] = []
+  if (form.contactNumber) ciParts.push(`Primary: ${form.contactNumber}`)
+  if (form.contactPersonAndNumber)
+    ciParts.push(`Contact Person: ${form.contactPersonAndNumber}`)
+  const contact_info = ciParts.length ? ciParts.join(' | ') : undefined
   const notes =
     [form.facebook && `FB: ${form.facebook}`, form.eventName]
       .filter(Boolean)
@@ -100,24 +113,90 @@ export function computePrefillPatch(params: {
   prevForm: BookingForm
 }): { patch: Partial<BookingForm>; selectedPackageId: number } {
   const { booking, packages, prevForm } = params
+  // Helper: pick first defined value from possible keys
+  const pick = <T = any,>(...keys: (keyof BookingRequest | string)[]) => {
+    for (const k of keys) {
+      const v = (booking as any)[k]
+      if (v !== undefined && v !== null && v !== '') return v as T
+    }
+    return undefined as unknown as T
+  }
+  // Normalize HH:mm from possible HH:mm:ss
+  const toHHmm = (t?: string) =>
+    t ? (t.length >= 5 ? t.slice(0, 5) : t) : undefined
 
+  // Resolve package display name (fallback to previous form value)
   const resolvedName =
     booking.package_name ||
     packages.find((p) => p.id === booking.packageid)?.package_name ||
     prevForm.package
 
-  const [contactPersonMaybe, contactNumMaybe] = (booking.contact_info || '')
+  // Contact info parsing per requirements:
+  // - contactNumber: only the number after "Primary:"
+  // - contactPersonAndNumber: the content after the first "|" (if any)
+  const contactInfoRaw = (pick<string>('contact_info') || '').toString()
+  const ciParts = contactInfoRaw
     .split('|')
     .map((s) => s.trim())
+    .filter(Boolean)
+
+  let contactNumberFromDb: string | undefined
+  let contactPersonAndNumberFromDb: string | undefined
+
+  if (ciParts.length) {
+    const first = ciParts[0]
+    const mPrimary = first.match(/^Primary\s*:\s*(.+)$/i)
+    if (mPrimary) {
+      const rawNum = mPrimary[1].trim()
+      // Keep leading + and digits; strip spaces, dashes, parentheses
+      const mNum = rawNum.match(/\+?\d[\d\s\-()]*/)
+      contactNumberFromDb = mNum ? mNum[0].replace(/[\s\-()]/g, '') : rawNum
+    } else {
+      // Fallback: try to extract a number-like token
+      const mNum = first.match(/\+?\d[\d\s\-()]*/)
+      if (mNum) contactNumberFromDb = mNum[0].replace(/[\s\-()]/g, '')
+    }
+    if (ciParts.length > 1) {
+      const tail = ciParts.slice(1).join(' | ').trim()
+      // Remove any leading label to prevent duplication when rebuilding
+      contactPersonAndNumberFromDb = tail
+        .replace(/^Contact\s*Person\s*:\s*/i, '')
+        .trim()
+    }
+  }
+
+  // Compose full name from DB if available
+  const fullNameFromDb = [pick('firstname'), pick('lastname')]
+    .filter(Boolean)
+    .join(' ')
+    .trim()
+
+  // Email best-effort (username is often email in this app)
+  const emailFromDb = pick('email', 'user_email', 'username') as
+    | string
+    | undefined
+
+  const eventDateStr = pick<string>('eventdate', 'event_date')
+  const eventTimeStr = pick<string>('eventtime', 'event_time')
+  const addressStr = pick<string>('eventaddress', 'event_address')
+  const eventNameStr = pick<string>('event_name', 'eventname')
+  const signalStr = pick<string>('strongest_signal', 'signal')
 
   const patch: Partial<BookingForm> = {
-    eventLocation: booking.eventaddress || prevForm.eventLocation,
-    eventDate: new Date(booking.eventdate),
-    eventTime: booking.eventtime || prevForm.eventTime,
+    // Explicitly requested fields:
+    email: emailFromDb || prevForm.email,
+    completeName: fullNameFromDb || prevForm.completeName,
+    // contact_info mapped per requirements
+    contactNumber: contactNumberFromDb || prevForm.contactNumber,
     contactPersonAndNumber:
-      contactPersonMaybe || prevForm.contactPersonAndNumber,
-    contactNumber: contactNumMaybe || prevForm.contactNumber,
-    package: resolvedName as unknown as BookingForm['package'],
+      contactPersonAndNumberFromDb || prevForm.contactPersonAndNumber,
+    eventName: eventNameStr || prevForm.eventName,
+    eventLocation: addressStr || prevForm.eventLocation,
+    signal: signalStr || prevForm.signal,
+    // Chosen package: keep enum-safe if possible
+    package: (resolvedName || prevForm.package) as BookingForm['package'],
+    eventDate: eventDateStr ? new Date(eventDateStr) : prevForm.eventDate,
+    eventTime: toHHmm(eventTimeStr) || prevForm.eventTime,
   }
 
   return { patch, selectedPackageId: booking.packageid }

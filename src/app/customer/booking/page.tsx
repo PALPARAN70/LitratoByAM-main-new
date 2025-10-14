@@ -3,7 +3,7 @@ import Image from 'next/image'
 import PromoCard from '../../../../Litratocomponents/Service_Card'
 import Calendar from '../../../../Litratocomponents/LitratoCalendar'
 import Timepicker from '../../../../Litratocomponents/Timepicker'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { toast } from 'sonner'
 import MotionDiv from '../../../../Litratocomponents/MotionDiv'
@@ -52,6 +52,7 @@ export default function BookingPage() {
     null
   )
   const [timepickerReady, setTimepickerReady] = useState(false)
+  const didPrefillRef = useRef(false)
 
   // Moved UP: booking form state before useEffects
   const initialForm: BookingForm = {
@@ -162,21 +163,21 @@ export default function BookingPage() {
       try {
         const list = await loadPackages()
         setPackages(list)
+        // Set a default selection only on first load when nothing selected yet
         if (!selectedPackageId && list.length) {
           const first = list[0]
           setSelectedPackageId(first.id)
-          if (isPkgName(first.package_name)) {
-            setForm((p) => ({
-              ...p,
-              package: first.package_name as BookingForm['package'],
-            }))
-          }
+          setForm((p) => ({
+            ...p,
+            package: first.package_name as BookingForm['package'],
+          }))
         }
       } catch {
         // ignore
       }
     })()
-  }, [selectedPackageId])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   useEffect(() => {
     setTimepickerReady(true) // enable child onChange after first commit
@@ -186,6 +187,7 @@ export default function BookingPage() {
   useEffect(() => {
     if (!requestIdParam) return
     if (!packages?.length) return
+    if (didPrefillRef.current) return
     const token =
       (typeof window !== 'undefined' && localStorage.getItem('access_token')) ||
       null
@@ -200,6 +202,7 @@ export default function BookingPage() {
         })
         setSelectedPackageId(res.selectedPackageId)
         setForm((prev) => ({ ...prev, ...res.patch }))
+        didPrefillRef.current = true
         // optional toast
       } catch (e: any) {
         console.error(e)
@@ -240,12 +243,18 @@ export default function BookingPage() {
         packageid: selectedPackageId ?? undefined,
       })
 
+      // Use the selected package's actual name from the loaded list for dashboard display
+      const selectedPkg = packages.find((p) => p.id === selectedPackageId)
+      const displayPackageName = (
+        selectedPkg?.package_name || form.package
+      ).trim()
+
       const row = {
         name: form.eventName,
         date: fmtDate(form.eventDate),
         startTime: to12h(form.eventTime),
         endTime: to12h(form.eventEndTime),
-        package: form.package,
+        package: displayPackageName,
         place: form.eventLocation,
         paymentStatus: 'Pending',
         status: 'Pending' as 'Approved' | 'Declined' | 'Pending',
@@ -539,8 +548,11 @@ export default function BookingPage() {
                   selected={selectedPackageId === pkg.id}
                   onSelect={() => {
                     setSelectedPackageId(pkg.id)
-                    if (isPkgName(pkg.package_name))
-                      setField('package', pkg.package_name)
+                    // Always set the package name from DB now that validation allows any non-empty string
+                    setField(
+                      'package',
+                      pkg.package_name as BookingForm['package']
+                    )
                   }}
                 />
               ))}

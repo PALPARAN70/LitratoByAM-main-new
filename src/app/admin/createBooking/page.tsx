@@ -138,12 +138,10 @@ export default function BookingPage() {
         if (!selectedPackageId && list.length) {
           const first = list[0]
           setSelectedPackageId(first.id)
-          if (isPkgName(first.package_name)) {
-            setForm((p) => ({
-              ...p,
-              package: first.package_name as BookingForm['package'],
-            }))
-          }
+          setForm((p) => ({
+            ...p,
+            package: first.package_name as BookingForm['package'],
+          }))
         }
       } catch (e) {
         // Optional: show a toast, but avoid spamming admin
@@ -442,11 +440,10 @@ export default function BookingPage() {
                   selected={selectedPackageId === pkg.id}
                   onSelect={() => {
                     setSelectedPackageId(pkg.id)
-                    if (isPkgName(pkg.package_name))
-                      setField(
-                        'package',
-                        pkg.package_name as BookingForm['package']
-                      )
+                    setField(
+                      'package',
+                      pkg.package_name as BookingForm['package']
+                    )
                   }}
                 />
               ))}

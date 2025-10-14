@@ -230,7 +230,7 @@ async function getBookingRequestsByDateRange(startDate, endDate) {
   return result.rows
 }
 
-// Check if a date/time slot is already taken (pending or accepted)
+// Check if a date/time slot is already taken (accepted only)
 async function checkBookingConflicts(params) {
   const event_date =
     params.event_date ?? params.eventdate ?? params.eventDate ?? null
@@ -241,7 +241,7 @@ async function checkBookingConflicts(params) {
     FROM booking_requests
     WHERE event_date = $1
       AND event_time = $2
-      AND status IN ('pending','accepted')
+      AND status IN ('accepted')
     LIMIT 1
   `
   const { rows } = await pool.query(q, [event_date, event_time])

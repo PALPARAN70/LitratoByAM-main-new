@@ -1,14 +1,14 @@
-"use client";
-import Image from "next/image";
+'use client'
+import Image from 'next/image'
 type PromoCardProps = {
-  imageSrc: string;
-  title: string;
-  price: string;
-  descriptions: string[];
+  imageSrc: string
+  title: string
+  price: string
+  descriptions: string[]
   // New optional props for selection
-  selected?: boolean;
-  onSelect?: () => void;
-};
+  selected?: boolean
+  onSelect?: () => void
+}
 
 function PromoCard({
   imageSrc,
@@ -18,6 +18,28 @@ function PromoCard({
   selected,
   onSelect,
 }: PromoCardProps) {
+  // Ensure multi-feature descriptions render as individual rows
+  // If a single description string contains delimiters (new lines, bullets, pipes, semicolons),
+  // split it into multiple items. Otherwise, respect the provided array as-is.
+  const splitToFeatures = (s: string): string[] => {
+    const primary = s
+      .split(/[\r\n]+|[•|;]+/g)
+      .map((t) => t.trim())
+      .filter(Boolean)
+    if (primary.length > 1) return primary
+    // Fallback to comma-splitting only if primary split didn't yield multiple items
+    const comma = s
+      .split(/,/g)
+      .map((t) => t.trim())
+      .filter(Boolean)
+    return comma.length > 1 ? comma : s.trim() ? [s.trim()] : []
+  }
+
+  const items: string[] =
+    descriptions.length === 1
+      ? splitToFeatures(descriptions[0] ?? '')
+      : descriptions
+
   return (
     <div className="flex flex-row gap-14 mb-12 justify-center">
       <button
@@ -25,7 +47,7 @@ function PromoCard({
         onClick={onSelect}
         aria-pressed={!!selected}
         className={`flex flex-col rounded-t-xl w-[270px] max-h-[85vh] border-white shadow-neutral-200 shadow-md overflow-hidden focus:outline-none focus-visible:ring-2 focus-visible:ring-litratored ${
-          selected ? "ring-2 ring-litratored ring-offset-2" : ""
+          selected ? 'ring-2 ring-litratored ring-offset-2' : ''
         }`}
       >
         {/* Header section */}
@@ -55,11 +77,11 @@ function PromoCard({
 
         {/* Description list */}
         <div className="bg-white flex flex-col pt-10 overflow-y-auto h-full">
-          {descriptions.map((item, index) => (
+          {items.map((item, index) => (
             <div
               key={index}
               className={`py-1.5 pl-4 text-[10px] flex flex-row leading-tight ${
-                index % 2 === 0 ? "bg-[#F5F5F5]" : "bg-white"
+                index % 2 === 0 ? 'bg-[#F5F5F5]' : 'bg-white'
               }`}
             >
               <Image
@@ -75,7 +97,7 @@ function PromoCard({
         </div>
       </button>
     </div>
-  );
+  )
 }
 
-export default PromoCard;
+export default PromoCard
