@@ -1,5 +1,7 @@
 const express = require('express')
 const adminController = require('../Controller/adminControllers/adminController')
+const adminBookingController = require('../Controller/adminControllers/adminBookingController')
+const adminConfirmedBookingController = require('../Controller/adminControllers/adminConfirmedBookingController')
 const authMiddleware = require('../Middleware/authMiddleware')
 const roleMiddleware = require('../Middleware/roleMiddleware')
 const path = require('path')
@@ -262,4 +264,64 @@ router.put(
   adminController.replacePackageItems
 )
 
+// ---- booking request admin actions ----
+router.post(
+  '/bookingRequest/:id/accept',
+  authMiddleware,
+  roleMiddleware('admin'),
+  adminBookingController.acceptBookingRequest
+)
+router.post(
+  '/bookingRequest/:id/reject',
+  authMiddleware,
+  roleMiddleware('admin'),
+  adminBookingController.rejectBookingRequest
+)
+
+// ---- confirmed bookings management ----
+router.get(
+  '/confirmed-bookings',
+  authMiddleware,
+  roleMiddleware('admin'),
+  adminConfirmedBookingController.list
+)
+router.get(
+  '/confirmed-bookings/:id',
+  authMiddleware,
+  roleMiddleware('admin'),
+  adminConfirmedBookingController.getById
+)
+router.get(
+  '/confirmed-bookings/by-request/:requestid',
+  authMiddleware,
+  roleMiddleware('admin'),
+  adminConfirmedBookingController.getByRequestId
+)
+router.patch(
+  '/confirmed-bookings/:id/contract',
+  authMiddleware,
+  roleMiddleware('admin'),
+  adminConfirmedBookingController.markContractSigned
+)
+router.patch(
+  '/confirmed-bookings/:id/payment-status',
+  authMiddleware,
+  roleMiddleware('admin'),
+  adminConfirmedBookingController.setPaymentStatus
+)
+router.patch(
+  '/confirmed-bookings/:id/booking-status',
+  authMiddleware,
+  roleMiddleware('admin'),
+  adminConfirmedBookingController.setBookingStatus
+)
+router.patch(
+  '/confirmed-bookings/:id/total',
+  authMiddleware,
+  roleMiddleware('admin'),
+  adminConfirmedBookingController.setTotalPrice
+)
+
 module.exports = router
+
+// keep module.exports at end

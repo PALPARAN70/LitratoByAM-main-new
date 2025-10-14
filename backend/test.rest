@@ -96,3 +96,17 @@ Authorization: Bearer {{TOKEN}}
 ### POST {{BASE}}/api/customer/booking
 ### ... (same body as above) then copy requestid into @bookingId and run edit/cancel
 
+
+### admin: accept a booking request
+POST http://localhost:5000/api/admin/bookingRequest/1/accept
+Authorization: Bearer {{TOKEN}}
+Content-Type: application/json
+### admin: reject a booking request with reason
+POST http://localhost:5000/api/admin/bookingRequest/2/reject
+Authorization: Bearer {{TOKEN}}
+Content-Type: application/json
+
+{
+	"reason": "Schedule conflict"
+}
+
