@@ -120,7 +120,7 @@ export default function Calendar() {
   };
 
   return (
-    <div className="bg-gray-300 w-full max-w-[640px] rounded-[28px] p-6 shadow-lg text-litratoblack">
+    <div className="bg-gray-300 w-full max-w-[640px] rounded p-6 shadow-lg text-litratoblack">
       {renderHeader()}
       {renderDays()}
       {renderCells()}
