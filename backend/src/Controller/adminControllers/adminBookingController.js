@@ -64,6 +64,40 @@ async function acceptBookingRequest(req, res) {
       [requestid]
     )
     if (!updatedRows[0]) {
+      // Determine why the atomic update failed and return a clearer message
+      try {
+        // Check if the timeslot is already accepted by another request
+        const conflictCheck = await pool.query(
+          `SELECT 1
+             FROM booking_requests bx
+            WHERE bx.event_date = $1
+              AND bx.event_time = $2
+              AND bx.status = 'accepted'
+            LIMIT 1`,
+          [existing.event_date, existing.event_time]
+        )
+        if (conflictCheck?.rowCount > 0) {
+          return res.status(409).json({
+            message:
+              'Cannot accept: another booking for this date and time is already accepted.',
+          })
+        }
+
+        // Otherwise, re-check the current status of this request
+        const latest = await getBookingRequestById(requestid)
+        if (!latest) {
+          return res.status(404).json({ message: 'Booking request not found' })
+        }
+        if (latest.status !== 'pending') {
+          return res.status(409).json({
+            message: `Request is no longer pending (current: ${latest.status}).`,
+          })
+        }
+      } catch (diagErr) {
+        console.warn('acceptBookingRequest diagnostic check failed:', diagErr)
+      }
+
+      // Fallback generic message
       return res
         .status(409)
         .json({ message: 'Request status changed; cannot accept' })

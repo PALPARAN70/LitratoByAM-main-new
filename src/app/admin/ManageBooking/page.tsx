@@ -19,11 +19,16 @@ import {
   readBookings,
   type BookingRequestRow,
 } from '../../../../schemas/functions/BookingRequest/readBookings'
+import {
+  approveBookingRequest,
+  rejectBookingRequest,
+} from '../../../../schemas/functions/BookingRequest/evaluateBookingRequest'
 
 type TabKey = 'bookings' | 'masterlist'
 type BookingStatus = 'pending' | 'approved' | 'declined' | 'cancelled'
 type BookingRow = {
   id: string
+  requestid?: number | null
   eventName: string
   date: string // ISO or display string
   startTime: string
@@ -44,6 +49,7 @@ type BookingRow = {
 export default function ManageBookingPage() {
   const [active, setActive] = useState<TabKey>('masterlist')
   const [selectedForBooking, setSelectedForBooking] = useState<{
+    requestid?: number | null
     eventName?: string
     date?: string
     startTime?: string
@@ -87,6 +93,7 @@ export default function ManageBookingPage() {
           <MasterListPanel
             onSelectPending={(row) => {
               setSelectedForBooking({
+                requestid: row.requestid ?? null,
                 eventName: row.eventName,
                 date: row.date,
                 startTime: row.startTime,
@@ -111,10 +118,34 @@ export default function ManageBookingPage() {
     </div>
   )
 }
+// Safely extract an ISO-like YYYY-MM-DD string from various date shapes
+function toISODateString(value: unknown): string {
+  if (!value) return '—'
+  if (typeof value === 'string') {
+    // If already ISO-like, take first 10 chars or part before 'T'
+    const m = value.match(/^(\d{4}-\d{2}-\d{2})/)
+    if (m) return m[1]
+    const d = new Date(value)
+    if (!Number.isNaN(d.getTime())) return d.toISOString().slice(0, 10)
+    return value.slice(0, 10)
+  }
+  if (value instanceof Date) {
+    // Normalize to calendar date (no tz shift)
+    const y = value.getFullYear()
+    const m = value.getMonth()
+    const d = value.getDate()
+    const iso = new Date(Date.UTC(y, m, d)).toISOString()
+    return iso.slice(0, 10)
+  }
+  const s = String(value)
+  const m = s.match(/^(\d{4}-\d{2}-\d{2})/)
+  return m ? m[1] : s.slice(0, 10)
+}
 function BookingsPanel({
   selected,
 }: {
   selected: {
+    requestid?: number | null
     eventName?: string
     date?: string
     startTime?: string
@@ -148,9 +179,18 @@ function BookingsPanel({
     eventTime: '',
   }
   const [form, setForm] = useState(defaultForm)
+  const [readonlyKeys, setReadonlyKeys] = useState<
+    Set<keyof typeof defaultForm>
+  >(new Set())
+  const [submitting, setSubmitting] = useState<null | 'approve' | 'reject'>(
+    null
+  )
   // When a selection arrives, prefill the form
   useEffect(() => {
-    if (!selected) return
+    if (!selected) {
+      setReadonlyKeys(new Set())
+      return
+    }
     const contactPersonCombo = [
       selected.contact_person,
       selected.contact_person_number,
@@ -177,6 +217,21 @@ function BookingsPanel({
       eventDate: selected.date || p.eventDate,
       eventTime: selected.startTime || p.eventTime,
     }))
+    // Mark all prefilled user booking fields as read-only (copyable)
+    const ro = new Set<keyof typeof defaultForm>([
+      'email',
+      'completeName',
+      'contactNumber',
+      'contactPersonAndNumber',
+      'eventName',
+      'eventLocation',
+      'extensionHours',
+      'signal',
+      'package',
+      'eventDate',
+      'eventTime',
+    ])
+    setReadonlyKeys(ro)
   }, [selected])
 
   // Simple config: all fields render as text inputs
@@ -208,6 +263,7 @@ function BookingsPanel({
         type="text"
         className="w-full bg-gray-200 rounded-md px-3 py-2 text-sm focus:outline-none"
         value={form[f.key]}
+        readOnly={readonlyKeys.has(f.key)}
         onChange={(e) => setForm((p) => ({ ...p, [f.key]: e.target.value }))}
         placeholder="Enter here:"
       />
@@ -243,11 +299,48 @@ function BookingsPanel({
           </div>
 
           <span className="flex justify-end gap-2 mt-4">
-            <button className="bg-red-500 text-white px-4 py-2 rounded">
-              Decline
+            <button
+              className="bg-red-500 text-white px-4 py-2 rounded disabled:opacity-50"
+              disabled={submitting !== null}
+              onClick={async () => {
+                if (!selected?.date) return
+                try {
+                  setSubmitting('reject')
+                  const requestid = selected?.requestid ?? null
+                  if (!requestid) throw new Error('Missing request id')
+                  await rejectBookingRequest(requestid)
+                  // Reset selection and go back to master list
+                  alert('Booking rejected')
+                  window.location.reload()
+                } catch (e: any) {
+                  alert(e?.message || 'Failed to reject')
+                } finally {
+                  setSubmitting(null)
+                }
+              }}
+            >
+              {submitting === 'reject' ? 'Rejecting…' : 'Decline'}
             </button>
-            <button className="bg-green-500 text-white px-4 py-2 rounded">
-              Approve
+            <button
+              className="bg-green-500 text-white px-4 py-2 rounded disabled:opacity-50"
+              disabled={submitting !== null}
+              onClick={async () => {
+                if (!selected?.date) return
+                try {
+                  setSubmitting('approve')
+                  const requestid = selected?.requestid ?? null
+                  if (!requestid) throw new Error('Missing request id')
+                  await approveBookingRequest(requestid)
+                  alert('Booking approved and confirmed')
+                  window.location.reload()
+                } catch (e: any) {
+                  alert(e?.message || 'Failed to approve')
+                } finally {
+                  setSubmitting(null)
+                }
+              }}
+            >
+              {submitting === 'approve' ? 'Approving…' : 'Approve'}
             </button>
           </span>
         </div>
@@ -293,11 +386,12 @@ function MasterListPanel({
           }
           const status =
             statusMap[(r.status as string) || 'pending'] ?? 'pending'
-          const date = (r.event_date || '').toString().slice(0, 10)
+          const date = toISODateString(r.event_date)
           const startTime = (r.event_time || '').toString().slice(0, 5)
           const endTime = (r.event_end_time || '').toString().slice(0, 5)
           return {
             id: String(r.requestid || r.confirmed_id || Math.random()),
+            requestid: r.requestid ?? null,
             eventName: r.event_name || '—',
             date,
             startTime,

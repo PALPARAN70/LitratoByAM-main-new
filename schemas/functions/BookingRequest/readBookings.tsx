@@ -155,8 +155,21 @@ export async function readBookings(
     last_updated: c.last_updated,
   }))
 
-  // Merge; you may want to de-duplicate by requestid if needed
-  const merged = [...reqRows, ...confRows]
+  // Merge and de-duplicate by requestid, preferring confirmed over request
+  const map = new Map<string | number, BookingRequestRow>()
+  const keyOf = (r: BookingRequestRow) =>
+    r.requestid ?? `${r.event_date}|${r.event_time}|${r.event_address}`
+  // First add requests
+  for (const r of reqRows) {
+    const k = keyOf(r)
+    map.set(k, r)
+  }
+  // Then overwrite with confirmed if present (preferred)
+  for (const c of confRows) {
+    const k = keyOf(c)
+    map.set(k, c)
+  }
+  const merged = Array.from(map.values())
   // Sort by created_at desc when available else by event_date desc
   merged.sort((a, b) => {
     const ta = Date.parse(a.created_at || a.event_date || '') || 0
