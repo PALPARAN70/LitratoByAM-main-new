@@ -57,9 +57,11 @@ export default function BookingPage() {
   // Moved UP: booking form state before useEffects
   const initialForm: BookingForm = {
     email: '',
-    facebook: '',
     completeName: '',
     contactNumber: '',
+    // New split fields; keep legacy combined empty for compatibility
+    contactPersonName: '',
+    contactPersonNumber: '',
     contactPersonAndNumber: '',
     eventName: '',
     eventLocation: '',
@@ -98,6 +100,8 @@ export default function BookingPage() {
       [
         'email',
         'contactNumber',
+        'contactPersonName',
+        'contactPersonNumber',
         'eventTime',
         'eventEndTime',
         'extensionHours',
@@ -291,7 +295,6 @@ export default function BookingPage() {
 
   const formFields = [
     'Email:',
-    'Facebook:',
     'Complete name:',
     'Contact #:',
     'Contact Person & Number:',
@@ -356,20 +359,7 @@ export default function BookingPage() {
             )}
           </div>
 
-          {/* Facebook */}
-          <div>
-            <label className="block text-lg mb-1">Facebook:</label>
-            <input
-              type="text"
-              placeholder="Enter here:"
-              className="w-full bg-gray-200 rounded-md px-3 py-2 text-sm focus:outline-none"
-              value={form.facebook}
-              onChange={(e) => setField('facebook', e.target.value)}
-            />
-            {errors.facebook && (
-              <p className="text-red-600 text-sm mt-1">{errors.facebook}</p>
-            )}
-          </div>
+          {/* Facebook removed */}
 
           {/* Complete name */}
           <div>
@@ -404,25 +394,47 @@ export default function BookingPage() {
             )}
           </div>
 
-          {/* Contact Person & Number */}
-          <div>
-            <label className="block text-lg mb-1">
-              Contact Person & Number:
-            </label>
-            <input
-              type="text"
-              placeholder="Enter here:"
-              className="w-full bg-gray-200 rounded-md px-3 py-2 text-sm focus:outline-none"
-              value={form.contactPersonAndNumber}
-              onChange={(e) =>
-                setField('contactPersonAndNumber', e.target.value)
-              }
-            />
-            {errors.contactPersonAndNumber && (
-              <p className="text-red-600 text-sm mt-1">
-                {errors.contactPersonAndNumber}
-              </p>
-            )}
+          {/* Contact Person (split fields) */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-lg mb-1">Contact Person Name:</label>
+              <input
+                type="text"
+                placeholder="Enter here:"
+                className="w-full bg-gray-200 rounded-md px-3 py-2 text-sm focus:outline-none"
+                value={form.contactPersonName || ''}
+                onChange={(e) =>
+                  setField('contactPersonName', e.target.value as any)
+                }
+              />
+              {errors.contactPersonName && (
+                <p className="text-red-600 text-sm mt-1">
+                  {errors.contactPersonName}
+                </p>
+              )}
+            </div>
+            <div>
+              <label className="block text-lg mb-1">
+                Contact Person Number:
+              </label>
+              <input
+                type="tel"
+                placeholder="e.g. +639171234567"
+                className="w-full bg-gray-200 rounded-md px-3 py-2 text-sm focus:outline-none"
+                value={form.contactPersonNumber || ''}
+                onChange={(e) =>
+                  setField('contactPersonNumber', e.target.value as any)
+                }
+                onBlur={(e) =>
+                  setField('contactPersonNumber', e.target.value as any)
+                }
+              />
+              {errors.contactPersonNumber && (
+                <p className="text-red-600 text-sm mt-1">
+                  {errors.contactPersonNumber}
+                </p>
+              )}
+            </div>
           </div>
 
           {/* Event name */}

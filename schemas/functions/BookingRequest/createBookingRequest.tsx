@@ -19,6 +19,8 @@ type CreateBookingPayload = {
   event_address: string
   grid?: string | null
   contact_info?: string | null
+  contact_person?: string | null
+  contact_person_number?: string | null
   notes?: string | null
   event_name?: string | null
   strongest_signal?: string | null
@@ -54,9 +56,10 @@ const toTimeWithSeconds = (t: string) => (t.length === 5 ? `${t}:00` : t)
 
 const buildContactInfo = (form: BookingForm) => {
   const parts = []
-  if (form.contactNumber) parts.push(`Primary: ${form.contactNumber}`)
-  if (form.contactPersonAndNumber)
-    parts.push(`Contact Person: ${form.contactPersonAndNumber}`)
+  // Only persist primary contact number in contact_info; contact person name/number
+  // are now first-class attributes sent separately.
+  if (form.contactNumber) parts.push(`${form.contactNumber}`)
+  // Do NOT include contactPersonName/Number nor legacy combined value here anymore.
   return parts.length ? parts.join(' | ') : null
 }
 
@@ -68,7 +71,6 @@ const buildNotes = (form: BookingForm) => {
     form.boothPlacement ? `Placement: ${form.boothPlacement}` : '',
     form.signal ? `Signal: ${form.signal}` : '',
     form.selectedGrids?.length ? `Grids: ${form.selectedGrids.join(', ')}` : '',
-    form.facebook ? `Facebook: ${form.facebook}` : '',
     form.completeName ? `Complete Name: ${form.completeName}` : '',
     form.email ? `Email: ${form.email}` : '',
   ].filter(Boolean)
@@ -116,6 +118,8 @@ export async function createBookingRequest({
         ? form.selectedGrids.join(',')
         : null,
     contact_info: buildContactInfo(form),
+    contact_person: form.contactPersonName || null,
+    contact_person_number: form.contactPersonNumber || null,
     notes: buildNotes(form),
     event_name: form.eventName || null,
     strongest_signal: form.signal || null,

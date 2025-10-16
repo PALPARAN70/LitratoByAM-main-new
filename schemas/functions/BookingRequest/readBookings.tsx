@@ -14,6 +14,8 @@ export type BookingRequestRow = {
   extension_duration?: number | null
   event_address?: string
   contact_info?: string | null
+  contact_person?: string | null
+  contact_person_number?: string | null
   event_name?: string | null
   strongest_signal?: string | null
   package_name?: string
@@ -98,6 +100,8 @@ export async function readBookings(
         : null,
     event_address: r.event_address ?? r.eventaddress,
     contact_info: r.contact_info ?? null,
+    contact_person: r.contact_person ?? null,
+    contact_person_number: r.contact_person_number ?? null,
     event_name: r.event_name ?? null,
     strongest_signal: r.strongest_signal ?? null,
     package_name: r.package_name,
@@ -128,6 +132,8 @@ export async function readBookings(
         : null,
     event_address: c.event_address,
     contact_info: c.contact_info ?? null,
+    contact_person: c.contact_person ?? null,
+    contact_person_number: c.contact_person_number ?? null,
     event_name: c.event_name ?? null,
     strongest_signal: c.strongest_signal ?? null,
     package_name: c.package_name,

@@ -21,8 +21,45 @@ import {
 } from '../../../../schemas/functions/BookingRequest/readBookings'
 
 type TabKey = 'bookings' | 'masterlist'
+type BookingStatus = 'pending' | 'approved' | 'declined' | 'cancelled'
+type BookingRow = {
+  id: string
+  eventName: string
+  date: string // ISO or display string
+  startTime: string
+  endTime: string
+  package: string
+  grid: string // now showing actual value, comma-joined
+  place: string
+  status: BookingStatus
+  contact_info?: string | null
+  contact_person?: string | null
+  contact_person_number?: string | null
+  strongest_signal?: string | null
+  extension_duration?: number | null
+  username?: string | null
+  firstname?: string | null
+  lastname?: string | null
+}
 export default function ManageBookingPage() {
   const [active, setActive] = useState<TabKey>('masterlist')
+  const [selectedForBooking, setSelectedForBooking] = useState<{
+    eventName?: string
+    date?: string
+    startTime?: string
+    endTime?: string
+    package?: string
+    grid?: string | null
+    place?: string
+    contact_info?: string | null
+    contact_person?: string | null
+    contact_person_number?: string | null
+    strongest_signal?: string | null
+    extension_duration?: number | null
+    username?: string | null
+    firstname?: string | null
+    lastname?: string | null
+  } | null>(null)
   return (
     <div className="p-4 flex flex-col">
       <header className="flex items-center justify-between mb-4">
@@ -43,17 +80,61 @@ export default function ManageBookingPage() {
         </TabButton>
       </nav>
       <section className="bg-white rounded-xl shadow p-2">
-        {active === 'bookings' && <BookingsPanel />}
-        {active === 'masterlist' && <MasterListPanel />}
+        {active === 'bookings' && (
+          <BookingsPanel selected={selectedForBooking} />
+        )}
+        {active === 'masterlist' && (
+          <MasterListPanel
+            onSelectPending={(row) => {
+              setSelectedForBooking({
+                eventName: row.eventName,
+                date: row.date,
+                startTime: row.startTime,
+                endTime: row.endTime,
+                package: row.package,
+                grid: row.grid,
+                place: row.place,
+                contact_info: row.contact_info ?? null,
+                contact_person: row.contact_person ?? null,
+                contact_person_number: row.contact_person_number ?? null,
+                strongest_signal: row.strongest_signal ?? null,
+                extension_duration: row.extension_duration ?? null,
+                username: row.username ?? null,
+                firstname: row.firstname ?? null,
+                lastname: row.lastname ?? null,
+              })
+              setActive('bookings')
+            }}
+          />
+        )}
       </section>
     </div>
   )
 }
-function BookingsPanel() {
+function BookingsPanel({
+  selected,
+}: {
+  selected: {
+    eventName?: string
+    date?: string
+    startTime?: string
+    endTime?: string
+    package?: string
+    grid?: string | null
+    place?: string
+    contact_info?: string | null
+    contact_person?: string | null
+    contact_person_number?: string | null
+    strongest_signal?: string | null
+    extension_duration?: number | null
+    username?: string | null
+    firstname?: string | null
+    lastname?: string | null
+  } | null
+}) {
   // All values as strings for text-only placeholders
   const defaultForm = {
     email: '',
-    facebook: '',
     completeName: '',
     contactNumber: '',
     contactPersonAndNumber: '',
@@ -67,11 +148,40 @@ function BookingsPanel() {
     eventTime: '',
   }
   const [form, setForm] = useState(defaultForm)
+  // When a selection arrives, prefill the form
+  useEffect(() => {
+    if (!selected) return
+    const contactPersonCombo = [
+      selected.contact_person,
+      selected.contact_person_number,
+    ]
+      .filter(Boolean)
+      .join(' | ')
+    const fullName = [selected.firstname, selected.lastname]
+      .filter(Boolean)
+      .join(' ')
+    setForm((p) => ({
+      ...p,
+      email: selected.username || p.email,
+      completeName: fullName || p.completeName,
+      contactNumber: selected.contact_info || p.contactNumber,
+      contactPersonAndNumber: contactPersonCombo,
+      eventName: selected.eventName || p.eventName,
+      eventLocation: selected.place || p.eventLocation,
+      extensionHours:
+        selected.extension_duration != null
+          ? String(selected.extension_duration)
+          : p.extensionHours,
+      signal: selected.strongest_signal || p.signal,
+      package: selected.package || p.package,
+      eventDate: selected.date || p.eventDate,
+      eventTime: selected.startTime || p.eventTime,
+    }))
+  }, [selected])
 
   // Simple config: all fields render as text inputs
   const fields: Array<{ key: keyof typeof defaultForm; label: string }> = [
     { key: 'email', label: 'Email:' },
-    { key: 'facebook', label: 'Facebook:' },
     { key: 'completeName', label: 'Complete name:' },
     { key: 'contactNumber', label: 'Contact #:' },
     { key: 'contactPersonAndNumber', label: 'Contact Person & Number:' },
@@ -104,9 +214,21 @@ function BookingsPanel() {
     </div>
   )
 
+  // Parse selected date for calendar marking
+  const markedDate = useMemo(() => {
+    if (!selected?.date) return null
+    const m = selected.date.match(/^(\d{4})-(\d{2})-(\d{2})/)
+    if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
+    const d = new Date(selected.date)
+    return Number.isNaN(d.getTime()) ? null : d
+  }, [selected?.date])
+
   return (
     <div className=" flex gap-2 p-2 ">
-      <Calendar />
+      <Calendar
+        markedDate={markedDate ?? undefined}
+        initialMonth={markedDate ?? undefined}
+      />
       <div className=" flex flex-col p-2 bg-gray-300 w-full rounded ">
         <div className="flex justify-between">
           {/* (api name fetching here) */}
@@ -141,23 +263,11 @@ function pageWindow(current: number, total: number, size = 3): number[] {
   return Array.from({ length: end - start + 1 }, (_, i) => start + i)
 }
 
-function MasterListPanel() {
-  type BookingStatus = 'pending' | 'approved' | 'declined' | 'cancelled'
-  type BookingRow = {
-    id: string
-    eventName: string
-    date: string // ISO or display string
-    startTime: string
-    endTime: string
-    package: string
-    grid: string // now showing actual value, comma-joined
-    place: string
-    status: BookingStatus
-    contact_info?: string | null
-    strongest_signal?: string | null
-    extension_duration?: number | null
-  }
-
+function MasterListPanel({
+  onSelectPending,
+}: {
+  onSelectPending: (row: BookingRow) => void
+}) {
   const pageSize = 5
   const [statusFilter, setStatusFilter] = useState<BookingStatus | 'all'>('all')
   const [page, setPage] = useState(1)
@@ -197,8 +307,13 @@ function MasterListPanel() {
             place: r.event_address || '—',
             status,
             contact_info: r.contact_info ?? null,
+            contact_person: r.contact_person ?? null,
+            contact_person_number: r.contact_person_number ?? null,
             strongest_signal: r.strongest_signal ?? null,
             extension_duration: r.extension_duration ?? null,
+            username: r.username ?? null,
+            firstname: r.firstname ?? null,
+            lastname: r.lastname ?? null,
           }
         }
         const mapped = list.map(toRow)
@@ -367,6 +482,22 @@ function MasterListPanel() {
                               </div>
                             </div>
                             <div>
+                              <div className="font-semibold">
+                                Contact person
+                              </div>
+                              <div className="text-gray-700 whitespace-pre-wrap">
+                                {row.contact_person || '—'}
+                              </div>
+                            </div>
+                            <div>
+                              <div className="font-semibold">
+                                Contact person number
+                              </div>
+                              <div className="text-gray-700 whitespace-pre-wrap">
+                                {row.contact_person_number || '—'}
+                              </div>
+                            </div>
+                            <div>
                               <div className="font-semibold">Address</div>
                               <div className="text-gray-700">
                                 {row.place || '—'}
@@ -394,9 +525,16 @@ function MasterListPanel() {
                       </Popover>
                     </td>
                     <td className="px-3 py-2">
-                      <button className="rounded bg-green-400 p-1">
-                        Validate
-                      </button>
+                      {row.status === 'pending' ? (
+                        <button
+                          className="rounded bg-green-500 text-white px-3 py-1"
+                          onClick={() => onSelectPending(row)}
+                        >
+                          Review
+                        </button>
+                      ) : (
+                        <span className="text-gray-400 text-xs">No action</span>
+                      )}
                     </td>
                   </tr>
                 ))

@@ -119,6 +119,8 @@ export default function DashboardPage() {
     action: string[]
     requestid?: number // add: used for update navigation
     contact_info?: string | null
+    contact_person?: string | null
+    contact_person_number?: string | null
     strongest_signal?: string | null
     extension_duration?: number | null
   }
@@ -151,6 +153,26 @@ export default function DashboardPage() {
     if (ap === 'pm' && h < 12) h += 12
     if (ap === 'am' && h === 12) h = 0
     return `${String(h).padStart(2, '0')}:${mm}`
+  }
+
+  // Normalize a variety of date strings to YYYY-MM-DD
+  const toISODate = (s: string) => {
+    if (!s) return ''
+    // Already ISO
+    const mIso = s.match(/^(\d{4})-(\d{2})-(\d{2})/)
+    if (mIso) return `${mIso[1]}-${mIso[2]}-${mIso[3]}`
+    // Common local format MM/DD/YYYY
+    const mUs = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
+    if (mUs) {
+      const mm = String(mUs[1]).padStart(2, '0')
+      const dd = String(mUs[2]).padStart(2, '0')
+      const yyyy = mUs[3]
+      return `${yyyy}-${mm}-${dd}`
+    }
+    // Fallback: Date parse
+    const d = new Date(s)
+    if (!Number.isNaN(d.getTime())) return d.toISOString().substring(0, 10)
+    return s
   }
 
   // Fetch user's bookings and fill missing requestid in local rows
@@ -203,25 +225,35 @@ export default function DashboardPage() {
 
       const exactMap = new Map<string, any>()
       const looseMap = new Map<string, any[]>()
+      const byId = new Map<number, any>()
       bookings.forEach((b: any) => {
         exactMap.set(keyExact(b), b)
         const lk = keyLoose(b)
         const arr = looseMap.get(lk) ?? []
         arr.push(b)
         looseMap.set(lk, arr)
+        if (b.requestid != null) {
+          byId.set(Number(b.requestid), b)
+        }
       })
 
       let changed = false
       const patched = currentRows.map((r) => {
         // Always try to enrich, even if requestid exists but package label is wrong
-        const exactKey = `${r.date}|${to24h(r.startTime)}|${(
+        const dateISO = toISODate(r.date)
+        const exactKey = `${dateISO}|${to24h(r.startTime)}|${(
           r.place || ''
         ).trim()}|${(r.package || '').trim()}`
         let hit = exactMap.get(exactKey)
 
+        // Best match: requestid direct lookup if present
+        if (!hit && r.requestid && byId.has(r.requestid)) {
+          hit = byId.get(r.requestid)
+        }
+
         if (!hit) {
           // Fallback: ignore local package name; only match date|time|address
-          const looseKey = `${r.date}|${to24h(r.startTime)}|${(
+          const looseKey = `${dateISO}|${to24h(r.startTime)}|${(
             r.place || ''
           ).trim()}`
           const candidates = looseMap.get(looseKey) ?? []
@@ -239,6 +271,9 @@ export default function DashboardPage() {
             package: newPackage || r.package,
             // Enrich details for More Details popover
             contact_info: hit.contact_info ?? r.contact_info ?? null,
+            contact_person: hit.contact_person ?? r.contact_person ?? null,
+            contact_person_number:
+              hit.contact_person_number ?? r.contact_person_number ?? null,
             strongest_signal:
               hit.strongest_signal ?? r.strongest_signal ?? null,
             extension_duration:
@@ -253,6 +288,8 @@ export default function DashboardPage() {
             next.requestid !== r.requestid ||
             next.package !== r.package ||
             next.contact_info !== r.contact_info ||
+            next.contact_person !== r.contact_person ||
+            next.contact_person_number !== r.contact_person_number ||
             next.strongest_signal !== r.strongest_signal ||
             next.extension_duration !== r.extension_duration
           ) {
@@ -546,6 +583,22 @@ export default function DashboardPage() {
                                       </div>
                                       <div className="text-gray-700 whitespace-pre-wrap">
                                         {data.contact_info || '—'}
+                                      </div>
+                                    </div>
+                                    <div>
+                                      <div className="font-semibold">
+                                        Contact person
+                                      </div>
+                                      <div className="text-gray-700 whitespace-pre-wrap">
+                                        {data.contact_person || '—'}
+                                      </div>
+                                    </div>
+                                    <div>
+                                      <div className="font-semibold">
+                                        Contact person number
+                                      </div>
+                                      <div className="text-gray-700 whitespace-pre-wrap">
+                                        {data.contact_person_number || '—'}
                                       </div>
                                     </div>
                                     <div>
