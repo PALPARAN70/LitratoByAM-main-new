@@ -12,6 +12,10 @@ const customerRoute = require('./src/Routes/customerRoutes')
 
 const cors = require('cors')
 const { initUserTable } = require('./src/Model/userModel')
+const { initBookingRequestTable } = require('./src/Model/bookingRequestModel')
+const {
+  initConfirmedBookingTable,
+} = require('./src/Model/confirmedBookingRequestModel')
 
 const ROOT = path.resolve(__dirname, '..') // points to backend/
 const UPLOAD_ROOT = path.join(ROOT, 'Assets')
@@ -58,7 +62,10 @@ app.use((req, res) => {
 })
 
 const PORT = process.env.PORT || 5000
+// Initialize essential tables (users + bookings) before starting server
 initUserTable()
+  .then(() => initBookingRequestTable())
+  .then(() => initConfirmedBookingTable())
   .then(() => {
     app.listen(PORT, () => console.log(`Server running on port ${PORT}`))
   })

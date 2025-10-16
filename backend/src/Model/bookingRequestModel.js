@@ -9,7 +9,10 @@ async function initBookingRequestTable() {
       userid INTEGER NOT NULL,
       event_date DATE NOT NULL,
       event_time TIME NOT NULL,
+      event_end_time TIME,
+      extension_duration INTEGER,
       event_address TEXT NOT NULL,
+  grid TEXT,
       event_name TEXT,
       strongest_signal TEXT,
       contact_info TEXT,
@@ -50,6 +53,19 @@ async function initBookingRequestTable() {
       'ALTER TABLE booking_requests ADD COLUMN IF NOT EXISTS strongest_signal TEXT'
     )
     .catch(() => {})
+  await pool
+    .query(
+      'ALTER TABLE booking_requests ADD COLUMN IF NOT EXISTS event_end_time TIME'
+    )
+    .catch(() => {})
+  await pool
+    .query(
+      'ALTER TABLE booking_requests ADD COLUMN IF NOT EXISTS extension_duration INTEGER'
+    )
+    .catch(() => {})
+  await pool
+    .query('ALTER TABLE booking_requests ADD COLUMN IF NOT EXISTS grid TEXT')
+    .catch(() => {})
 }
 
 // Create a new booking request
@@ -58,14 +74,17 @@ async function createBookingRequest(
   userid,
   eventdate,
   eventtime,
+  event_end_time,
+  extension_duration,
   eventaddress,
   notes = null,
   event_name = null,
-  strongest_signal = null
+  strongest_signal = null,
+  grid = null
 ) {
   const query = `
-    INSERT INTO booking_requests (packageid, userid, event_date, event_time, event_address, notes, event_name, strongest_signal)
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+    INSERT INTO booking_requests (packageid, userid, event_date, event_time, event_end_time, extension_duration, event_address, notes, event_name, strongest_signal, grid)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
     RETURNING *
   `
   const values = [
@@ -73,10 +92,13 @@ async function createBookingRequest(
     userid,
     eventdate,
     eventtime,
+    event_end_time,
+    extension_duration,
     eventaddress,
     notes,
     event_name,
     strongest_signal,
+    grid,
   ]
   const { rows } = await pool.query(query, values)
   return rows[0]
