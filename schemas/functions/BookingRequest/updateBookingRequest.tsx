@@ -94,10 +94,7 @@ export function buildUpdatePayload(
   if (form.contactPersonAndNumber)
     ciParts.push(`Contact Person: ${form.contactPersonAndNumber}`)
   const contact_info = ciParts.length ? ciParts.join(' | ') : undefined
-  const notes =
-    [form.facebook && `FB: ${form.facebook}`, form.eventName]
-      .filter(Boolean)
-      .join(' | ') || undefined
+  const notes = [form.eventName].filter(Boolean).join(' | ') || undefined
   return {
     packageid: selectedPackageId ?? undefined,
     eventaddress: form.eventLocation || undefined,

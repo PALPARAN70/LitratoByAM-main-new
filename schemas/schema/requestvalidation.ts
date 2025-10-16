@@ -3,7 +3,6 @@ import { requestvalidation } from '../types/validation.type'
 
 export const requestSchema: z.ZodSchema<requestvalidation> = z.object({
   Email: z.string().min(1, 'Email is required'),
-  Facebook: z.string().min(1, 'Facebook is required'),
   Completename: z.string().min(1, 'Complete name is required'),
   ContactNumber: z.number().int().positive(),
   ContactPersonandNumber: z
@@ -19,14 +18,18 @@ export const requestSchema: z.ZodSchema<requestvalidation> = z.object({
 export const bookingFormSchema = z
   .object({
     email: z.string().email('Invalid email address'),
-    facebook: z.string().min(1, 'Facebook is required'),
     completeName: z.string().min(1, 'Complete name is required'),
     contactNumber: z
       .string()
       .regex(/^\+?\d{10,15}$/, 'Contact number must be 10-15 digits'),
-    contactPersonAndNumber: z
+    // New split fields
+    contactPersonName: z.string().optional(),
+    contactPersonNumber: z
       .string()
-      .min(1, 'Contact Person & Number is required'),
+      .regex(/^\+?\d{10,15}$/i, 'Contact person number must be 10-15 digits')
+      .optional(),
+    // Backward compatibility: legacy combined field (optional)
+    contactPersonAndNumber: z.string().optional(),
     eventName: z.string().min(1, 'Event name is required'),
     eventLocation: z.string().min(1, 'Event location is required'),
     extensionHours: z.coerce
@@ -62,6 +65,24 @@ export const bookingFormSchema = z
         path: ['eventEndTime'],
         code: z.ZodIssueCode.custom,
         message: 'End time must be after start time',
+      })
+    }
+
+    // Ensure we have either the new split fields (both) or the legacy combined
+    const hasSplit = Boolean(
+      (data as any).contactPersonName && (data as any).contactPersonNumber
+    )
+    const hasLegacy = Boolean((data as any).contactPersonAndNumber)
+    if (!hasSplit && !hasLegacy) {
+      ctx.addIssue({
+        path: ['contactPersonName'],
+        code: z.ZodIssueCode.custom,
+        message: 'Provide contact person name.',
+      })
+      ctx.addIssue({
+        path: ['contactPersonNumber'],
+        code: z.ZodIssueCode.custom,
+        message: 'Provide contact person name.',
       })
     }
   })

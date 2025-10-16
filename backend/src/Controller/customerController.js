@@ -42,6 +42,8 @@ async function createBooking(req, res) {
       extension_duration = null,
       event_address,
       contact_info = null,
+      contact_person = null,
+      contact_person_number = null,
       notes = null,
       event_name = null,
       strongest_signal = null,
@@ -76,7 +78,9 @@ async function createBooking(req, res) {
       notes,
       event_name,
       strongest_signal,
-      grid
+      grid,
+      contact_person,
+      contact_person_number
     )
 
     // Patch contact info if provided
