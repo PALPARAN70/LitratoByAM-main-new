@@ -2,7 +2,10 @@
 
 // Admin booking request actions: accept/reject
 const { pool } = require('../../Config/db')
-const { getBookingRequestById } = require('../../Model/bookingRequestModel')
+const {
+  getBookingRequestById,
+  getAllBookingRequests,
+} = require('../../Model/bookingRequestModel')
 const {
   initConfirmedBookingTable,
   createConfirmedBooking,
@@ -163,6 +166,18 @@ async function rejectBookingRequest(req, res) {
 }
 
 module.exports = {
+  // List all booking requests (admin)
+  async listBookingRequests(_req, res) {
+    try {
+      const rows = await getAllBookingRequests()
+      return res.json({ bookings: rows })
+    } catch (err) {
+      console.error('listBookingRequests error:', err)
+      return res
+        .status(500)
+        .json({ message: 'Server error listing booking requests' })
+    }
+  },
   acceptBookingRequest,
   rejectBookingRequest,
 }

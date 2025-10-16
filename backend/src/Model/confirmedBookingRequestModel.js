@@ -15,6 +15,21 @@ async function initConfirmedBookingTable() {
       last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `)
+
+  // Ensure optional columns for forward-compat (some designs store these on request only)
+  await pool
+    .query(
+      'ALTER TABLE confirmed_bookings ADD COLUMN IF NOT EXISTS event_end_time TIME'
+    )
+    .catch(() => {})
+  await pool
+    .query(
+      'ALTER TABLE confirmed_bookings ADD COLUMN IF NOT EXISTS extension_duration INTEGER'
+    )
+    .catch(() => {})
+  await pool
+    .query('ALTER TABLE confirmed_bookings ADD COLUMN IF NOT EXISTS grid TEXT')
+    .catch(() => {})
 }
 
 /**
@@ -33,7 +48,7 @@ async function createConfirmedBooking(requestid, options = {}) {
   // Fetch request + package price
   const rq = await pool.query(
     `
-    SELECT br.requestid, br.userid, br.status, p.price
+  SELECT br.requestid, br.userid, br.status, br.event_end_time, br.extension_duration, br.grid, p.price
     FROM booking_requests br
     JOIN packages p ON p.id = br.packageid
     WHERE br.requestid = $1
@@ -58,8 +73,8 @@ async function createConfirmedBooking(requestid, options = {}) {
   const ins = await pool.query(
     `
     INSERT INTO confirmed_bookings
-      (requestid, userid, contract_signed, payment_status, booking_status, total_booking_price)
-    VALUES ($1, $2, $3, $4, $5, $6)
+      (requestid, userid, contract_signed, payment_status, booking_status, total_booking_price, event_end_time, extension_duration, grid)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
     RETURNING *
     `,
     [
@@ -69,6 +84,9 @@ async function createConfirmedBooking(requestid, options = {}) {
       paymentStatus,
       bookingStatus,
       total,
+      reqRow.event_end_time || null,
+      reqRow.extension_duration || null,
+      reqRow.grid || null,
     ]
   )
   return ins.rows[0]
@@ -82,7 +100,13 @@ async function getConfirmedBookingById(bookingid) {
       cb.*,
       br.event_date,
       br.event_time,
+      COALESCE(cb.event_end_time, br.event_end_time) AS event_end_time,
+      COALESCE(cb.extension_duration, br.extension_duration) AS extension_duration,
+      COALESCE(cb.grid, br.grid) AS grid,
       br.event_address,
+      br.contact_info,
+      br.event_name,
+      br.strongest_signal,
       p.package_name,
       p.price AS package_price,
       u.username,
@@ -114,7 +138,13 @@ async function listConfirmedBookings() {
       cb.*,
       br.event_date,
       br.event_time,
+      COALESCE(cb.event_end_time, br.event_end_time) AS event_end_time,
+      COALESCE(cb.extension_duration, br.extension_duration) AS extension_duration,
+      COALESCE(cb.grid, br.grid) AS grid,
       br.event_address,
+      br.contact_info,
+      br.event_name,
+      br.strongest_signal,
       p.package_name,
       p.price AS package_price,
       u.username,

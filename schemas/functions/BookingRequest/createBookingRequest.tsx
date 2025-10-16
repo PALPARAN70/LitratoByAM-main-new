@@ -14,7 +14,10 @@ type CreateBookingPayload = {
   packageid: number
   event_date: string // YYYY-MM-DD
   event_time: string // HH:mm:ss
+  event_end_time?: string | null // HH:mm:ss
+  extension_duration?: number | null
   event_address: string
+  grid?: string | null
   contact_info?: string | null
   notes?: string | null
   event_name?: string | null
@@ -100,7 +103,18 @@ export async function createBookingRequest({
     packageid: resolvedPackageId,
     event_date: fmtDate(form.eventDate),
     event_time: toTimeWithSeconds(form.eventTime),
+    event_end_time: toTimeWithSeconds(form.eventEndTime),
+    extension_duration:
+      typeof form.extensionHours === 'number'
+        ? form.extensionHours
+        : Number.isFinite(Number(form.extensionHours))
+        ? Number(form.extensionHours)
+        : 0,
     event_address: form.eventLocation,
+    grid:
+      Array.isArray(form.selectedGrids) && form.selectedGrids.length
+        ? form.selectedGrids.join(',')
+        : null,
     contact_info: buildContactInfo(form),
     notes: buildNotes(form),
     event_name: form.eventName || null,

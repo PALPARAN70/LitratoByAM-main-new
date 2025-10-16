@@ -265,6 +265,13 @@ router.put(
 )
 
 // ---- booking request admin actions ----
+// list all booking requests
+router.get(
+  '/bookingRequest',
+  authMiddleware,
+  roleMiddleware('admin'),
+  adminBookingController.listBookingRequests
+)
 router.post(
   '/bookingRequest/:id/accept',
   authMiddleware,

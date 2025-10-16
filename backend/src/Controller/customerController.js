@@ -38,11 +38,14 @@ async function createBooking(req, res) {
       packageid,
       event_date,
       event_time,
+      event_end_time = null,
+      extension_duration = null,
       event_address,
       contact_info = null,
       notes = null,
       event_name = null,
       strongest_signal = null,
+      grid = null,
     } = req.body || {}
 
     if (!packageid || !event_date || !event_time || !event_address) {
@@ -67,10 +70,13 @@ async function createBooking(req, res) {
       userid,
       event_date,
       event_time,
+      event_end_time,
+      extension_duration,
       event_address,
       notes,
       event_name,
-      strongest_signal
+      strongest_signal,
+      grid
     )
 
     // Patch contact info if provided
