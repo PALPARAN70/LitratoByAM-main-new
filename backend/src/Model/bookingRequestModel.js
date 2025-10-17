@@ -125,6 +125,9 @@ async function getBookingRequestById(requestid) {
   const query = `
     SELECT 
       br.*,
+      TO_CHAR(br.event_date, 'YYYY-MM-DD') AS event_date,
+      TO_CHAR(br.event_time, 'HH24:MI') AS event_time,
+      TO_CHAR(br.event_end_time, 'HH24:MI') AS event_end_time,
       p.package_name,
       p.description as package_description,
       p.price,
@@ -146,6 +149,9 @@ async function getAllBookingRequests() {
   const query = `
     SELECT 
       br.*,
+      TO_CHAR(br.event_date, 'YYYY-MM-DD') AS event_date,
+      TO_CHAR(br.event_time, 'HH24:MI') AS event_time,
+      TO_CHAR(br.event_end_time, 'HH24:MI') AS event_end_time,
       p.package_name,
       p.price,
       u.username,
@@ -166,6 +172,9 @@ async function getBookingRequestsByUserId(userid) {
   const query = `
     SELECT 
       br.*,
+      TO_CHAR(br.event_date, 'YYYY-MM-DD') AS event_date,
+      TO_CHAR(br.event_time, 'HH24:MI') AS event_time,
+      TO_CHAR(br.event_end_time, 'HH24:MI') AS event_end_time,
       p.package_name,
       p.description as package_description,
       p.price,
@@ -184,6 +193,9 @@ async function getBookingRequestsByStatus(status) {
   const query = `
     SELECT 
       br.*,
+      TO_CHAR(br.event_date, 'YYYY-MM-DD') AS event_date,
+      TO_CHAR(br.event_time, 'HH24:MI') AS event_time,
+      TO_CHAR(br.event_end_time, 'HH24:MI') AS event_end_time,
       p.package_name,
       p.price,
       u.username,

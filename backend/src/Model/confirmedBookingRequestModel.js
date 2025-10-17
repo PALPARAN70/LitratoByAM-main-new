@@ -98,8 +98,8 @@ async function getConfirmedBookingById(bookingid) {
     `
     SELECT 
       cb.*,
-      br.event_date,
-      br.event_time,
+      TO_CHAR(br.event_date, 'YYYY-MM-DD') AS event_date,
+      TO_CHAR(br.event_time, 'HH24:MI') AS event_time,
       COALESCE(cb.event_end_time, br.event_end_time) AS event_end_time,
       COALESCE(cb.extension_duration, br.extension_duration) AS extension_duration,
       COALESCE(cb.grid, br.grid) AS grid,
@@ -136,8 +136,8 @@ async function listConfirmedBookings() {
     `
     SELECT 
       cb.*,
-      br.event_date,
-      br.event_time,
+      TO_CHAR(br.event_date, 'YYYY-MM-DD') AS event_date,
+      TO_CHAR(br.event_time, 'HH24:MI') AS event_time,
       COALESCE(cb.event_end_time, br.event_end_time) AS event_end_time,
       COALESCE(cb.extension_duration, br.extension_duration) AS extension_duration,
       COALESCE(cb.grid, br.grid) AS grid,
