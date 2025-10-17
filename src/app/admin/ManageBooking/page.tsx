@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useMemo, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import Calendar from '../../../../Litratocomponents/LitratoCalendar'
 import {
   Pagination,
@@ -23,6 +24,8 @@ import {
   approveBookingRequest,
   rejectBookingRequest,
 } from '../../../../schemas/functions/BookingRequest/evaluateBookingRequest'
+import { cancelConfirmedBooking } from '../../../../schemas/functions/BookingRequest/cancelBooking'
+import { updateConfirmedBooking } from '../../../../schemas/functions/BookingRequest/updateBooking'
 
 type TabKey = 'bookings' | 'masterlist'
 type BookingStatus = 'pending' | 'approved' | 'declined' | 'cancelled'
@@ -361,12 +364,14 @@ function MasterListPanel({
 }: {
   onSelectPending: (row: BookingRow) => void
 }) {
+  const router = useRouter()
   const pageSize = 5
   const [statusFilter, setStatusFilter] = useState<BookingStatus | 'all'>('all')
   const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [rows, setRows] = useState<BookingRow[]>([])
+  const [search, setSearch] = useState('')
 
   useEffect(() => {
     let cancelled = false
@@ -378,14 +383,20 @@ function MasterListPanel({
         if (cancelled) return
         // Map API rows into table rows
         const toRow = (r: BookingRequestRow): BookingRow => {
-          const statusMap: Record<string, BookingStatus> = {
-            pending: 'pending',
-            accepted: 'approved',
-            rejected: 'declined',
-            cancelled: 'cancelled',
+          // Derive UI status. For confirmed bookings, reflect booking_status
+          // (cancelled -> 'cancelled', others -> 'approved'). For requests, map DB status.
+          let status: BookingStatus
+          if (r.kind === 'confirmed') {
+            status = r.booking_status === 'cancelled' ? 'cancelled' : 'approved'
+          } else {
+            const statusMap: Record<string, BookingStatus> = {
+              pending: 'pending',
+              accepted: 'approved',
+              rejected: 'declined',
+              cancelled: 'cancelled',
+            }
+            status = statusMap[(r.status as string) || 'pending'] ?? 'pending'
           }
-          const status =
-            statusMap[(r.status as string) || 'pending'] ?? 'pending'
           const date = toISODateString(r.event_date)
           const startTime = (r.event_time || '').toString().slice(0, 5)
           const endTime = (r.event_end_time || '').toString().slice(0, 5)
@@ -426,9 +437,38 @@ function MasterListPanel({
   }, [])
 
   const filtered = useMemo(() => {
-    if (statusFilter === 'all') return rows
-    return rows.filter((d) => d.status === statusFilter)
-  }, [statusFilter, rows])
+    // First, filter by status
+    const byStatus =
+      statusFilter === 'all'
+        ? rows
+        : rows.filter((d) => d.status === statusFilter)
+    // Then, apply search tokens (AND over tokens)
+    const q = search.trim().toLowerCase()
+    if (!q) return byStatus
+    const tokens = q.split(/\s+/).filter(Boolean)
+    if (!tokens.length) return byStatus
+    return byStatus.filter((r) => {
+      const hay = [
+        r.eventName,
+        r.date,
+        r.startTime,
+        r.endTime,
+        r.package,
+        r.grid,
+        r.place,
+        r.username,
+        r.firstname,
+        r.lastname,
+        r.contact_info,
+        r.contact_person,
+        r.contact_person_number,
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase()
+      return tokens.every((t) => hay.includes(t))
+    })
+  }, [statusFilter, rows, search])
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize))
   const startIdx = (page - 1) * pageSize
   const pageRows = filtered.slice(startIdx, startIdx + pageSize)
@@ -454,6 +494,90 @@ function MasterListPanel({
     ]
   const currentLabel =
     statusOptions.find((o) => o.value === statusFilter)?.label ?? 'All'
+
+  // Handlers for actions menu
+  const handleEdit = (row: BookingRow) => {
+    try {
+      // Build prefill payload for createBooking page
+      const prefill = {
+        email: row.username || '',
+        completeName: [row.firstname, row.lastname].filter(Boolean).join(' '),
+        contactNumber: row.contact_info || '',
+        contactPersonAndNumber: [row.contact_person, row.contact_person_number]
+          .filter(Boolean)
+          .join(' | '),
+        eventName: row.eventName || '',
+        eventLocation: row.place || '',
+        extensionHours:
+          typeof row.extension_duration === 'number'
+            ? row.extension_duration
+            : 0,
+        boothPlacement: 'Indoor',
+        signal: row.strongest_signal || '',
+        package: (row.package || 'The Hanz') as any,
+        selectedGrids: (row.grid || '')
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean),
+        eventDate: row.date ? new Date(row.date) : new Date(),
+        eventTime: row.startTime || '12:00',
+        eventEndTime: row.endTime || '14:00',
+        // Attach the requestid for reference if needed during save
+        __requestid: row.requestid ?? null,
+      }
+      if (typeof window !== 'undefined') {
+        sessionStorage.setItem('edit_booking_prefill', JSON.stringify(prefill))
+      }
+      router.push('/admin/createBooking?prefill=1')
+    } catch {
+      // no-op; optionally toast an error
+    }
+  }
+
+  const handleCancel = async (row: BookingRow) => {
+    if (!(row.requestid && row.status === 'approved')) return
+    const ok =
+      typeof window !== 'undefined' ? window.confirm('Are you sure?') : true
+    if (!ok) return
+    try {
+      await cancelConfirmedBooking({
+        requestid: row.requestid,
+        reason: 'Admin cancel via ManageBooking',
+      })
+      // Reflect immediately in UI
+      setRows((prev) =>
+        prev.map((r) =>
+          r.requestid === row.requestid ? { ...r, status: 'cancelled' } : r
+        )
+      )
+      alert('Booking cancelled')
+    } catch (e: any) {
+      alert(e?.message || 'Failed to cancel booking')
+    }
+  }
+
+  const handleUndoCancel = async (row: BookingRow) => {
+    if (!row.requestid || row.status !== 'cancelled') return
+    try {
+      const ok =
+        typeof window !== 'undefined'
+          ? window.confirm('Restore this booking to scheduled?')
+          : true
+      if (!ok) return
+      await updateConfirmedBooking({
+        requestid: row.requestid,
+        updates: { bookingStatus: 'scheduled' },
+      })
+      setRows((prev) =>
+        prev.map((r) =>
+          r.requestid === row.requestid ? { ...r, status: 'approved' } : r
+        )
+      )
+      alert('Booking restored to scheduled')
+    } catch (e: any) {
+      alert(e?.message || 'Failed to undo cancel')
+    }
+  }
 
   return (
     <div className="p-2 flex flex-col h-[60vh] min-h-0">
@@ -501,7 +625,32 @@ function MasterListPanel({
           </PopoverContent>
         </Popover>
 
-        <div>Search Bar</div>
+        <div className="flex items-center gap-2">
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value)
+              setPage(1)
+            }}
+            placeholder="Search by name, date, user, place…"
+            className="h-9 w-64 max-w-[50vw] px-3 rounded border border-gray-300 bg-white text-sm focus:outline-none focus:ring-1 focus:ring-black/50"
+            aria-label="Search bookings"
+          />
+          {search ? (
+            <button
+              type="button"
+              onClick={() => {
+                setSearch('')
+                setPage(1)
+              }}
+              className="h-9 px-3 rounded border border-gray-300 bg-white text-sm hover:bg-gray-100"
+              aria-label="Clear search"
+            >
+              Clear
+            </button>
+          ) : null}
+        </div>
       </div>
 
       <div className="bg-white rounded-xl shadow flex-1 min-h-0 flex flex-col overflow-hidden">
@@ -619,16 +768,65 @@ function MasterListPanel({
                       </Popover>
                     </td>
                     <td className="px-3 py-2">
-                      {row.status === 'pending' ? (
-                        <button
-                          className="rounded bg-green-500 text-white px-3 py-1"
-                          onClick={() => onSelectPending(row)}
-                        >
-                          Review
-                        </button>
-                      ) : (
-                        <span className="text-gray-400 text-xs">No action</span>
-                      )}
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <button
+                            type="button"
+                            className="p-1 rounded hover:bg-gray-100"
+                            aria-label="Actions"
+                            title="Actions"
+                          >
+                            <Ellipsis />
+                          </button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-40 p-1" align="end">
+                          <div className="flex flex-col">
+                            <button
+                              type="button"
+                              className={`text-left px-2 py-1.5 rounded text-sm hover:bg-gray-100 ${
+                                row.status === 'pending'
+                                  ? ''
+                                  : 'opacity-50 cursor-not-allowed'
+                              }`}
+                              disabled={row.status !== 'pending'}
+                              onClick={() => onSelectPending(row)}
+                            >
+                              Review
+                            </button>
+                            <button
+                              type="button"
+                              className="text-left px-2 py-1.5 rounded text-sm hover:bg-gray-100"
+                              onClick={() => handleEdit(row)}
+                            >
+                              Edit
+                            </button>
+                            <button
+                              type="button"
+                              className={`text-left px-2 py-1.5 rounded text-sm hover:bg-gray-100 ${
+                                row.status === 'approved'
+                                  ? ''
+                                  : 'opacity-50 cursor-not-allowed'
+                              }`}
+                              disabled={row.status !== 'approved'}
+                              onClick={() => handleCancel(row)}
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              type="button"
+                              className={`text-left px-2 py-1.5 rounded text-sm hover:bg-gray-100 ${
+                                row.status === 'cancelled'
+                                  ? ''
+                                  : 'opacity-50 cursor-not-allowed'
+                              }`}
+                              disabled={row.status !== 'cancelled'}
+                              onClick={() => handleUndoCancel(row)}
+                            >
+                              Undo Cancel
+                            </button>
+                          </div>
+                        </PopoverContent>
+                      </Popover>
                     </td>
                   </tr>
                 ))

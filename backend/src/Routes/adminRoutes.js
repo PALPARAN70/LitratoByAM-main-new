@@ -329,6 +329,28 @@ router.patch(
   adminConfirmedBookingController.setTotalPrice
 )
 
+// Combined update (any subset of fields) and explicit cancel endpoints
+router.patch(
+  '/confirmed-bookings/:id',
+  authMiddleware,
+  roleMiddleware('admin'),
+  adminConfirmedBookingController.updateConfirmedCombined
+)
+router.post(
+  '/confirmed-bookings/:id/cancel',
+  authMiddleware,
+  roleMiddleware('admin'),
+  adminConfirmedBookingController.cancelConfirmed
+)
+
+// Admin creates a booking and confirms immediately
+router.post(
+  '/confirmed-bookings',
+  authMiddleware,
+  roleMiddleware('admin'),
+  adminConfirmedBookingController.createAndConfirm
+)
+
 module.exports = router
 
 // keep module.exports at end

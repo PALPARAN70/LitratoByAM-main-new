@@ -16,6 +16,10 @@ import {
   loadPackages,
   type PackageDto,
 } from '../../../../schemas/functions/BookingRequest/loadPackages'
+import {
+  adminCreateAndConfirm,
+  type AdminCreateConfirmPayload,
+} from '../../../../schemas/functions/BookingRequest/adminCreateAndConfirm'
 const API_BASE =
   (process.env.NEXT_PUBLIC_API_BASE?.replace(/\/$/, '') ||
     'http://localhost:5000') + '/api/auth/getProfile'
@@ -46,13 +50,16 @@ export default function BookingPage() {
     eventName: '',
     eventLocation: '',
     extensionHours: 0,
-    boothPlacement: 'Indoor',
+    // Leave booth placement unselected by default
+    boothPlacement: '' as unknown as BookingForm['boothPlacement'],
     signal: '',
-    package: 'The Hanz',
+    // Leave package unselected by default
+    package: '' as unknown as BookingForm['package'],
     selectedGrids: [],
     eventDate: new Date(),
-    eventTime: '12:00',
-    eventEndTime: '14:00',
+    // Start with empty times; Timepicker renders safe defaults visually
+    eventTime: '',
+    eventEndTime: '',
   }
   const [form, setForm] = useState<BookingForm>(initialForm)
   const [errors, setErrors] = useState<
@@ -64,6 +71,7 @@ export default function BookingPage() {
   const [selectedPackageId, setSelectedPackageId] = useState<number | null>(
     null
   )
+  const [prefillPkgName, setPrefillPkgName] = useState<string | null>(null)
 
   // BookingForm['package'] is a union; guard before setting from DB names
   type PkgName = BookingForm['package']
@@ -78,6 +86,42 @@ export default function BookingPage() {
 
   useEffect(() => {
     if (typeof window === 'undefined') return
+    // Apply prefilled values when redirected from ManageBooking (Edit action)
+    try {
+      const raw = sessionStorage.getItem('edit_booking_prefill')
+      if (raw) {
+        const data = JSON.parse(raw)
+        sessionStorage.removeItem('edit_booking_prefill')
+        setIsEditable(true)
+        setPrefillPkgName(
+          typeof data.package === 'string' ? data.package : null
+        )
+        setForm((prev) => ({
+          ...prev,
+          email: data.email ?? prev.email,
+          completeName: data.completeName ?? prev.completeName,
+          contactNumber: data.contactNumber ?? prev.contactNumber,
+          contactPersonAndNumber:
+            data.contactPersonAndNumber ?? prev.contactPersonAndNumber,
+          eventName: data.eventName ?? prev.eventName,
+          eventLocation: data.eventLocation ?? prev.eventLocation,
+          extensionHours:
+            typeof data.extensionHours === 'number'
+              ? data.extensionHours
+              : prev.extensionHours,
+          boothPlacement: data.boothPlacement ?? prev.boothPlacement,
+          signal: data.signal ?? prev.signal,
+          package: (data.package as BookingForm['package']) ?? prev.package,
+          selectedGrids: Array.isArray(data.selectedGrids)
+            ? data.selectedGrids
+            : prev.selectedGrids,
+          eventDate: data.eventDate ? new Date(data.eventDate) : prev.eventDate,
+          eventTime: data.eventTime ?? prev.eventTime,
+          eventEndTime: data.eventEndTime ?? prev.eventEndTime,
+        }))
+      }
+    } catch {}
+
     const token = localStorage.getItem('access_token')
     if (!token) {
       router.replace('/login')
@@ -111,13 +155,7 @@ export default function BookingPage() {
           Firstname: data.firstname || '',
           Lastname: data.lastname || '',
         })
-        setForm((prev) => ({
-          ...prev,
-          email: data.email || prev.email,
-          completeName:
-            `${data.firstname ?? ''} ${data.lastname ?? ''}`.trim() ||
-            prev.completeName,
-        }))
+        // Do not prefill form fields from profile on admin create.
       } catch (err: any) {
         if (err?.name === 'AbortError') return
         toast.error('Error fetching profile')
@@ -134,13 +172,17 @@ export default function BookingPage() {
         const list = await loadPackages()
         // Ensure only display=true packages are shown
         setPackages(Array.isArray(list) ? list.filter((p) => p.display) : [])
-        if (!selectedPackageId && list.length) {
-          const first = list[0]
-          setSelectedPackageId(first.id)
-          setForm((p) => ({
-            ...p,
-            package: first.package_name as BookingForm['package'],
-          }))
+        if (!selectedPackageId) {
+          // If we came from Edit, try to resolve package by name
+          const chosen = list.find((p) => p.package_name === prefillPkgName)
+          if (chosen) {
+            setSelectedPackageId(chosen.id)
+            setForm((p) => ({
+              ...p,
+              package: chosen.package_name as BookingForm['package'],
+            }))
+          }
+          // Otherwise, leave package unselected by default
         }
       } catch (e) {
         // Optional: show a toast, but avoid spamming admin
@@ -148,7 +190,7 @@ export default function BookingPage() {
       }
     })()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedPackageId])
+  }, [selectedPackageId, prefillPkgName])
 
   // Helpers
   const setField = <K extends keyof BookingForm>(
@@ -186,12 +228,64 @@ export default function BookingPage() {
       toast.error('Please fill in all required fields.')
       return
     }
-    // You can send result.data to your backend here
-    toast.success("Form submitted! Please wait for the admin's response.")
+    // Admin create flow: create and confirm immediately
+    const doSubmit = async () => {
+      try {
+        // Resolve package id from selection or by name
+        const pkgId =
+          selectedPackageId ??
+          packages.find((p) => p.package_name === form.package)?.id ??
+          null
+        if (!pkgId) throw new Error('Please select a package')
+
+        const fmtDate = (d: Date) => new Date(d).toISOString().substring(0, 10)
+        const toTimeWithSeconds = (t: string) =>
+          t.length === 5 ? `${t}:00` : t
+
+        const payload: AdminCreateConfirmPayload = {
+          email: form.email || undefined,
+          packageid: pkgId,
+          event_date: fmtDate(form.eventDate),
+          event_time: toTimeWithSeconds(form.eventTime),
+          event_end_time: toTimeWithSeconds(form.eventEndTime),
+          extension_duration:
+            typeof form.extensionHours === 'number'
+              ? form.extensionHours
+              : Number(form.extensionHours) || 0,
+          event_address: form.eventLocation,
+          grid:
+            Array.isArray(form.selectedGrids) && form.selectedGrids.length
+              ? form.selectedGrids.join(',')
+              : null,
+          contact_info: form.contactNumber || null,
+          // Optionally parse contactPersonAndNumber formatted as "Name | Number"
+          contact_person: form.contactPersonAndNumber?.includes('|')
+            ? form.contactPersonAndNumber.split('|')[0].trim()
+            : null,
+          contact_person_number: form.contactPersonAndNumber?.includes('|')
+            ? form.contactPersonAndNumber.split('|')[1]?.trim() || null
+            : null,
+          notes: null,
+          event_name: form.eventName || null,
+          strongest_signal: form.signal || null,
+        }
+
+        await adminCreateAndConfirm(payload)
+        toast.success('Booking created and confirmed.')
+        // Optionally redirect back to manage bookings
+        // router.push('/admin/ManageBooking')
+      } catch (e: any) {
+        toast.error(e?.message || 'Failed to create booking')
+      }
+    }
+
+    void doSubmit()
   }
 
   const handleClear = () => {
     setForm(initialForm)
+    setSelectedPackageId(null)
+    setPrefillPkgName(null)
     setErrors({})
     toast.message('Form cleared.')
   }
