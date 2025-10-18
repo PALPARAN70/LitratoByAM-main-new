@@ -14,8 +14,21 @@ const { pool } = require('../Config/db')
 function buildCustomerBookingUpdate(updates = {}) {
   const allowed = {
     packageid: true,
+    // core schedule fields
+    event_date: true,
+    event_time: true,
+    event_end_time: true,
+    extension_duration: true,
+    // location/details
     event_address: true,
+    grid: true,
+    event_name: true,
+    strongest_signal: true,
+    // contacts
     contact_info: true,
+    contact_person: true,
+    contact_person_number: true,
+    // misc
     notes: true,
   }
   const sets = []
@@ -124,11 +137,34 @@ async function editBookingRequest(req, res) {
         .json({ message: 'Only pending bookings can be edited' })
     }
 
-    const { packageid, event_address, contact_info, notes } = req.body || {}
+    const {
+      packageid,
+      event_date,
+      event_time,
+      event_end_time,
+      extension_duration,
+      event_address,
+      grid,
+      event_name,
+      strongest_signal,
+      contact_info,
+      contact_person,
+      contact_person_number,
+      notes,
+    } = req.body || {}
     const { sets, values } = buildCustomerBookingUpdate({
       packageid,
+      event_date,
+      event_time,
+      event_end_time,
+      extension_duration,
       event_address,
+      grid,
+      event_name,
+      strongest_signal,
       contact_info,
+      contact_person,
+      contact_person_number,
       notes,
     })
     if (!sets.length) {

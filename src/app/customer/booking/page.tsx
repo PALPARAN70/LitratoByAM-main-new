@@ -315,7 +315,11 @@ export default function BookingPage() {
   }
   const fmtDate = (d: Date) => {
     try {
-      return new Date(d).toISOString().substring(0, 10)
+      const dd = new Date(d)
+      const y = dd.getFullYear()
+      const m = String(dd.getMonth() + 1).padStart(2, '0')
+      const day = String(dd.getDate()).padStart(2, '0')
+      return `${y}-${m}-${day}`
     } catch {
       return ''
     }
@@ -476,19 +480,17 @@ export default function BookingPage() {
             <label className="block text-lg mb-1">
               Extension? (Our Minimum is 2hrs. Additional hour is Php2000):
             </label>
-            <input
-              type="number"
-              min={0}
-              max={12}
-              step={1}
-              placeholder="0"
+            <select
               className="w-full bg-gray-200 rounded-md px-3 py-2 text-sm focus:outline-none"
-              value={form.extensionHours}
+              value={String(form.extensionHours)}
               onChange={(e) =>
                 setField('extensionHours', Number(e.target.value))
               }
-              onBlur={(e) => setField('extensionHours', Number(e.target.value))}
-            />
+            >
+              <option value="0">0</option>
+              <option value="1">1</option>
+              <option value="2">2</option>
+            </select>
             {errors.extensionHours && (
               <p className="text-red-600 text-sm mt-1">
                 {errors.extensionHours}
@@ -602,7 +604,10 @@ export default function BookingPage() {
             </p>
             <div className="flex flex-row justify-center gap-24 ">
               <div>
-                <Calendar />
+                <Calendar
+                  value={form.eventDate}
+                  onDateChangeAction={(d) => setField('eventDate', d as any)}
+                />
                 {errors.eventDate && (
                   <p className="text-red-600 text-sm mt-1">
                     {errors.eventDate}

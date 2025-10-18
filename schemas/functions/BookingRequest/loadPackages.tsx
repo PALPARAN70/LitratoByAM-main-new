@@ -5,6 +5,7 @@ export type PackageDto = {
   package_name: string
   description: string | null
   price: number
+  duration_hours?: number | null
   status: boolean
   display: boolean
   image_url: string | null

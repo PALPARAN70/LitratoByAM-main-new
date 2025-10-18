@@ -124,7 +124,6 @@ export default function DashboardPage() {
     strongest_signal?: string | null
     extension_duration?: number | null
   }
-  const DASHBOARD_KEY = 'litrato_dashboard_table'
   const [rows, setRows] = useState<Row[]>([])
   const PER_PAGE = 5
   const [page, setPage] = useState(1)
@@ -171,179 +170,113 @@ export default function DashboardPage() {
     }
     // Fallback: Date parse
     const d = new Date(s)
-    if (!Number.isNaN(d.getTime())) return d.toISOString().substring(0, 10)
+    if (!Number.isNaN(d.getTime())) {
+      const y = d.getFullYear()
+      const m = String(d.getMonth() + 1).padStart(2, '0')
+      const day = String(d.getDate()).padStart(2, '0')
+      return `${y}-${m}-${day}`
+    }
     return s
   }
 
-  // Fetch user's bookings and fill missing requestid in local rows
-  const hydrateRequestIds = async (currentRows: Row[]) => {
+  // Helper: 24h to 12h
+  const to12h = (t: string) => {
+    if (!t) return ''
+    const [HHs, MMs] = t.split(':')
+    const HH = parseInt(HHs || '0', 10)
+    const MM = parseInt(MMs || '0', 10)
+    const ampm = HH >= 12 ? 'pm' : 'am'
+    const h12 = (HH % 12 || 12).toString().padStart(2, '0')
+    return `${h12}:${String(MM || 0).padStart(2, '0')} ${ampm}`
+  }
+
+  // Load rows from server for the current authenticated customer
+  const loadRows = async () => {
     try {
       const token =
         (typeof window !== 'undefined' &&
           localStorage.getItem('access_token')) ||
         null
-      if (!token) return
+      if (!token) {
+        setRows([])
+        setPage(1)
+        return
+      }
 
-      const API_BASE =
+      const API_URL =
         (process.env.NEXT_PUBLIC_API_BASE?.replace(/\/$/, '') ||
           'http://localhost:5000') + '/api/customer/bookingRequest'
 
-      const res = await fetch(API_BASE, {
+      const res = await fetch(API_URL, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
+        cache: 'no-store',
       })
-      if (!res.ok) return
+
+      if (!res.ok) {
+        setRows([])
+        setPage(1)
+        return
+      }
+
       const data = await res.json().catch(() => ({}))
       const bookings = Array.isArray(data?.bookings) ? data.bookings : []
 
-      // Build quick lookups supporting both legacy and snake_case keys:
-      // 1) exact key: date|time|address|package
-      // 2) loose key: date|time|address (to tolerate local package name mismatches)
-      const norm = (b: any) => {
-        const d = b.event_date ?? b.eventdate
-        const t = b.event_time ?? b.eventtime
-        const a = (b.event_address ?? b.eventaddress ?? '').trim()
-        const p = (b.package_name ?? '').trim()
+      const toTitle = (s: string | null | undefined) => {
+        const v = String(s || '').toLowerCase()
+        if (v === 'accepted' || v === 'approved') return 'Approved' as const
+        if (v === 'rejected' || v === 'declined') return 'Declined' as const
+        if (v === 'cancelled' || v === 'canceled') return 'Cancelled' as const
+        return 'Pending' as const
+      }
+
+      const mapped: Row[] = bookings.map((b: any) => {
+        const timeStart = String(b.event_time ?? b.eventtime ?? '').slice(0, 5)
+        const timeEnd = String(b.event_end_time ?? '').slice(0, 5)
+        const dateISO = toISODate(String(b.event_date ?? b.eventdate ?? ''))
         return {
-          date: d,
-          timeHHmm: String(t ?? '').slice(0, 5),
-          address: a,
-          pkg: p,
-        }
-      }
-      const keyExact = (b: any) => {
-        const n = norm(b)
-        return `${n.date}|${n.timeHHmm}|${n.address}|${n.pkg}`
-      }
-      const keyLoose = (b: any) => {
-        const n = norm(b)
-        return `${n.date}|${n.timeHHmm}|${n.address}`
-      }
-
-      const exactMap = new Map<string, any>()
-      const looseMap = new Map<string, any[]>()
-      const byId = new Map<number, any>()
-      bookings.forEach((b: any) => {
-        exactMap.set(keyExact(b), b)
-        const lk = keyLoose(b)
-        const arr = looseMap.get(lk) ?? []
-        arr.push(b)
-        looseMap.set(lk, arr)
-        if (b.requestid != null) {
-          byId.set(Number(b.requestid), b)
+          name: b.event_name ?? '',
+          date: dateISO,
+          startTime: to12h(timeStart),
+          endTime: timeEnd ? to12h(timeEnd) : '',
+          package: (b.package_name ?? '').trim(),
+          place: (b.event_address ?? b.eventaddress ?? '').trim(),
+          paymentStatus: (b.payment_status ?? 'Pending') as string,
+          status: toTitle(b.status as string),
+          action: ['Cancel', 'Reschedule'],
+          requestid: b.requestid != null ? Number(b.requestid) : undefined,
+          contact_info: b.contact_info ?? null,
+          contact_person: b.contact_person ?? null,
+          contact_person_number: b.contact_person_number ?? null,
+          strongest_signal: b.strongest_signal ?? null,
+          extension_duration:
+            typeof b.extension_duration === 'number'
+              ? b.extension_duration
+              : b.extension_duration != null
+              ? Number(b.extension_duration)
+              : null,
         }
       })
 
-      let changed = false
-      const patched = currentRows.map((r) => {
-        // Always try to enrich, even if requestid exists but package label is wrong
-        const dateISO = toISODate(r.date)
-        const exactKey = `${dateISO}|${to24h(r.startTime)}|${(
-          r.place || ''
-        ).trim()}|${(r.package || '').trim()}`
-        let hit = exactMap.get(exactKey)
-
-        // Best match: requestid direct lookup if present
-        if (!hit && r.requestid && byId.has(r.requestid)) {
-          hit = byId.get(r.requestid)
-        }
-
-        if (!hit) {
-          // Fallback: ignore local package name; only match date|time|address
-          const looseKey = `${dateISO}|${to24h(r.startTime)}|${(
-            r.place || ''
-          ).trim()}`
-          const candidates = looseMap.get(looseKey) ?? []
-          if (candidates.length === 1) {
-            hit = candidates[0]
-          }
-        }
-
-        if (hit?.requestid) {
-          // Update both requestid and package label from server
-          const newPackage = (hit.package_name || r.package || '').trim()
-          const next = {
-            ...r,
-            requestid: r.requestid ?? hit.requestid,
-            package: newPackage || r.package,
-            // Enrich details for More Details popover
-            contact_info: hit.contact_info ?? r.contact_info ?? null,
-            contact_person: hit.contact_person ?? r.contact_person ?? null,
-            contact_person_number:
-              hit.contact_person_number ?? r.contact_person_number ?? null,
-            strongest_signal:
-              hit.strongest_signal ?? r.strongest_signal ?? null,
-            extension_duration:
-              typeof hit.extension_duration === 'number'
-                ? hit.extension_duration
-                : hit.extension_duration != null
-                ? Number(hit.extension_duration)
-                : r.extension_duration ?? null,
-          }
-          // Mark changed only if we actually modified the row
-          if (
-            next.requestid !== r.requestid ||
-            next.package !== r.package ||
-            next.contact_info !== r.contact_info ||
-            next.contact_person !== r.contact_person ||
-            next.contact_person_number !== r.contact_person_number ||
-            next.strongest_signal !== r.strongest_signal ||
-            next.extension_duration !== r.extension_duration
-          ) {
-            changed = true
-            return next
-          }
-        }
-        return r
+      // Sort by date desc then time desc
+      mapped.sort((a, b) => {
+        const ta = Date.parse(`${a.date} ${to24h(a.startTime)}`) || 0
+        const tb = Date.parse(`${b.date} ${to24h(b.startTime)}`) || 0
+        return tb - ta
       })
 
-      if (changed) {
-        setRows(patched)
-        try {
-          localStorage.setItem(DASHBOARD_KEY, JSON.stringify(patched))
-        } catch {}
-      }
-    } catch {
-      // silent
-    }
-  }
-
-  const loadRows = () => {
-    try {
-      const raw =
-        (typeof window !== 'undefined' &&
-          localStorage.getItem(DASHBOARD_KEY)) ||
-        '[]'
-      const arr = Array.isArray(JSON.parse(raw))
-        ? (JSON.parse(raw) as Row[])
-        : []
-      const normalized = arr.map((r) => ({
-        ...r,
-        status: (r.status ?? 'Pending') as
-          | 'Approved'
-          | 'Declined'
-          | 'Pending'
-          | 'Cancelled',
-      }))
-      setRows(normalized)
+      setRows(mapped)
       setPage(1)
-      // Try to backfill missing ids
-      hydrateRequestIds(normalized)
     } catch {
       setRows([])
       setPage(1)
     }
   }
   useEffect(() => {
-    loadRows()
-    const onStorage = (e: StorageEvent) => {
-      if (e.key === DASHBOARD_KEY) loadRows()
-    }
-    window.addEventListener('storage', onStorage)
-    return () => window.removeEventListener('storage', onStorage)
+    void loadRows()
   }, [])
 
   // Compute filtered rows based on selected status
@@ -409,9 +342,6 @@ export default function DashboardPage() {
           : r
       )
       setRows(updated)
-      try {
-        localStorage.setItem(DASHBOARD_KEY, JSON.stringify(updated))
-      } catch {}
       toast.success('Booking cancelled')
     } catch (e: any) {
       toast.error(e?.message || 'Failed to cancel booking')

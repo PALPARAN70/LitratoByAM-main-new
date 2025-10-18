@@ -26,6 +26,9 @@ export interface BookingRequest {
   event_name?: string | null
   strongest_signal?: string | null
   contact_info: string | null
+  contact_person?: string | null
+  contact_person_number?: string | null
+  grid?: string | null
   notes: string | null
   status: BookingStatus
   last_updated?: string
@@ -39,9 +42,18 @@ export interface BookingRequest {
 
 export type UpdateBookingFields = Partial<{
   packageid: number
-  eventaddress: string
-  contact_info: string
-  notes: string
+  event_date: string
+  event_time: string
+  event_end_time?: string | null
+  extension_duration?: number | null
+  event_address: string
+  grid?: string | null
+  event_name?: string | null
+  strongest_signal?: string | null
+  contact_info?: string | null
+  contact_person?: string | null
+  contact_person_number?: string | null
+  notes?: string | null
 }>
 
 // Add type-only import for the UI form shape
@@ -88,18 +100,38 @@ export function buildUpdatePayload(
   form: BookingForm,
   selectedPackageId: number | null
 ): UpdateBookingFields {
-  // Keep contact_info format consistent with creation: "Primary: <num> | Contact Person: <value>"
-  const ciParts: string[] = []
-  if (form.contactNumber) ciParts.push(`Primary: ${form.contactNumber}`)
-  if (form.contactPersonAndNumber)
-    ciParts.push(`Contact Person: ${form.contactPersonAndNumber}`)
-  const contact_info = ciParts.length ? ciParts.join(' | ') : undefined
-  const notes = [form.eventName].filter(Boolean).join(' | ') || undefined
+  const toTimeWithSeconds = (t: string) => (t.length === 5 ? `${t}:00` : t)
+  const fmtDate = (d: Date) => {
+    const dt = new Date(d)
+    const y = dt.getFullYear()
+    const m = String(dt.getMonth() + 1).padStart(2, '0')
+    const day = String(dt.getDate()).padStart(2, '0')
+    return `${y}-${m}-${day}`
+  }
+
+  // Keep contact_info consistent with creation
+  const contact_info = form.contactNumber ? `${form.contactNumber}` : null
+
   return {
     packageid: selectedPackageId ?? undefined,
-    eventaddress: form.eventLocation || undefined,
+    event_date: fmtDate(form.eventDate),
+    event_time: toTimeWithSeconds(form.eventTime),
+    event_end_time: toTimeWithSeconds(form.eventEndTime),
+    extension_duration:
+      typeof form.extensionHours === 'number'
+        ? form.extensionHours
+        : Number(form.extensionHours) || 0,
+    event_address: form.eventLocation,
+    grid:
+      Array.isArray(form.selectedGrids) && form.selectedGrids.length
+        ? form.selectedGrids.join(',')
+        : null,
+    event_name: form.eventName || null,
+    strongest_signal: form.signal || null,
     contact_info,
-    notes,
+    contact_person: form.contactPersonName || null,
+    contact_person_number: form.contactPersonNumber || null,
+    notes: null,
   }
 }
 
@@ -139,6 +171,8 @@ export function computePrefillPatch(params: {
 
   let contactNumberFromDb: string | undefined
   let contactPersonAndNumberFromDb: string | undefined
+  let contactPersonNameFromDb: string | undefined
+  let contactPersonNumberFromDb: string | undefined
 
   if (ciParts.length) {
     const first = ciParts[0]
@@ -159,7 +193,26 @@ export function computePrefillPatch(params: {
       contactPersonAndNumberFromDb = tail
         .replace(/^Contact\s*Person\s*:\s*/i, '')
         .trim()
+      // Attempt to split name and number if present in legacy combined value (e.g., "Name | +63917...")
+      const parts = contactPersonAndNumberFromDb.split('|').map((s) => s.trim())
+      if (parts.length >= 2) {
+        contactPersonNameFromDb = parts[0]
+        const mNum2 = parts[1].match(/\+?\d[\d\s\-()]*/)
+        contactPersonNumberFromDb = mNum2
+          ? mNum2[0].replace(/[\s\-()]/g, '')
+          : parts[1]
+      }
     }
+  }
+
+  // Prefer explicit contact person fields from DB if provided
+  if (!contactPersonNameFromDb && (booking as any).contact_person) {
+    contactPersonNameFromDb = String((booking as any).contact_person)
+  }
+  if (!contactPersonNumberFromDb && (booking as any).contact_person_number) {
+    const raw = String((booking as any).contact_person_number)
+    const m = raw.match(/\+?\d[\d\s\-()]*/)
+    contactPersonNumberFromDb = m ? m[0].replace(/[\s\-()]/g, '') : raw
   }
 
   // Compose full name from DB if available
@@ -178,6 +231,20 @@ export function computePrefillPatch(params: {
   const addressStr = pick<string>('eventaddress', 'event_address')
   const eventNameStr = pick<string>('event_name', 'eventname')
   const signalStr = pick<string>('strongest_signal', 'signal')
+  const gridStr = pick<string>('grid')
+
+  // Parse grid string into number array (e.g., "1,2")
+  const parsedGrids = Array.isArray(gridStr)
+    ? (gridStr as unknown as number[])
+    : typeof gridStr === 'string' && gridStr.trim().length
+    ? gridStr
+        .split(/[_,\s]*[,\s]+[_\s]*/)
+        .map((s) => s.trim())
+        .map((s) => Number(s))
+        .filter((n) => Number.isFinite(n))
+        .map((n) => Math.max(0, Math.min(7, n))) // clamp within allowed range
+        .slice(0, 2)
+    : undefined
 
   const patch: Partial<BookingForm> = {
     // Explicitly requested fields:
@@ -187,6 +254,10 @@ export function computePrefillPatch(params: {
     contactNumber: contactNumberFromDb || prevForm.contactNumber,
     contactPersonAndNumber:
       contactPersonAndNumberFromDb || prevForm.contactPersonAndNumber,
+    // New split fields when available
+    contactPersonName: contactPersonNameFromDb || prevForm.contactPersonName,
+    contactPersonNumber:
+      contactPersonNumberFromDb || prevForm.contactPersonNumber,
     eventName: eventNameStr || prevForm.eventName,
     eventLocation: addressStr || prevForm.eventLocation,
     signal: signalStr || prevForm.signal,
@@ -194,6 +265,8 @@ export function computePrefillPatch(params: {
     package: (resolvedName || prevForm.package) as BookingForm['package'],
     eventDate: eventDateStr ? new Date(eventDateStr) : prevForm.eventDate,
     eventTime: toHHmm(eventTimeStr) || prevForm.eventTime,
+    // Prefill selected grids from DB
+    selectedGrids: parsedGrids ?? prevForm.selectedGrids,
   }
 
   return { patch, selectedPackageId: booking.packageid }

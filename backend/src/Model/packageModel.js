@@ -8,6 +8,7 @@ async function initPackagesTable() {
       package_name VARCHAR(100) NOT NULL,
       description TEXT,
       price NUMERIC(10,2) DEFAULT 0.00,
+      duration_hours INTEGER,
       status BOOLEAN DEFAULT TRUE,
       display BOOLEAN DEFAULT TRUE,
       image_url TEXT,
@@ -15,22 +16,37 @@ async function initPackagesTable() {
       last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `)
+  // Migration: add missing column if table already exists
+  await pool
+    .query(
+      'ALTER TABLE packages ADD COLUMN IF NOT EXISTS duration_hours INTEGER'
+    )
+    .catch(() => {})
 }
 // Create package
 async function createPackage(
   package_name,
   description,
   price,
+  duration_hours = null,
   status = true,
   display = true,
   image_url = null
 ) {
   const query = `
-    INSERT INTO packages (package_name, description, price, status, display, image_url)
-    VALUES ($1, $2, $3, $4, $5, $6)
+    INSERT INTO packages (package_name, description, price, duration_hours, status, display, image_url)
+    VALUES ($1, $2, $3, $4, $5, $6, $7)
     RETURNING *
   `
-  const values = [package_name, description, price, status, display, image_url]
+  const values = [
+    package_name,
+    description,
+    price,
+    duration_hours,
+    status,
+    display,
+    image_url,
+  ]
   const { rows } = await pool.query(query, values)
   return rows[0]
 }
@@ -67,6 +83,7 @@ async function updatePackage(id, updates) {
     package_name: true,
     description: true,
     price: true,
+    duration_hours: true,
     status: true,
     display: true,
     image_url: true,

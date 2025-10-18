@@ -54,7 +54,13 @@ export async function adminCreateAndConfirm(
 }
 
 // Helpers to build payload from BookingForm
-const fmtDate = (d: Date) => new Date(d).toISOString().substring(0, 10)
+const fmtDate = (d: Date) => {
+  const dd = new Date(d)
+  const y = dd.getFullYear()
+  const m = String(dd.getMonth() + 1).padStart(2, '0')
+  const day = String(dd.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
 const toTimeWithSeconds = (t: string) => (t.length === 5 ? `${t}:00` : t)
 
 export type PackageIdResolver = (name: string) => number | undefined

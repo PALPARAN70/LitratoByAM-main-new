@@ -1,5 +1,5 @@
 'use client'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   startOfMonth,
   endOfMonth,
@@ -16,14 +16,28 @@ import {
 type CalendarProps = {
   markedDate?: Date | null
   initialMonth?: Date | null
+  value?: Date | null
+  onDateChangeAction?: (date: Date) => void
 }
 
 export default function Calendar({
   markedDate = null,
   initialMonth = null,
+  value = null,
+  onDateChangeAction,
 }: CalendarProps) {
-  const [currentMonth, setCurrentMonth] = useState(initialMonth ?? new Date())
-  const [selectedDate, setSelectedDate] = useState(initialMonth ?? new Date())
+  const initial = value ?? initialMonth ?? new Date()
+  const [currentMonth, setCurrentMonth] = useState(initial)
+  const [selectedDate, setSelectedDate] = useState(initial)
+
+  // Keep internal state in sync if parent controls the value
+  useEffect(() => {
+    if (value) {
+      setSelectedDate(value)
+      // If month changed significantly, center currentMonth on the selected value
+      setCurrentMonth(value)
+    }
+  }, [value])
 
   const renderHeader = () => {
     return (
@@ -121,6 +135,7 @@ export default function Calendar({
 
   const onDateClick = (day: Date) => {
     setSelectedDate(day)
+    onDateChangeAction?.(day)
   }
 
   const nextMonth = () => {

@@ -2,6 +2,7 @@
 // Contains endpoints related to user administration: dashboard, listing, blocking, role updates.
 
 const userModel = require('../../Model/userModel')
+const bcrypt = require('bcrypt')
 
 exports.getDashboard = (req, res) => {
   res.json({
@@ -14,6 +15,96 @@ exports.manageUsers = (_req, res) => {
   res.json({
     toast: { type: 'success', message: 'Manage Users - Admin Only' },
   })
+}
+
+// Admin-only: Create a new user with role restricted to customer or employee
+// Assumptions:
+//  - Admin-created accounts are auto-verified (no email verification flow)
+//  - Allowed roles: 'customer' | 'employee' (admin creation of 'admin' is not allowed here)
+exports.createUser = async (req, res) => {
+  try {
+    const {
+      username,
+      password,
+      firstname,
+      lastname,
+      birthdate,
+      sex,
+      contact,
+      region,
+      province,
+      city,
+      barangay,
+      postal_code,
+      role,
+    } = req.body || {}
+
+    if (!username || !password) {
+      return res
+        .status(400)
+        .json({
+          toast: {
+            type: 'error',
+            message: 'Username and password are required',
+          },
+        })
+    }
+
+    const existing = await userModel.findUserByUsername(username)
+    if (existing) {
+      return res
+        .status(409)
+        .json({ toast: { type: 'error', message: 'Username already exists' } })
+    }
+
+    // Only allow customer or employee from admin UI
+    const allowedRoles = ['customer', 'employee']
+    const newRole = allowedRoles.includes(role) ? role : 'customer'
+
+    const hashed = await bcrypt.hash(password, 10)
+    const created = await userModel.createUser(
+      username,
+      hashed,
+      newRole,
+      firstname,
+      lastname,
+      birthdate,
+      sex,
+      contact,
+      region,
+      province,
+      city,
+      barangay,
+      postal_code
+    )
+
+    // Auto-verify admin-created users so they can log in immediately
+    try {
+      await userModel.verifyUser(created.id)
+    } catch (e) {
+      // Non-fatal: if verification update fails, still return created user
+      console.warn('createUser: verifyUser failed:', e?.message)
+    }
+
+    return res.status(201).json({
+      toast: { type: 'success', message: 'User created successfully' },
+      user: {
+        id: String(created.id),
+        firstname: created.firstname || '',
+        lastname: created.lastname || '',
+        email: created.username,
+        contact: created.contact || '',
+        role: newRole,
+        isactive: true,
+        is_verified: true,
+      },
+    })
+  } catch (e) {
+    console.error('Admin createUser error:', e)
+    return res
+      .status(500)
+      .json({ toast: { type: 'error', message: 'Internal server error' } })
+  }
 }
 
 // View List of Users (optionally filter by role) - only verified users returned
