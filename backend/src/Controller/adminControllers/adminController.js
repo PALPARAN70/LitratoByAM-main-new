@@ -14,6 +14,7 @@ module.exports = {
   // User Management
   getDashboard: userCtrl.getDashboard,
   manageUsers: userCtrl.manageUsers,
+  createUser: userCtrl.createUser,
   listUsers: userCtrl.listUsers,
   blockUser: userCtrl.blockUser,
   unblockUser: userCtrl.unblockUser,

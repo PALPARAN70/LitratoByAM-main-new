@@ -44,6 +44,14 @@ router.get(
   adminController.listUsers
 )
 
+// Admin-only: create user (role limited to customer or employee)
+router.post(
+  '/user',
+  authMiddleware,
+  roleMiddleware('admin'),
+  adminController.createUser
+)
+
 // blocks the user
 router.patch(
   '/user/:id/block',

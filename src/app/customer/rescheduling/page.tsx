@@ -199,7 +199,11 @@ export default function ReschedulingPage() {
   }
   const fmtDate = (d: Date) => {
     try {
-      return new Date(d).toISOString().substring(0, 10)
+      const dd = new Date(d)
+      const y = dd.getFullYear()
+      const m = String(dd.getMonth() + 1).padStart(2, '0')
+      const day = String(dd.getDate()).padStart(2, '0')
+      return `${y}-${m}-${day}`
     } catch {
       return ''
     }
@@ -518,7 +522,10 @@ export default function ReschedulingPage() {
             </p>
             <div className="flex flex-row justify-center gap-24 ">
               <div>
-                <Calendar />
+                <Calendar
+                  value={form.eventDate}
+                  onDateChangeAction={(d) => setField('eventDate', d as any)}
+                />
                 {errors.eventDate && (
                   <p className="text-red-600 text-sm mt-1">
                     {errors.eventDate}

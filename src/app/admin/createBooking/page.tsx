@@ -41,25 +41,26 @@ export default function BookingPage() {
     lastname?: string
   } | null>(null)
 
-  // Controlled booking form state + errors
+  // Controlled booking form state + errors (aligned with customer page)
   const initialForm: BookingForm = {
     email: '',
     completeName: '',
     contactNumber: '',
+    // Split contact person fields (UI uses these); keep legacy combined for fallback/compat
+    contactPersonName: '',
+    contactPersonNumber: '',
     contactPersonAndNumber: '',
     eventName: '',
     eventLocation: '',
     extensionHours: 0,
-    // Leave booth placement unselected by default
-    boothPlacement: '' as unknown as BookingForm['boothPlacement'],
+    boothPlacement: 'Indoor',
     signal: '',
-    // Leave package unselected by default
-    package: '' as unknown as BookingForm['package'],
+    // Will be overwritten by first visible package if available
+    package: 'The Hanz' as BookingForm['package'],
     selectedGrids: [],
     eventDate: new Date(),
-    // Start with empty times; Timepicker renders safe defaults visually
-    eventTime: '',
-    eventEndTime: '',
+    eventTime: '12:00',
+    eventEndTime: '14:00',
   }
   const [form, setForm] = useState<BookingForm>(initialForm)
   const [errors, setErrors] = useState<
@@ -72,6 +73,7 @@ export default function BookingPage() {
     null
   )
   const [prefillPkgName, setPrefillPkgName] = useState<string | null>(null)
+  const [timepickerReady, setTimepickerReady] = useState(false)
 
   // BookingForm['package'] is a union; guard before setting from DB names
   type PkgName = BookingForm['package']
@@ -103,6 +105,18 @@ export default function BookingPage() {
           contactNumber: data.contactNumber ?? prev.contactNumber,
           contactPersonAndNumber:
             data.contactPersonAndNumber ?? prev.contactPersonAndNumber,
+          // If combined field comes as "Name | Number", attempt to split to new fields
+          contactPersonName:
+            typeof data.contactPersonAndNumber === 'string' &&
+            data.contactPersonAndNumber.includes('|')
+              ? data.contactPersonAndNumber.split('|')[0].trim()
+              : prev.contactPersonName,
+          contactPersonNumber:
+            typeof data.contactPersonAndNumber === 'string' &&
+            data.contactPersonAndNumber.includes('|')
+              ? data.contactPersonAndNumber.split('|')[1]?.trim() ||
+                prev.contactPersonNumber
+              : prev.contactPersonNumber,
           eventName: data.eventName ?? prev.eventName,
           eventLocation: data.eventLocation ?? prev.eventLocation,
           extensionHours:
@@ -170,19 +184,26 @@ export default function BookingPage() {
     ;(async () => {
       try {
         const list = await loadPackages()
-        // Ensure only display=true packages are shown
-        setPackages(Array.isArray(list) ? list.filter((p) => p.display) : [])
+        const visible = Array.isArray(list) ? list.filter((p) => p.display) : []
+        setPackages(visible)
         if (!selectedPackageId) {
           // If we came from Edit, try to resolve package by name
-          const chosen = list.find((p) => p.package_name === prefillPkgName)
+          const chosen = visible.find((p) => p.package_name === prefillPkgName)
           if (chosen) {
             setSelectedPackageId(chosen.id)
             setForm((p) => ({
               ...p,
               package: chosen.package_name as BookingForm['package'],
             }))
+          } else if (visible.length) {
+            // Default to first visible package
+            const first = visible[0]
+            setSelectedPackageId(first.id)
+            setForm((p) => ({
+              ...p,
+              package: first.package_name as BookingForm['package'],
+            }))
           }
-          // Otherwise, leave package unselected by default
         }
       } catch (e) {
         // Optional: show a toast, but avoid spamming admin
@@ -191,6 +212,11 @@ export default function BookingPage() {
     })()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedPackageId, prefillPkgName])
+
+  // Timepicker readiness after mount (to avoid setState in render warnings)
+  useEffect(() => {
+    setTimepickerReady(true)
+  }, [])
 
   // Helpers
   const setField = <K extends keyof BookingForm>(
@@ -202,6 +228,8 @@ export default function BookingPage() {
       [
         'email',
         'contactNumber',
+        'contactPersonName',
+        'contactPersonNumber',
         'eventTime',
         'eventEndTime',
         'extensionHours',
@@ -238,7 +266,13 @@ export default function BookingPage() {
           null
         if (!pkgId) throw new Error('Please select a package')
 
-        const fmtDate = (d: Date) => new Date(d).toISOString().substring(0, 10)
+        const fmtDate = (d: Date) => {
+          const dd = new Date(d)
+          const y = dd.getFullYear()
+          const m = String(dd.getMonth() + 1).padStart(2, '0')
+          const day = String(dd.getDate()).padStart(2, '0')
+          return `${y}-${m}-${day}`
+        }
         const toTimeWithSeconds = (t: string) =>
           t.length === 5 ? `${t}:00` : t
 
@@ -258,13 +292,17 @@ export default function BookingPage() {
               ? form.selectedGrids.join(',')
               : null,
           contact_info: form.contactNumber || null,
-          // Optionally parse contactPersonAndNumber formatted as "Name | Number"
-          contact_person: form.contactPersonAndNumber?.includes('|')
-            ? form.contactPersonAndNumber.split('|')[0].trim()
-            : null,
-          contact_person_number: form.contactPersonAndNumber?.includes('|')
-            ? form.contactPersonAndNumber.split('|')[1]?.trim() || null
-            : null,
+          // Prefer split fields; fallback to parsing legacy combined
+          contact_person:
+            form.contactPersonName?.trim() ||
+            (form.contactPersonAndNumber?.includes('|')
+              ? form.contactPersonAndNumber.split('|')[0].trim()
+              : null),
+          contact_person_number:
+            form.contactPersonNumber?.trim() ||
+            (form.contactPersonAndNumber?.includes('|')
+              ? form.contactPersonAndNumber.split('|')[1]?.trim() || null
+              : null),
           notes: null,
           event_name: form.eventName || null,
           strongest_signal: form.signal || null,
@@ -374,25 +412,47 @@ export default function BookingPage() {
             )}
           </div>
 
-          {/* Contact Person & Number */}
-          <div>
-            <label className="block text-lg mb-1">
-              Contact Person & Number:
-            </label>
-            <input
-              type="text"
-              placeholder="Enter here:"
-              className="w-full bg-gray-200 rounded-md px-3 py-2 text-sm focus:outline-none"
-              value={form.contactPersonAndNumber}
-              onChange={(e) =>
-                setField('contactPersonAndNumber', e.target.value)
-              }
-            />
-            {errors.contactPersonAndNumber && (
-              <p className="text-red-600 text-sm mt-1">
-                {errors.contactPersonAndNumber}
-              </p>
-            )}
+          {/* Contact Person (split fields) */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-lg mb-1">Contact Person Name:</label>
+              <input
+                type="text"
+                placeholder="Enter here:"
+                className="w-full bg-gray-200 rounded-md px-3 py-2 text-sm focus:outline-none"
+                value={form.contactPersonName || ''}
+                onChange={(e) =>
+                  setField('contactPersonName', e.target.value as any)
+                }
+              />
+              {errors.contactPersonName && (
+                <p className="text-red-600 text-sm mt-1">
+                  {errors.contactPersonName}
+                </p>
+              )}
+            </div>
+            <div>
+              <label className="block text-lg mb-1">
+                Contact Person Number:
+              </label>
+              <input
+                type="tel"
+                placeholder="e.g. +639171234567"
+                className="w-full bg-gray-200 rounded-md px-3 py-2 text-sm focus:outline-none"
+                value={form.contactPersonNumber || ''}
+                onChange={(e) =>
+                  setField('contactPersonNumber', e.target.value as any)
+                }
+                onBlur={(e) =>
+                  setField('contactPersonNumber', e.target.value as any)
+                }
+              />
+              {errors.contactPersonNumber && (
+                <p className="text-red-600 text-sm mt-1">
+                  {errors.contactPersonNumber}
+                </p>
+              )}
+            </div>
           </div>
 
           {/* Event name */}
@@ -434,19 +494,17 @@ export default function BookingPage() {
             <label className="block text-lg mb-1">
               Extension? (Our Minimum is 2hrs. Additional hour is Php2000):
             </label>
-            <input
-              type="number"
-              min={0}
-              max={12}
-              step={1}
-              placeholder="0"
+            <select
               className="w-full bg-gray-200 rounded-md px-3 py-2 text-sm focus:outline-none"
-              value={form.extensionHours}
+              value={String(form.extensionHours)}
               onChange={(e) =>
                 setField('extensionHours', Number(e.target.value))
               }
-              onBlur={(e) => setField('extensionHours', Number(e.target.value))}
-            />
+            >
+              <option value="0">0</option>
+              <option value="1">1</option>
+              <option value="2">2</option>
+            </select>
             {errors.extensionHours && (
               <p className="text-red-600 text-sm mt-1">
                 {errors.extensionHours}
@@ -558,7 +616,10 @@ export default function BookingPage() {
             </p>
             <div className="flex flex-row justify-center gap-24 ">
               <div>
-                <Calendar />
+                <Calendar
+                  value={form.eventDate}
+                  onDateChangeAction={(d) => setField('eventDate', d as any)}
+                />
                 {errors.eventDate && (
                   <p className="text-red-600 text-sm mt-1">
                     {errors.eventDate}
@@ -566,14 +627,17 @@ export default function BookingPage() {
                 )}
               </div>
               <div className="mt-8 ">
-                <Timepicker
-                  start={form.eventTime}
-                  end={form.eventEndTime}
-                  onChange={({ start, end }) => {
-                    setField('eventTime', start)
-                    setField('eventEndTime', end)
-                  }}
-                />
+                {timepickerReady && (
+                  <Timepicker
+                    key={`${form.eventTime}-${form.eventEndTime}`}
+                    start={form.eventTime}
+                    end={form.eventEndTime}
+                    onChange={({ start, end }) => {
+                      setField('eventTime', start)
+                      setField('eventEndTime', end)
+                    }}
+                  />
+                )}
                 {errors.eventTime && (
                   <p className="text-red-600 text-sm mt-1">
                     {errors.eventTime}

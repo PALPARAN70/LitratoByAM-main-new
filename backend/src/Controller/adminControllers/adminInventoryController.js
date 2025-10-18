@@ -196,12 +196,20 @@ exports.createMaterialType = async (req, res) => {
 // -------- Packages -------- //
 exports.createPackage = async (req, res) => {
   try {
-    const { package_name, description, price, status, display, image_url } =
-      req.body
+    const {
+      package_name,
+      description,
+      price,
+      duration_hours,
+      status,
+      display,
+      image_url,
+    } = req.body
     const newPackage = await packageModel.createPackage(
       package_name,
       description,
       price,
+      duration_hours,
       status,
       display,
       image_url
@@ -215,6 +223,7 @@ exports.createPackage = async (req, res) => {
           changes: {
             package_name: [null, newPackage.package_name],
             price: [null, String(newPackage.price)],
+            duration_hours: [null, String(newPackage.duration_hours ?? '')],
             status: [null, newPackage.status ? 'active' : 'inactive'],
             display: [null, newPackage.display ? 'visible' : 'hidden'],
           },
@@ -301,6 +310,10 @@ exports.updatePackage = async (req, res) => {
       const n = Number(body.price)
       if (Number.isFinite(n)) updates.price = n
     }
+    if (Object.prototype.hasOwnProperty.call(body, 'duration_hours')) {
+      const n = body.duration_hours == null ? null : Number(body.duration_hours)
+      if (n === null || Number.isFinite(n)) updates.duration_hours = n
+    }
     if (Object.prototype.hasOwnProperty.call(body, 'image_url')) {
       updates.image_url = body.image_url == null ? '' : String(body.image_url)
     }
@@ -320,6 +333,7 @@ exports.updatePackage = async (req, res) => {
       'package_name',
       'description',
       'price',
+      'duration_hours',
       'image_url',
       'display',
     ]
@@ -402,14 +416,12 @@ exports.createPackageInventoryItem = async (req, res) => {
     const { package_id, inventory_id, quantity } = req.body
 
     if (!package_id || !inventory_id || quantity == null) {
-      return res
-        .status(400)
-        .json({
-          toast: {
-            type: 'error',
-            message: 'package_id, inventory_id, quantity required',
-          },
-        })
+      return res.status(400).json({
+        toast: {
+          type: 'error',
+          message: 'package_id, inventory_id, quantity required',
+        },
+      })
     }
     if (quantity <= 0) {
       return res
@@ -435,12 +447,10 @@ exports.createPackageInventoryItem = async (req, res) => {
       { package_id, inventory_id, quantity }
     )
 
-    res
-      .status(201)
-      .json({
-        toast: { type: 'success', message: 'Package inventory item created' },
-        packageInventoryItem: junction,
-      })
+    res.status(201).json({
+      toast: { type: 'success', message: 'Package inventory item created' },
+      packageInventoryItem: junction,
+    })
   } catch (error) {
     console.error('Create Package Inventory Item Error:', error)
     res
@@ -491,11 +501,9 @@ exports.updatePackageInventoryItem = async (req, res) => {
       updates
     )
     if (!updated) {
-      return res
-        .status(404)
-        .json({
-          toast: { type: 'error', message: 'Package inventory item not found' },
-        })
+      return res.status(404).json({
+        toast: { type: 'error', message: 'Package inventory item not found' },
+      })
     }
 
     res.json({
@@ -521,11 +529,9 @@ exports.deletePackageInventoryItem = async (req, res) => {
       { display: false }
     )
     if (!updated) {
-      return res
-        .status(404)
-        .json({
-          toast: { type: 'error', message: 'Package inventory item not found' },
-        })
+      return res.status(404).json({
+        toast: { type: 'error', message: 'Package inventory item not found' },
+      })
     }
     res.json({
       toast: {
@@ -594,14 +600,12 @@ exports.listInventoryStatusLogsByEntity = async (req, res) => {
   try {
     const { entity_type, entity_id } = req.query
     if (!entity_type || !entity_id) {
-      return res
-        .status(400)
-        .json({
-          toast: {
-            type: 'error',
-            message: 'entity_type and entity_id required',
-          },
-        })
+      return res.status(400).json({
+        toast: {
+          type: 'error',
+          message: 'entity_type and entity_id required',
+        },
+      })
     }
     const rows = await inventoryStatusLogModel.findLogsByEntity(
       String(entity_type),
@@ -632,14 +636,12 @@ exports.updateInventoryStatusLog = async (req, res) => {
         .json({ toast: { type: 'error', message: 'log_id is required' } })
     }
     if (!entity_type || entity_id == null || !status) {
-      return res
-        .status(400)
-        .json({
-          toast: {
-            type: 'error',
-            message: 'entity_type, entity_id, and status are required',
-          },
-        })
+      return res.status(400).json({
+        toast: {
+          type: 'error',
+          message: 'entity_type, entity_id, and status are required',
+        },
+      })
     }
     const updater = req.user?.id ?? null
     await inventoryStatusLogModel.updateLog(
@@ -759,14 +761,12 @@ exports.replacePackageItems = async (req, res) => {
     for (const item of items) {
       const { inventory_id, quantity } = item
       if (!inventory_id || quantity == null) {
-        return res
-          .status(400)
-          .json({
-            toast: {
-              type: 'error',
-              message: 'inventory_id and quantity are required',
-            },
-          })
+        return res.status(400).json({
+          toast: {
+            type: 'error',
+            message: 'inventory_id and quantity are required',
+          },
+        })
       }
       if (quantity <= 0) {
         return res
@@ -776,11 +776,9 @@ exports.replacePackageItems = async (req, res) => {
 
       const inv = await inventoryModel.findInventoryById(inventory_id)
       if (!inv) {
-        return res
-          .status(404)
-          .json({
-            toast: { type: 'error', message: 'Inventory item not found' },
-          })
+        return res.status(404).json({
+          toast: { type: 'error', message: 'Inventory item not found' },
+        })
       }
 
       const junction =
