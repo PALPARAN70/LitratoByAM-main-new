@@ -3,6 +3,7 @@ const router = express.Router()
 const authController = require('../Controller/authController')
 const authMiddleware = require('../Middleware/authMiddleware')
 const { getAllPackages } = require('../Model/packageModel') // <-- add
+const { getAllGrids } = require('../Model/gridModel')
 
 router.post('/register', authController.register)
 router.post('/login', authController.login)
@@ -25,6 +26,17 @@ router.get('/packages', async (_req, res) => {
   } catch (e) {
     console.error('list packages error:', e)
     res.status(500).json({ message: 'Failed to load packages' })
+  }
+})
+
+// Public: list visible grids (created by admin)
+router.get('/grids', async (_req, res) => {
+  try {
+    const rows = await getAllGrids()
+    res.json(rows)
+  } catch (e) {
+    console.error('list grids error:', e)
+    res.status(500).json({ message: 'Failed to load grids' })
   }
 })
 

@@ -6,7 +6,9 @@ import Timepicker from '../../../../Litratocomponents/Timepicker'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
-import PhotoGrids from '../../../../Litratocomponents/PhotoGrids'
+import loadGridsPublic, {
+  type PublicGrid,
+} from '../../../../schemas/functions/BookingRequest/loadGridsPublic'
 import MotionDiv from '../../../../Litratocomponents/MotionDiv'
 import {
   bookingFormSchema,
@@ -69,6 +71,7 @@ export default function BookingPage() {
 
   // Packages (dynamic from DB)
   const [packages, setPackages] = useState<PackageDto[]>([])
+  const [grids, setGrids] = useState<PublicGrid[]>([])
   const [selectedPackageId, setSelectedPackageId] = useState<number | null>(
     null
   )
@@ -209,6 +212,13 @@ export default function BookingPage() {
         // Optional: show a toast, but avoid spamming admin
         // toast.error('Failed to load packages');
       }
+    })()
+    // Load available grids
+    ;(async () => {
+      try {
+        const g = await loadGridsPublic()
+        setGrids(g)
+      } catch {}
     })()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedPackageId, prefillPkgName])
@@ -591,19 +601,64 @@ export default function BookingPage() {
             )}
           </div>
 
-          {/* Grids */}
+          {/* Grids (dynamic) */}
           <div className="flex flex-col justify-center mt-8">
             <p className="font-semibold text-xl">
               Select the Type of Grids you want for your Photos (max of 2) :
             </p>
-            <div>
-              <PhotoGrids
-                value={form.selectedGrids}
-                onChange={(arr) => setField('selectedGrids', arr)}
-              />
+            <div className="mt-4 flex flex-wrap gap-4 justify-center">
+              {grids.length === 0 ? (
+                <span className="text-sm text-gray-500">
+                  No grids available yet.
+                </span>
+              ) : (
+                grids.map((g) => {
+                  const picked = form.selectedGrids.includes(g.grid_name)
+                  const atLimit = form.selectedGrids.length >= 2 && !picked
+                  const imgSrc = g.image_url || '/Images/litratobg.jpg'
+                  return (
+                    <button
+                      key={g.id}
+                      type="button"
+                      disabled={atLimit}
+                      aria-pressed={picked}
+                      className={`group w-[270px] overflow-hidden rounded-xl border shadow-sm transition focus:outline-none focus-visible:ring-2 focus-visible:ring-litratored ${
+                        picked ? 'ring-2 ring-litratored' : ''
+                      } ${
+                        atLimit
+                          ? 'opacity-60 cursor-not-allowed'
+                          : 'hover:shadow-md'
+                      }`}
+                      onClick={() => {
+                        const next = picked
+                          ? form.selectedGrids.filter((n) => n !== g.grid_name)
+                          : [...form.selectedGrids, g.grid_name]
+                        setField('selectedGrids', next)
+                      }}
+                    >
+                      <div className="relative w-full h-[200px] bg-gray-100">
+                        <Image
+                          src={imgSrc}
+                          alt={g.grid_name}
+                          fill
+                          className="object-cover"
+                        />
+                        {picked && (
+                          <div className="absolute inset-0 bg-black/20" />
+                        )}
+                      </div>
+                      <div className="p-2 text-center">
+                        <span className="text-sm font-medium text-litratoblack">
+                          {g.grid_name}
+                        </span>
+                      </div>
+                    </button>
+                  )
+                })
+              )}
             </div>
             {errors.selectedGrids && (
-              <p className="text-red-600 text-sm mt-1">
+              <p className="text-red-600 text-sm mt-1 text-center">
                 {errors.selectedGrids}
               </p>
             )}
