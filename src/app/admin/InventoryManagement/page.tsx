@@ -13,6 +13,20 @@ import {
   Eye, // ADDED
   EyeOff, // ADDED
 } from 'lucide-react'
+// Grid Admin helpers (extracted API logic)
+import createGridAdmin, {
+  uploadGridImage,
+  type GridRow as AdminGridRow,
+} from '../../../../schemas/functions/InventoryAdmin/createGrid'
+import {
+  loadActiveGrids,
+  loadArchivedGrids,
+} from '../../../../schemas/functions/InventoryAdmin/loadGridsAdmin'
+import updateGridAdmin from '../../../../schemas/functions/InventoryAdmin/updateGrid'
+import {
+  archiveGrid,
+  unarchiveGrid,
+} from '../../../../schemas/functions/InventoryAdmin/archivedGrid'
 import {
   Select,
   SelectContent,
@@ -52,7 +66,7 @@ import {
   PaginationEllipsis,
 } from '@/components/ui/pagination'
 // Shared types hoisted for stability
-type TabKey = 'equipment' | 'package' | 'logitems'
+type TabKey = 'equipment' | 'package' | 'grid' | 'logitems'
 type EquipmentTabKey = 'available' | 'unavailable'
 type EquipmentRow = {
   id: string
@@ -186,6 +200,10 @@ export default function InventoryManagementPage() {
     () => <CreatePackagePanel searchTerm={searchTerm} />,
     [searchTerm]
   )
+  const gridPanelEl = useMemo(
+    () => <GridPanel searchTerm={searchTerm} />,
+    [searchTerm]
+  )
   const itemLogsPanelEl = useMemo(
     () => <ItemLogsPanel searchTerm={searchTerm} />,
     [searchTerm]
@@ -209,6 +227,12 @@ export default function InventoryManagementPage() {
             onClick={() => setActive('package')}
           >
             Packages
+          </TabButton>
+          <TabButton
+            active={active === 'grid'}
+            onClick={() => setActive('grid')}
+          >
+            Grid
           </TabButton>
           <TabButton
             active={active === 'logitems'}
@@ -262,6 +286,7 @@ export default function InventoryManagementPage() {
         <section className="bg-white h-125 rounded-xl shadow p-4">
           {active === 'equipment' && equipmentPanelEl}
           {active === 'package' && packagePanelEl}
+          {active === 'grid' && gridPanelEl}
           {active === 'logitems' && itemLogsPanelEl}
           {/* NEW */}
         </section>
@@ -1216,6 +1241,348 @@ export default function InventoryManagementPage() {
     }
   }
 
+  // Grid panel with header and API helpers
+  function GridPanel({ searchTerm }: { searchTerm?: string }) {
+    const [view, setView] = useState<'active' | 'archived'>('active')
+    const [open, setOpen] = useState(false)
+    const [grids, setGrids] = useState<AdminGridRow[]>([])
+    const [archived, setArchived] = useState<AdminGridRow[]>([])
+    const [loading, setLoading] = useState(false)
+    const [form, setForm] = useState<{
+      grid_name: string
+      imageFile: File | null
+    }>({ grid_name: '', imageFile: null })
+    const [editOpen, setEditOpen] = useState(false)
+    const [editForm, setEditForm] = useState<{
+      id: number | null
+      grid_name: string
+      imageFile: File | null
+      image_url: string | null
+    }>({ id: null, grid_name: '', imageFile: null, image_url: null })
+
+    // Load lists
+    useEffect(() => {
+      let ignore = false
+      ;(async () => {
+        try {
+          setLoading(true)
+          if (view === 'active') {
+            const rows = await loadActiveGrids()
+            if (!ignore) setGrids(rows)
+          } else {
+            const rows = await loadArchivedGrids()
+            if (!ignore) setArchived(rows)
+          }
+        } catch (e) {
+          console.error('Load grids failed:', e)
+        } finally {
+          setLoading(false)
+        }
+      })()
+      return () => {
+        ignore = true
+      }
+    }, [view])
+
+    // Create grid
+    const handleCreateGrid = async () => {
+      const name = form.grid_name.trim()
+      if (!name) return
+      try {
+        const row = await createGridAdmin({
+          grid_name: name,
+          status: true,
+          display: true,
+          imageFile: form.imageFile ?? undefined,
+        })
+        setGrids((prev) => [row, ...prev])
+        setOpen(false)
+        setForm({ grid_name: '', imageFile: null })
+      } catch (e) {
+        console.error('Create grid failed:', e)
+      }
+    }
+
+    // Archive/unarchive
+    const toggleArchive = async (row: AdminGridRow) => {
+      const isArchived = row.display === false
+      try {
+        if (isArchived) {
+          await unarchiveGrid(Number(row.id))
+          // move to active
+          setArchived((arr) => arr.filter((g) => g.id !== row.id))
+          setGrids((arr) => [{ ...row, display: true }, ...arr])
+          if (view === 'archived') setView('active')
+        } else {
+          await archiveGrid(Number(row.id))
+          // move to archived
+          setGrids((arr) => arr.filter((g) => g.id !== row.id))
+          setArchived((arr) => [{ ...row, display: false }, ...arr])
+        }
+      } catch (e) {
+        console.error('Toggle archive grid failed:', e)
+      }
+    }
+
+    const list = view === 'active' ? grids : archived
+    const q = (searchTerm || '').trim().toLowerCase()
+    const filtered = useMemo(() => {
+      if (!q) return list
+      return list.filter((g) => (g.grid_name || '').toLowerCase().includes(q))
+    }, [list, q])
+
+    const openEditGrid = (row: AdminGridRow) => {
+      setEditForm({
+        id: Number(row.id),
+        grid_name: row.grid_name || '',
+        imageFile: null,
+        image_url: row.image_url ?? null,
+      })
+      setEditOpen(true)
+    }
+
+    const saveEditedGrid = async () => {
+      const id = editForm.id
+      if (!id) return
+      try {
+        const updated = await updateGridAdmin(id, {
+          grid_name: editForm.grid_name,
+          imageFile: editForm.imageFile ?? undefined,
+        })
+        // replace in both arrays to avoid desync
+        setGrids((arr) => arr.map((g) => (Number(g.id) === id ? updated : g)))
+        setArchived((arr) =>
+          arr.map((g) => (Number(g.id) === id ? updated : g))
+        )
+        setEditOpen(false)
+      } catch (e) {
+        console.error('Save edited grid failed:', e)
+      }
+    }
+
+    return (
+      <div className="flex flex-col h-full min-h-0">
+        <div className="flex justify-between border-b-2 border-black items-center">
+          <div className="flex items-center gap-4">
+            <h2 className="text-lg font-semibold">Grid</h2>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                className={`px-3 py-1 rounded-full border text-sm font-medium transition ${
+                  view === 'active'
+                    ? 'bg-litratoblack text-white border-litratoblack'
+                    : 'bg-white text-litratoblack border-gray-300 hover:bg-gray-100'
+                }`}
+                onClick={() => setView('active')}
+              >
+                Active
+              </button>
+              <button
+                type="button"
+                className={`px-3 py-1 rounded-full border text-sm font-medium transition ${
+                  view === 'archived'
+                    ? 'bg-litratoblack text-white border-litratoblack'
+                    : 'bg-white text-litratoblack border-gray-300 hover:bg-gray-100'
+                }`}
+                onClick={() => setView('archived')}
+              >
+                Archived
+              </button>
+            </div>
+          </div>
+          <Dialog open={open} onOpenChange={setOpen}>
+            <button
+              type="button"
+              className="px-4 py-2 rounded-full bg-litratoblack text-white font-medium hover:opacity-90"
+              onClick={() => setOpen(true)}
+            >
+              Add Grid
+            </button>
+            <DialogContent className="sm:max-w-lg">
+              <div className="space-y-3">
+                <div className="text-lg font-semibold">Add Grid</div>
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium">Name</label>
+                  <input
+                    className="w-full rounded border px-2 py-1 text-sm"
+                    value={form.grid_name}
+                    onChange={(e) =>
+                      setForm((p) => ({ ...p, grid_name: e.target.value }))
+                    }
+                    placeholder="Enter grid name"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium">Image</label>
+                  <br />
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) =>
+                      setForm((p) => ({
+                        ...p,
+                        imageFile: e.target.files?.[0] || null,
+                      }))
+                    }
+                  />
+                </div>
+                <div className="flex justify-end gap-2 pt-2">
+                  <button
+                    type="button"
+                    className="px-3 py-1 rounded border text-sm"
+                    onClick={() => setOpen(false)}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    className="px-3 py-1 rounded bg-litratoblack text-white text-sm"
+                    onClick={handleCreateGrid}
+                  >
+                    Create
+                  </button>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
+        </div>
+
+        <div className="flex-1 min-h-0 overflow-auto p-3">
+          {loading ? (
+            <div className="text-sm text-gray-500 text-center mt-8">
+              Loading grids…
+            </div>
+          ) : filtered.length ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {filtered.map((g) => (
+                <div
+                  key={g.id}
+                  className="relative border rounded-lg p-2 bg-gray-50"
+                >
+                  {/* Overlay icons top-right: update (archive/unarchive) then edit */}
+                  <div className="absolute top-2 right-2 flex gap-1 z-10">
+                    {/* Edit first */}
+                    <button
+                      type="button"
+                      className="inline-flex items-center justify-center h-7 w-7 rounded bg-white/90 border shadow-sm hover:bg-white"
+                      onClick={() => openEditGrid(g)}
+                      title="Edit grid"
+                      aria-label="Edit grid"
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </button>
+                    {/* Then archive/unarchive toggle */}
+                    <button
+                      type="button"
+                      className="inline-flex items-center justify-center h-7 w-7 rounded bg-white/90 border shadow-sm hover:bg-white"
+                      onClick={() => toggleArchive(g)}
+                      title={g.display === false ? 'Unarchive' : 'Archive'}
+                      aria-label={g.display === false ? 'Unarchive' : 'Archive'}
+                    >
+                      {g.display === false ? (
+                        <Eye className="h-4 w-4" />
+                      ) : (
+                        <EyeOff className="h-4 w-4" />
+                      )}
+                    </button>
+                  </div>
+
+                  {g.image_url ? (
+                    <img
+                      src={g.image_url}
+                      alt={g.grid_name}
+                      className="w-full h-36 object-cover rounded"
+                    />
+                  ) : null}
+                  <div className="mt-2">
+                    <div className="font-medium">{g.grid_name}</div>
+                    <div className="text-xs text-gray-500">
+                      {g.display === false
+                        ? 'Archived'
+                        : g.status
+                        ? 'Active'
+                        : 'Inactive'}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-sm text-gray-500 text-center mt-8">
+              No grids found.
+            </div>
+          )}
+        </div>
+
+        {/* Edit Grid Dialog */}
+        <Dialog
+          open={editOpen}
+          onOpenChange={(o) => {
+            if (!o) setEditOpen(false)
+          }}
+        >
+          <DialogContent className="sm:max-w-[640px] max-h-[70vh] overflow-hidden flex flex-col">
+            <DialogHeader>
+              <DialogTitle>Edit Grid</DialogTitle>
+              <DialogDescription>Update grid details.</DialogDescription>
+            </DialogHeader>
+            <div className="flex-1 min-h-0 overflow-y-auto p-2">
+              <div className="space-y-3">
+                <div className="space-y-1">
+                  <label className="block text-sm font-medium">Name</label>
+                  <Input
+                    className="h-9 rounded-md border px-3 text-sm outline-none"
+                    value={editForm.grid_name}
+                    onChange={(e) =>
+                      setEditForm((p) => ({ ...p, grid_name: e.target.value }))
+                    }
+                    placeholder="Enter grid name"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="block text-sm font-medium">Image</label>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) =>
+                      setEditForm((p) => ({
+                        ...p,
+                        imageFile: e.target.files?.[0] || null,
+                      }))
+                    }
+                  />
+                  {editForm.image_url ? (
+                    <div className="text-xs text-gray-500 truncate">
+                      Current image: {editForm.image_url}
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+            <DialogFooter className="mt-2">
+              <DialogClose asChild>
+                <Button
+                  type="button"
+                  className="px-4 py-2 rounded border"
+                  variant="outline"
+                >
+                  Cancel
+                </Button>
+              </DialogClose>
+              <Button
+                type="button"
+                className="px-4 py-2 rounded bg-litratoblack text-white"
+                onClick={saveEditedGrid}
+              >
+                Save
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
+    )
+  }
+
   function CreatePackagePanel({ searchTerm }: { searchTerm?: string }) {
     type PackageItem = {
       id: string
@@ -1999,36 +2366,6 @@ export default function InventoryManagementPage() {
                   className="grid grid-cols-1 sm:grid-cols-2 gap-3"
                   onSubmit={(e) => e.preventDefault()}
                 >
-                  {/* Image, Name, Price ... */}
-                  <div className="flex flex-col gap-1 sm:col-span-2">
-                    <label className="text-sm font-medium">Package Image</label>
-                    <Input
-                      type="file"
-                      accept="image/*"
-                      onChange={handleFileChange}
-                      ref={fileInputRef}
-                    />
-                    {pkgForm.imageUrl ? (
-                      <div className="mt-2 inline-flex items-center gap-2 rounded-full bg-gray-100 px-3 py-1 text-sm border">
-                        <span
-                          className="truncate max-w-[16rem]"
-                          title={pkgForm.imageName || 'Selected image'}
-                        >
-                          {pkgForm.imageName || 'Selected image'}
-                        </span>
-                        <button
-                          type="button"
-                          className="text-gray-600 hover:text-black"
-                          onClick={handleClearImage}
-                          aria-label="Remove selected image"
-                          title="Remove"
-                        >
-                          Remove
-                        </button>
-                      </div>
-                    ) : null}
-                  </div>
-
                   <div className="flex flex-col gap-1">
                     <label className="text-sm font-medium">Package Name</label>
                     <Input

@@ -42,8 +42,9 @@ export const bookingFormSchema = z
     signal: z.string().min(1, 'Signal is required'),
     // Accept any package name coming from the DB/API
     package: z.string().min(1, 'Package is required'),
+    // Dynamic grids selected by name (admin-defined). Keep 1-2 selections.
     selectedGrids: z
-      .array(z.number().int().min(0).max(7))
+      .array(z.string().min(1))
       .min(1, 'Pick at least 1 grid')
       .max(2, 'Pick at most 2 grids'),
     eventDate: z.coerce.date(),

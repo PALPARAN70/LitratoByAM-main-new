@@ -1,5 +1,6 @@
 const express = require('express')
 const adminController = require('../Controller/adminControllers/adminController')
+const adminGridController = require('../Controller/adminControllers/adminGridController')
 const adminBookingController = require('../Controller/adminControllers/adminBookingController')
 const adminConfirmedBookingController = require('../Controller/adminControllers/adminConfirmedBookingController')
 const authMiddleware = require('../Middleware/authMiddleware')
@@ -12,7 +13,9 @@ const router = express.Router()
 
 const ASSETS_DIR = path.resolve(__dirname, '..', '..', 'Assets')
 const PKG_DIR = path.join(ASSETS_DIR, 'Packages')
+const GRIDS_DIR = path.join(ASSETS_DIR, 'Grids')
 fs.mkdirSync(PKG_DIR, { recursive: true })
+fs.mkdirSync(GRIDS_DIR, { recursive: true })
 
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => cb(null, PKG_DIR),
@@ -23,19 +26,16 @@ const storage = multer.diskStorage({
 })
 const upload = multer({ storage })
 
-// router.get(
-//   '/dashboard',
-//   authMiddleware,
-//   roleMiddleware('admin'),
-//   adminController.getDashboard
-// )
-// router.post(
-//   '/manage-users',
-//   authMiddleware,
-//   roleMiddleware('admin'),
-//   adminController.manageUsers
-// )
-
+// separate storage for Grids images
+const storageGrids = multer.diskStorage({
+  destination: (_req, _file, cb) => cb(null, GRIDS_DIR),
+  filename: (_req, file, cb) => {
+    const safe = file.originalname.replace(/[^a-z0-9._-]/gi, '_').toLowerCase()
+    cb(null, `${Date.now()}_${safe}`)
+  },
+})
+const uploadGrids = multer({ storage: storageGrids })
+// -------- user management routes -------- //
 // List users by role (?role=customer|employee|admin)
 router.get(
   '/list',
@@ -206,6 +206,64 @@ router.post(
     )}/assets/Packages/${path.basename(req.file.path)}`
     res.json({ url })
   }
+)
+
+router.post(
+  '/grid-image',
+  authMiddleware,
+  roleMiddleware('admin'),
+  uploadGrids.single('image'),
+  (req, res) => {
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' })
+    console.log('Saved grid image:', req.file.path)
+    const url = `${req.protocol}://${req.get(
+      'host'
+    )}/assets/Grids/${path.basename(req.file.path)}`
+    res.json({ url })
+  }
+)
+
+// -------- grid management routes -------- //
+// create grid
+router.post(
+  '/grid',
+  authMiddleware,
+  roleMiddleware('admin'),
+  adminGridController.createGrid
+)
+// list active grids
+router.get(
+  '/grid',
+  authMiddleware,
+  roleMiddleware('admin'),
+  adminGridController.listGrids
+)
+// list archived grids
+router.get(
+  '/grid/archived',
+  authMiddleware,
+  roleMiddleware('admin'),
+  adminGridController.listArchivedGrids
+)
+// update grid (PATCH or PUT)
+router.patch(
+  '/grid/:grid_id',
+  authMiddleware,
+  roleMiddleware('admin'),
+  adminGridController.updateGrid
+)
+router.put(
+  '/grid/:grid_id',
+  authMiddleware,
+  roleMiddleware('admin'),
+  adminGridController.updateGrid
+)
+// soft delete
+router.delete(
+  '/grid/:grid_id',
+  authMiddleware,
+  roleMiddleware('admin'),
+  adminGridController.deleteGrid
 )
 
 // ----- inventory status log routes ----- //
