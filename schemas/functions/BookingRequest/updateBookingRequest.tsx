@@ -29,6 +29,8 @@ export interface BookingRequest {
   contact_person?: string | null
   contact_person_number?: string | null
   grid?: string | null
+  grid_ids?: number[] | null
+  grid_names?: string[] | null
   notes: string | null
   status: BookingStatus
   last_updated?: string
@@ -48,6 +50,7 @@ export type UpdateBookingFields = Partial<{
   extension_duration?: number | null
   event_address: string
   grid?: string | null
+  grid_ids?: number[]
   event_name?: string | null
   strongest_signal?: string | null
   contact_info?: string | null
@@ -112,6 +115,20 @@ export function buildUpdatePayload(
   // Keep contact_info consistent with creation
   const contact_info = form.contactNumber ? `${form.contactNumber}` : null
 
+  // Map selected grid names to IDs via a cached list if present
+  let gridIds: number[] | undefined
+  try {
+    const cached = localStorage.getItem('public_grids_cache')
+    if (cached) {
+      const list: Array<{ id: number; grid_name: string }> = JSON.parse(cached)
+      const picked = (form.selectedGrids || []) as string[]
+      gridIds = picked
+        .map((name) => list.find((g) => g.grid_name === name)?.id)
+        .filter((v): v is number => typeof v === 'number')
+        .slice(0, 2)
+    }
+  } catch {}
+
   return {
     packageid: selectedPackageId ?? undefined,
     event_date: fmtDate(form.eventDate),
@@ -126,6 +143,7 @@ export function buildUpdatePayload(
       Array.isArray(form.selectedGrids) && form.selectedGrids.length
         ? form.selectedGrids.join(',')
         : null,
+    grid_ids: gridIds && gridIds.length ? gridIds : undefined,
     event_name: form.eventName || null,
     strongest_signal: form.signal || null,
     contact_info,
@@ -231,18 +249,17 @@ export function computePrefillPatch(params: {
   const addressStr = pick<string>('eventaddress', 'event_address')
   const eventNameStr = pick<string>('event_name', 'eventname')
   const signalStr = pick<string>('strongest_signal', 'signal')
+  const gridNamesArr = (booking as any).grid_names as string[] | undefined
   const gridStr = pick<string>('grid')
 
-  // Parse grid string into number array (e.g., "1,2")
-  const parsedGrids = Array.isArray(gridStr)
-    ? (gridStr as unknown as number[])
+  // Prefer normalized names array from backend; fallback to splitting legacy snapshot
+  const selectedGridNames: string[] | undefined = Array.isArray(gridNamesArr)
+    ? gridNamesArr.slice(0, 2)
     : typeof gridStr === 'string' && gridStr.trim().length
     ? gridStr
-        .split(/[_,\s]*[,\s]+[_\s]*/)
+        .split(',')
         .map((s) => s.trim())
-        .map((s) => Number(s))
-        .filter((n) => Number.isFinite(n))
-        .map((n) => Math.max(0, Math.min(7, n))) // clamp within allowed range
+        .filter(Boolean)
         .slice(0, 2)
     : undefined
 
@@ -265,8 +282,8 @@ export function computePrefillPatch(params: {
     package: (resolvedName || prevForm.package) as BookingForm['package'],
     eventDate: eventDateStr ? new Date(eventDateStr) : prevForm.eventDate,
     eventTime: toHHmm(eventTimeStr) || prevForm.eventTime,
-    // Prefill selected grids from DB
-    selectedGrids: parsedGrids ?? prevForm.selectedGrids,
+    // Prefill selected grids by name (matches UI expectation)
+    selectedGrids: selectedGridNames ?? prevForm.selectedGrids,
   }
 
   return { patch, selectedPackageId: booking.packageid }

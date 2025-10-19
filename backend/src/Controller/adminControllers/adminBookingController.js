@@ -212,6 +212,134 @@ module.exports = {
         .json({ message: 'Server error listing booking requests' })
     }
   },
+  // Admin can update any booking request fields (subset)
+  async updateBookingRequest(req, res) {
+    try {
+      const requestid = parseInt(req.params.id, 10)
+      if (Number.isNaN(requestid)) {
+        return res.status(400).json({ message: 'Invalid request id' })
+      }
+
+      const existing = await getBookingRequestById(requestid)
+      if (!existing) {
+        return res.status(404).json({ message: 'Booking request not found' })
+      }
+
+      const {
+        packageid,
+        event_date,
+        event_time,
+        event_end_time,
+        extension_duration,
+        event_address,
+        grid,
+        grid_ids = null,
+        event_name,
+        strongest_signal,
+        contact_info,
+        contact_person,
+        contact_person_number,
+        notes,
+      } = req.body || {}
+
+      // Build SET clause allowing same fields as customer edit
+      const allowed = {
+        packageid: true,
+        event_date: true,
+        event_time: true,
+        event_end_time: true,
+        extension_duration: true,
+        event_address: true,
+        grid: true,
+        event_name: true,
+        strongest_signal: true,
+        contact_info: true,
+        contact_person: true,
+        contact_person_number: true,
+        notes: true,
+      }
+      const sets = []
+      const values = []
+      let idx = 1
+      for (const [k, v] of Object.entries({
+        packageid,
+        event_date,
+        event_time,
+        event_end_time,
+        extension_duration,
+        event_address,
+        grid,
+        event_name,
+        strongest_signal,
+        contact_info,
+        contact_person,
+        contact_person_number,
+        notes,
+      })) {
+        if (!allowed[k] || typeof v === 'undefined') continue
+        sets.push(`${k} = $${idx}`)
+        values.push(v)
+        idx++
+      }
+      if (!sets.length) {
+        return res.status(400).json({ message: 'Nothing to update' })
+      }
+      sets.push(`last_updated = CURRENT_TIMESTAMP`)
+      await pool.query(
+        `UPDATE booking_requests SET ${sets.join(', ')} WHERE requestid = $${
+          values.length + 1
+        }`,
+        [...values, requestid]
+      )
+
+      // Update junction links for grids if provided
+      if (
+        (Array.isArray(grid_ids) && grid_ids.length) ||
+        (typeof grid === 'string' && grid?.trim())
+      ) {
+        try {
+          const {
+            setBookingGrids,
+            filterVisibleGridIds,
+          } = require('../../Model/bookingGridsModel')
+          const { pool } = require('../../Config/db')
+          let ids = Array.isArray(grid_ids)
+            ? grid_ids.map((n) => Number(n)).filter(Number.isFinite)
+            : []
+          if (!ids.length && typeof grid === 'string' && grid.trim()) {
+            const parts = grid
+              .split(',')
+              .map((s) => s.trim())
+              .filter(Boolean)
+            if (parts.length) {
+              const q = `SELECT id FROM grids WHERE grid_name = ANY($1::text[])`
+              const r = await pool.query(q, [parts])
+              ids = r.rows.map((row) => row.id)
+            }
+          }
+          if (ids.length) {
+            const visible = await filterVisibleGridIds(ids)
+            await setBookingGrids(requestid, visible.slice(0, 2))
+          } else {
+            if (Array.isArray(grid_ids) && grid_ids.length === 0) {
+              const {
+                removeBookingGrids,
+              } = require('../../Model/bookingGridsModel')
+              await removeBookingGrids(requestid)
+            }
+          }
+        } catch (e) {
+          console.warn('admin update booking: grid links skipped:', e?.message)
+        }
+      }
+
+      const updated = await getBookingRequestById(requestid)
+      return res.json({ message: 'Booking updated', booking: updated })
+    } catch (err) {
+      console.error('admin updateBookingRequest error:', err)
+      return res.status(500).json({ message: 'Server error updating booking' })
+    }
+  },
   acceptBookingRequest,
   rejectBookingRequest,
 }

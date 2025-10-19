@@ -22,6 +22,7 @@ import {
   adminCreateAndConfirm,
   type AdminCreateConfirmPayload,
 } from '../../../../schemas/functions/BookingRequest/adminCreateAndConfirm'
+import { submitAdminUpdate } from '../../../../schemas/functions/BookingRequest/adminupdateBooking'
 const API_BASE =
   (process.env.NEXT_PUBLIC_API_BASE?.replace(/\/$/, '') ||
     'http://localhost:5000') + '/api/auth/getProfile'
@@ -77,6 +78,7 @@ export default function BookingPage() {
   )
   const [prefillPkgName, setPrefillPkgName] = useState<string | null>(null)
   const [timepickerReady, setTimepickerReady] = useState(false)
+  const [editingRequestId, setEditingRequestId] = useState<number | null>(null)
 
   // BookingForm['package'] is a union; guard before setting from DB names
   type PkgName = BookingForm['package']
@@ -98,6 +100,15 @@ export default function BookingPage() {
         const data = JSON.parse(raw)
         sessionStorage.removeItem('edit_booking_prefill')
         setIsEditable(true)
+        // Capture request id to enable update flow instead of create
+        if (typeof data.__requestid === 'number' && data.__requestid > 0) {
+          setEditingRequestId(data.__requestid)
+        } else if (
+          typeof data.__requestid === 'string' &&
+          !Number.isNaN(Number(data.__requestid))
+        ) {
+          setEditingRequestId(Number(data.__requestid))
+        }
         setPrefillPkgName(
           typeof data.package === 'string' ? data.package : null
         )
@@ -218,6 +229,12 @@ export default function BookingPage() {
       try {
         const g = await loadGridsPublic()
         setGrids(g)
+        try {
+          localStorage.setItem(
+            'public_grids_cache',
+            JSON.stringify(g.map(({ id, grid_name }) => ({ id, grid_name })))
+          )
+        } catch {}
       } catch {}
     })()
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -266,7 +283,7 @@ export default function BookingPage() {
       toast.error('Please fill in all required fields.')
       return
     }
-    // Admin create flow: create and confirm immediately
+    // Create vs Update flow
     const doSubmit = async () => {
       try {
         // Resolve package id from selection or by name
@@ -286,42 +303,55 @@ export default function BookingPage() {
         const toTimeWithSeconds = (t: string) =>
           t.length === 5 ? `${t}:00` : t
 
-        const payload: AdminCreateConfirmPayload = {
-          email: form.email || undefined,
-          packageid: pkgId,
-          event_date: fmtDate(form.eventDate),
-          event_time: toTimeWithSeconds(form.eventTime),
-          event_end_time: toTimeWithSeconds(form.eventEndTime),
-          extension_duration:
-            typeof form.extensionHours === 'number'
-              ? form.extensionHours
-              : Number(form.extensionHours) || 0,
-          event_address: form.eventLocation,
-          grid:
-            Array.isArray(form.selectedGrids) && form.selectedGrids.length
-              ? form.selectedGrids.join(',')
-              : null,
-          contact_info: form.contactNumber || null,
-          // Prefer split fields; fallback to parsing legacy combined
-          contact_person:
-            form.contactPersonName?.trim() ||
-            (form.contactPersonAndNumber?.includes('|')
-              ? form.contactPersonAndNumber.split('|')[0].trim()
-              : null),
-          contact_person_number:
-            form.contactPersonNumber?.trim() ||
-            (form.contactPersonAndNumber?.includes('|')
-              ? form.contactPersonAndNumber.split('|')[1]?.trim() || null
-              : null),
-          notes: null,
-          event_name: form.eventName || null,
-          strongest_signal: form.signal || null,
-        }
+        if (editingRequestId) {
+          // Update existing booking request (admin role)
+          await submitAdminUpdate({
+            requestid: editingRequestId,
+            form,
+            selectedPackageId: pkgId,
+          })
+          toast.success('Booking updated.')
+          // Redirect back to manage bookings after update
+          router.push('/admin/ManageBooking')
+        } else {
+          // Admin create flow: create and confirm immediately
+          const payload: AdminCreateConfirmPayload = {
+            email: form.email || undefined,
+            packageid: pkgId,
+            event_date: fmtDate(form.eventDate),
+            event_time: toTimeWithSeconds(form.eventTime),
+            event_end_time: toTimeWithSeconds(form.eventEndTime),
+            extension_duration:
+              typeof form.extensionHours === 'number'
+                ? form.extensionHours
+                : Number(form.extensionHours) || 0,
+            event_address: form.eventLocation,
+            grid:
+              Array.isArray(form.selectedGrids) && form.selectedGrids.length
+                ? form.selectedGrids.join(',')
+                : null,
+            contact_info: form.contactNumber || null,
+            // Prefer split fields; fallback to parsing legacy combined
+            contact_person:
+              form.contactPersonName?.trim() ||
+              (form.contactPersonAndNumber?.includes('|')
+                ? form.contactPersonAndNumber.split('|')[0].trim()
+                : null),
+            contact_person_number:
+              form.contactPersonNumber?.trim() ||
+              (form.contactPersonAndNumber?.includes('|')
+                ? form.contactPersonAndNumber.split('|')[1]?.trim() || null
+                : null),
+            notes: null,
+            event_name: form.eventName || null,
+            strongest_signal: form.signal || null,
+          }
 
-        await adminCreateAndConfirm(payload)
-        toast.success('Booking created and confirmed.')
-        // Optionally redirect back to manage bookings
-        // router.push('/admin/ManageBooking')
+          await adminCreateAndConfirm(payload)
+          toast.success('Booking created and confirmed.')
+          // Optionally redirect back to manage bookings
+          // router.push('/admin/ManageBooking')
+        }
       } catch (e: any) {
         toast.error(e?.message || 'Failed to create booking')
       }
@@ -622,8 +652,10 @@ export default function BookingPage() {
                       type="button"
                       disabled={atLimit}
                       aria-pressed={picked}
-                      className={`group w-[270px] overflow-hidden rounded-xl border shadow-sm transition focus:outline-none focus-visible:ring-2 focus-visible:ring-litratored ${
-                        picked ? 'ring-2 ring-litratored' : ''
+                      className={`group w-[270px] overflow-hidden rounded-xl border shadow-sm transition focus:outline-none ${
+                        picked
+                          ? 'border-2 border-red-500 ring-2 ring-red-500 ring-offset-2 ring-offset-white'
+                          : 'border-gray-200 focus-visible:ring-2 focus-visible:ring-litratored'
                       } ${
                         atLimit
                           ? 'opacity-60 cursor-not-allowed'
@@ -644,7 +676,7 @@ export default function BookingPage() {
                           className="object-cover"
                         />
                         {picked && (
-                          <div className="absolute inset-0 bg-black/20" />
+                          <div className="absolute inset-0 bg-black/30" />
                         )}
                       </div>
                       <div className="p-2 text-center">
@@ -720,7 +752,7 @@ export default function BookingPage() {
               type="button"
               className="bg-litratoblack text-white px-4 py-2 hover:bg-black rounded"
             >
-              Submit
+              {editingRequestId ? 'Update' : 'Submit'}
             </button>
           </div>
         </div>

@@ -19,6 +19,7 @@ export type AdminCreateConfirmPayload = {
   extension_duration?: number | null
   event_address: string
   grid?: string | null
+  grid_ids?: number[]
   contact_info?: string | null
   contact_person?: string | null
   contact_person_number?: string | null
@@ -72,6 +73,20 @@ export function buildAdminCreatePayload(
 ): AdminCreateConfirmPayload {
   const packageid = resolvePackageId(form.package)
   if (!packageid) throw new Error('Package ID could not be resolved')
+  // Map selected grid names to IDs via a cached list if present
+  let gridIds: number[] | undefined
+  try {
+    const cached = localStorage.getItem('public_grids_cache')
+    if (cached) {
+      const list: Array<{ id: number; grid_name: string }> = JSON.parse(cached)
+      const picked = (form.selectedGrids || []) as string[]
+      gridIds = picked
+        .map((name) => list.find((g) => g.grid_name === name)?.id)
+        .filter((v): v is number => typeof v === 'number')
+        .slice(0, 2)
+    }
+  } catch {}
+
   return {
     userid: opts?.userid,
     email: opts?.email,
@@ -88,6 +103,7 @@ export function buildAdminCreatePayload(
       Array.isArray(form.selectedGrids) && form.selectedGrids.length
         ? form.selectedGrids.join(',')
         : null,
+    grid_ids: gridIds && gridIds.length ? gridIds : undefined,
     contact_info: form.contactNumber || null,
     contact_person: (form as any).contactPersonName || null,
     contact_person_number: (form as any).contactPersonNumber || null,

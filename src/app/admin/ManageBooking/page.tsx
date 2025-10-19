@@ -667,7 +667,6 @@ function MasterListPanel({
                 <th className="text-left px-3 py-2">Start time</th>
                 <th className="text-left px-3 py-2">End time</th>
                 <th className="text-left px-3 py-2">Package</th>
-                <th className="text-left px-3 py-2">Grid</th>
                 <th className="text-left px-3 py-2">Place</th>
                 <th className="text-left px-3 py-2">Status</th>
                 <th className="text-left px-3 py-2">More Details</th>
@@ -680,7 +679,7 @@ function MasterListPanel({
                 <tr>
                   <td
                     className="px-3 py-4 text-center text-gray-500"
-                    colSpan={8}
+                    colSpan={9}
                   >
                     No bookings found
                   </td>
@@ -693,7 +692,6 @@ function MasterListPanel({
                     <td className="px-3 py-2">{row.startTime}</td>
                     <td className="px-3 py-2">{row.endTime}</td>
                     <td className="px-3 py-2">{row.package}</td>
-                    <td className="px-3 py-2">{row.grid}</td>
                     <td className="px-3 py-2">{row.place}</td>
                     <td className="px-3 py-2">
                       <span
@@ -729,15 +727,36 @@ function MasterListPanel({
                                 Contact person
                               </div>
                               <div className="text-gray-700 whitespace-pre-wrap">
-                                {row.contact_person || '—'}
-                              </div>
-                            </div>
-                            <div>
-                              <div className="font-semibold">
-                                Contact person number
-                              </div>
-                              <div className="text-gray-700 whitespace-pre-wrap">
-                                {row.contact_person_number || '—'}
+                                <div>
+                                  <span className="font-medium">Name:</span>{' '}
+                                  {(() => {
+                                    const byField = (
+                                      row.contact_person || ''
+                                    ).trim()
+                                    const byName = [row.firstname, row.lastname]
+                                      .filter(Boolean)
+                                      .join(' ')
+                                      .trim()
+                                    const val = byField || byName
+                                    return val || '—'
+                                  })()}
+                                </div>
+                                <div>
+                                  <span className="font-medium">Number:</span>{' '}
+                                  {(() => {
+                                    const direct = (
+                                      row.contact_person_number || ''
+                                    ).trim()
+                                    if (direct) return direct
+                                    const info = (
+                                      row.contact_info || ''
+                                    ).toString()
+                                    // Try to extract a phone-like sequence from contact_info
+                                    const m = info.match(/(\+?\d[\d\s-]{6,}\d)/)
+                                    const extracted = (m?.[1] || '').trim()
+                                    return extracted || '—'
+                                  })()}
+                                </div>
                               </div>
                             </div>
                             <div>
@@ -762,6 +781,24 @@ function MasterListPanel({
                                 {row.extension_duration ?? '—'}
                                 {row.extension_duration != null ? ' hr' : ''}
                               </div>
+                            </div>
+                            <div>
+                              <div className="font-semibold">Grids</div>
+                              {(() => {
+                                const names = (row.grid || '')
+                                  .split(',')
+                                  .map((s) => s.trim())
+                                  .filter((s) => s && s !== '—')
+                                return names.length ? (
+                                  <ul className="list-disc list-inside text-gray-700">
+                                    {names.map((n) => (
+                                      <li key={n}>{n}</li>
+                                    ))}
+                                  </ul>
+                                ) : (
+                                  <div className="text-gray-700">—</div>
+                                )
+                              })()}
                             </div>
                           </div>
                         </PopoverContent>

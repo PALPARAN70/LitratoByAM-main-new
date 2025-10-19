@@ -113,6 +113,7 @@ export default function DashboardPage() {
     startTime: string
     endTime: string
     package: string
+    grid?: string
     place: string
     paymentStatus: string
     status?: 'Approved' | 'Declined' | 'Pending' | 'Cancelled' // extended
@@ -237,12 +238,23 @@ export default function DashboardPage() {
         const timeStart = String(b.event_time ?? b.eventtime ?? '').slice(0, 5)
         const timeEnd = String(b.event_end_time ?? '').slice(0, 5)
         const dateISO = toISODate(String(b.event_date ?? b.eventdate ?? ''))
+        // Derive grid names from either grid_names array or legacy grid string
+        const gridNames: string[] = Array.isArray(b.grid_names)
+          ? b.grid_names
+              .map((n: any) => String(n || '').trim())
+              .filter((s: string) => !!s)
+          : String(b.grid || '')
+              .split(',')
+              .map((s: string) => s.trim())
+              .filter((s: string) => !!s)
+        const gridString = gridNames.join(', ')
         return {
           name: b.event_name ?? '',
           date: dateISO,
           startTime: to12h(timeStart),
           endTime: timeEnd ? to12h(timeEnd) : '',
           package: (b.package_name ?? '').trim(),
+          grid: gridString,
           place: (b.event_address ?? b.eventaddress ?? '').trim(),
           paymentStatus: (b.payment_status ?? 'Pending') as string,
           status: toTitle(b.status as string),
@@ -520,15 +532,45 @@ export default function DashboardPage() {
                                         Contact person
                                       </div>
                                       <div className="text-gray-700 whitespace-pre-wrap">
-                                        {data.contact_person || '—'}
-                                      </div>
-                                    </div>
-                                    <div>
-                                      <div className="font-semibold">
-                                        Contact person number
-                                      </div>
-                                      <div className="text-gray-700 whitespace-pre-wrap">
-                                        {data.contact_person_number || '—'}
+                                        <div>
+                                          <span className="font-medium">
+                                            Name:
+                                          </span>{' '}
+                                          {(() => {
+                                            const byField = (
+                                              data.contact_person || ''
+                                            ).trim()
+                                            const byName = [
+                                              profile?.firstname,
+                                              profile?.lastname,
+                                            ]
+                                              .filter(Boolean)
+                                              .join(' ')
+                                              .trim()
+                                            const val = byField || byName
+                                            return val || '—'
+                                          })()}
+                                        </div>
+                                        <div>
+                                          <span className="font-medium">
+                                            Number:
+                                          </span>{' '}
+                                          {(() => {
+                                            const direct = (
+                                              data.contact_person_number || ''
+                                            ).trim()
+                                            if (direct) return direct
+                                            const info = (
+                                              data.contact_info || ''
+                                            ).toString()
+                                            const m =
+                                              info.match(/(\+?\d[\d\s-]{6,}\d)/)
+                                            const extracted = (
+                                              m?.[1] || ''
+                                            ).trim()
+                                            return extracted || '—'
+                                          })()}
+                                        </div>
                                       </div>
                                     </div>
                                     <div>
@@ -557,6 +599,24 @@ export default function DashboardPage() {
                                           ? ' hr'
                                           : ''}
                                       </div>
+                                    </div>
+                                    <div>
+                                      <div className="font-semibold">Grids</div>
+                                      {(() => {
+                                        const names = (data.grid || '')
+                                          .split(',')
+                                          .map((s) => s.trim())
+                                          .filter((s) => s && s !== '—')
+                                        return names.length ? (
+                                          <ul className="list-disc list-inside text-gray-700">
+                                            {names.map((n) => (
+                                              <li key={n}>{n}</li>
+                                            ))}
+                                          </ul>
+                                        ) : (
+                                          <div className="text-gray-700">—</div>
+                                        )
+                                      })()}
                                     </div>
                                   </div>
                                 </PopoverContent>

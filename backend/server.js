@@ -13,6 +13,8 @@ const customerRoute = require('./src/Routes/customerRoutes')
 const cors = require('cors')
 const { initUserTable } = require('./src/Model/userModel')
 const { initBookingRequestTable } = require('./src/Model/bookingRequestModel')
+const { initBookingGridsTable } = require('./src/Model/bookingGridsModel')
+const { initGridsTable } = require('./src/Model/gridModel')
 const {
   initConfirmedBookingTable,
 } = require('./src/Model/confirmedBookingRequestModel')
@@ -64,7 +66,9 @@ app.use((req, res) => {
 const PORT = process.env.PORT || 5000
 // Initialize essential tables (users + bookings) before starting server
 initUserTable()
+  .then(() => initGridsTable())
   .then(() => initBookingRequestTable())
+  .then(() => initBookingGridsTable())
   .then(() => initConfirmedBookingTable())
   .then(() => {
     app.listen(PORT, () => console.log(`Server running on port ${PORT}`))
