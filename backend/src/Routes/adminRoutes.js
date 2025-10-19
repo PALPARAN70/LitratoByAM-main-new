@@ -338,6 +338,19 @@ router.get(
   roleMiddleware('admin'),
   adminBookingController.listBookingRequests
 )
+// update a booking request (admin)
+router.patch(
+  '/bookingRequest/:id',
+  authMiddleware,
+  roleMiddleware('admin'),
+  adminBookingController.updateBookingRequest
+)
+router.put(
+  '/bookingRequest/:id',
+  authMiddleware,
+  roleMiddleware('admin'),
+  adminBookingController.updateBookingRequest
+)
 router.post(
   '/bookingRequest/:id/accept',
   authMiddleware,

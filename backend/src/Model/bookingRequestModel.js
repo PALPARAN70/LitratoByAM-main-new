@@ -128,6 +128,18 @@ async function getBookingRequestById(requestid) {
       TO_CHAR(br.event_date, 'YYYY-MM-DD') AS event_date,
       TO_CHAR(br.event_time, 'HH24:MI') AS event_time,
       TO_CHAR(br.event_end_time, 'HH24:MI') AS event_end_time,
+      (
+        SELECT COALESCE(json_agg(g.id ORDER BY g.grid_name), '[]'::json)
+        FROM booking_request_grids brg
+        JOIN grids g ON g.id = brg.grid_id
+        WHERE brg.requestid = br.requestid
+      ) AS grid_ids,
+      (
+        SELECT COALESCE(json_agg(g.grid_name ORDER BY g.grid_name), '[]'::json)
+        FROM booking_request_grids brg
+        JOIN grids g ON g.id = brg.grid_id
+        WHERE brg.requestid = br.requestid
+      ) AS grid_names,
       p.package_name,
       p.description as package_description,
       p.price,
@@ -152,6 +164,18 @@ async function getAllBookingRequests() {
       TO_CHAR(br.event_date, 'YYYY-MM-DD') AS event_date,
       TO_CHAR(br.event_time, 'HH24:MI') AS event_time,
       TO_CHAR(br.event_end_time, 'HH24:MI') AS event_end_time,
+      (
+        SELECT COALESCE(json_agg(g.id ORDER BY g.grid_name), '[]'::json)
+        FROM booking_request_grids brg
+        JOIN grids g ON g.id = brg.grid_id
+        WHERE brg.requestid = br.requestid
+      ) AS grid_ids,
+      (
+        SELECT COALESCE(json_agg(g.grid_name ORDER BY g.grid_name), '[]'::json)
+        FROM booking_request_grids brg
+        JOIN grids g ON g.id = brg.grid_id
+        WHERE brg.requestid = br.requestid
+      ) AS grid_names,
       p.package_name,
       p.price,
       u.username,
@@ -175,6 +199,18 @@ async function getBookingRequestsByUserId(userid) {
       TO_CHAR(br.event_date, 'YYYY-MM-DD') AS event_date,
       TO_CHAR(br.event_time, 'HH24:MI') AS event_time,
       TO_CHAR(br.event_end_time, 'HH24:MI') AS event_end_time,
+      (
+        SELECT COALESCE(json_agg(g.id ORDER BY g.grid_name), '[]'::json)
+        FROM booking_request_grids brg
+        JOIN grids g ON g.id = brg.grid_id
+        WHERE brg.requestid = br.requestid
+      ) AS grid_ids,
+      (
+        SELECT COALESCE(json_agg(g.grid_name ORDER BY g.grid_name), '[]'::json)
+        FROM booking_request_grids brg
+        JOIN grids g ON g.id = brg.grid_id
+        WHERE brg.requestid = br.requestid
+      ) AS grid_names,
       p.package_name,
       p.description as package_description,
       p.price,
@@ -196,6 +232,18 @@ async function getBookingRequestsByStatus(status) {
       TO_CHAR(br.event_date, 'YYYY-MM-DD') AS event_date,
       TO_CHAR(br.event_time, 'HH24:MI') AS event_time,
       TO_CHAR(br.event_end_time, 'HH24:MI') AS event_end_time,
+      (
+        SELECT COALESCE(json_agg(g.id ORDER BY g.grid_name), '[]'::json)
+        FROM booking_request_grids brg
+        JOIN grids g ON g.id = brg.grid_id
+        WHERE brg.requestid = br.requestid
+      ) AS grid_ids,
+      (
+        SELECT COALESCE(json_agg(g.grid_name ORDER BY g.grid_name), '[]'::json)
+        FROM booking_request_grids brg
+        JOIN grids g ON g.id = brg.grid_id
+        WHERE brg.requestid = br.requestid
+      ) AS grid_names,
       p.package_name,
       p.price,
       u.username,

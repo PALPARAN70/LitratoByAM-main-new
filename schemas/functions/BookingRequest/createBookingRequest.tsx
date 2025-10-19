@@ -17,7 +17,8 @@ type CreateBookingPayload = {
   event_end_time?: string | null // HH:mm:ss
   extension_duration?: number | null
   event_address: string
-  grid?: string | null
+  grid?: string | null // legacy snapshot (names), will be removed later
+  grid_ids?: number[] // new normalized link
   contact_info?: string | null
   contact_person?: string | null
   contact_person_number?: string | null
@@ -105,6 +106,20 @@ export async function createBookingRequest({
     throw new Error('Package ID is required (mapping missing or invalid).')
   }
 
+  // Map selected grid names to IDs using a best-effort cache from localStorage (populated elsewhere) or by piggy-backing the selection list if available at call site.
+  let gridIds: number[] | undefined
+  try {
+    const cached = localStorage.getItem('public_grids_cache')
+    if (cached) {
+      const list: Array<{ id: number; grid_name: string }> = JSON.parse(cached)
+      const picked = (form.selectedGrids || []) as string[]
+      gridIds = picked
+        .map((name) => list.find((g) => g.grid_name === name)?.id)
+        .filter((v): v is number => typeof v === 'number')
+        .slice(0, 2)
+    }
+  } catch {}
+
   const payload: CreateBookingPayload = {
     packageid: resolvedPackageId,
     event_date: fmtDate(form.eventDate),
@@ -121,6 +136,7 @@ export async function createBookingRequest({
       Array.isArray(form.selectedGrids) && form.selectedGrids.length
         ? form.selectedGrids.join(',')
         : null,
+    grid_ids: gridIds && gridIds.length ? gridIds : undefined,
     contact_info: buildContactInfo(form),
     contact_person: form.contactPersonName || null,
     contact_person_number: form.contactPersonNumber || null,

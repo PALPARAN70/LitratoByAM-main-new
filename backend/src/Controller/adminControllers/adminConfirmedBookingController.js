@@ -343,6 +343,7 @@ async function createAndConfirm(req, res) {
       event_name = null,
       strongest_signal = null,
       grid = null,
+      grid_ids = null,
     } = req.body || {}
     // Resolve user and ensure verified
     let userRecord = null
@@ -360,12 +361,9 @@ async function createAndConfirm(req, res) {
           .json({ message: 'User not found for provided email' })
     }
     if (!userRecord.is_verified) {
-      return res
-        .status(400)
-        .json({
-          message:
-            'User email is not verified. Please verify the account first.',
-        })
+      return res.status(400).json({
+        message: 'User email is not verified. Please verify the account first.',
+      })
     }
     if (!packageid || !event_date || !event_time || !event_address) {
       return res.status(400).json({
@@ -407,6 +405,35 @@ async function createAndConfirm(req, res) {
         `UPDATE booking_requests SET contact_info = $1, last_updated = CURRENT_TIMESTAMP WHERE requestid = $2`,
         [contact_info, booking.requestid]
       )
+    }
+
+    // Handle grid junction links (prefer provided ids; fallback to parsing names)
+    try {
+      const {
+        setBookingGrids,
+        filterVisibleGridIds,
+      } = require('../../Model/bookingGridsModel')
+      const { pool } = require('../../Config/db')
+      let ids = Array.isArray(grid_ids)
+        ? grid_ids.map((n) => Number(n)).filter(Number.isFinite)
+        : []
+      if (!ids.length && typeof grid === 'string' && grid.trim()) {
+        const parts = grid
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean)
+        if (parts.length) {
+          const q = `SELECT id FROM grids WHERE grid_name = ANY($1::text[])`
+          const r = await pool.query(q, [parts])
+          ids = r.rows.map((row) => row.id)
+        }
+      }
+      if (ids.length) {
+        const visible = await filterVisibleGridIds(ids)
+        await setBookingGrids(booking.requestid, visible.slice(0, 2))
+      }
+    } catch (e) {
+      console.warn('confirmed booking: grid links skipped:', e?.message)
     }
 
     // Mark as accepted

@@ -189,6 +189,12 @@ export default function BookingPage() {
       try {
         const g = await loadGridsPublic()
         setGrids(g)
+        try {
+          localStorage.setItem(
+            'public_grids_cache',
+            JSON.stringify(g.map(({ id, grid_name }) => ({ id, grid_name })))
+          )
+        } catch {}
       } catch {
         // ignore
       }
@@ -301,9 +307,13 @@ export default function BookingPage() {
   }
 
   const handleClear = () => {
-    setForm(initialForm)
+    setForm((prev) => ({
+      ...initialForm,
+      email: prev.email,
+      completeName: prev.completeName,
+    }))
     setErrors({})
-    toast.message('Form cleared.')
+    toast.message('Form cleared. Email and name kept from your profile.')
   }
 
   const formFields = [
@@ -368,8 +378,8 @@ export default function BookingPage() {
               placeholder="Enter here:"
               className="w-full bg-gray-200 rounded-md px-3 py-2 text-sm focus:outline-none"
               value={form.email}
-              onChange={(e) => setField('email', e.target.value)}
-              onBlur={(e) => setField('email', e.target.value)}
+              readOnly
+              aria-readonly="true"
             />
             {errors.email && (
               <p className="text-red-600 text-sm mt-1">{errors.email}</p>
@@ -386,7 +396,8 @@ export default function BookingPage() {
               placeholder="Enter here:"
               className="w-full bg-gray-200 rounded-md px-3 py-2 text-sm focus:outline-none"
               value={form.completeName}
-              onChange={(e) => setField('completeName', e.target.value)}
+              readOnly
+              aria-readonly="true"
             />
             {errors.completeName && (
               <p className="text-red-600 text-sm mt-1">{errors.completeName}</p>
@@ -612,8 +623,10 @@ export default function BookingPage() {
                       type="button"
                       disabled={atLimit}
                       aria-pressed={picked}
-                      className={`group w-[270px] overflow-hidden rounded-xl border shadow-sm transition focus:outline-none focus-visible:ring-2 focus-visible:ring-litratored ${
-                        picked ? 'ring-2 ring-litratored' : ''
+                      className={`group w-[270px] overflow-hidden rounded-xl border shadow-sm transition focus:outline-none ${
+                        picked
+                          ? 'border-2 border-red-500 ring-2 ring-red-500 ring-offset-2 ring-offset-white'
+                          : 'border-gray-200 focus-visible:ring-2 focus-visible:ring-litratored'
                       } ${
                         atLimit
                           ? 'opacity-60 cursor-not-allowed'
@@ -634,7 +647,7 @@ export default function BookingPage() {
                           className="object-cover"
                         />
                         {picked && (
-                          <div className="absolute inset-0 bg-black/20" />
+                          <div className="absolute inset-0 bg-black/30" />
                         )}
                       </div>
                       <div className="p-2 text-center">

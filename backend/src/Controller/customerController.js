@@ -61,6 +61,7 @@ async function createBooking(req, res) {
       event_name = null,
       strongest_signal = null,
       grid = null,
+      grid_ids = null, // preferred moving forward
     } = req.body || {}
 
     if (!packageid || !event_date || !event_time || !event_address) {
@@ -106,6 +107,37 @@ async function createBooking(req, res) {
       )
     }
 
+    // Handle grid junction links (prefer provided ids; fallback to parsing names)
+    try {
+      const {
+        setBookingGrids,
+        filterVisibleGridIds,
+      } = require('../Model/bookingGridsModel')
+      const { pool } = require('../Config/db')
+      let ids = Array.isArray(grid_ids)
+        ? grid_ids.map((n) => Number(n)).filter(Number.isFinite)
+        : []
+      if (!ids.length && typeof grid === 'string' && grid.trim()) {
+        // Map legacy comma-separated names -> ids
+        const parts = grid
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean)
+        if (parts.length) {
+          const q = `SELECT id FROM grids WHERE grid_name = ANY($1::text[])`
+          const r = await pool.query(q, [parts])
+          ids = r.rows.map((row) => row.id)
+        }
+      }
+      // Enforce max 2 and visibility
+      if (ids.length) {
+        const visible = await filterVisibleGridIds(ids)
+        await setBookingGrids(booking.requestid, visible.slice(0, 2))
+      }
+    } catch (e) {
+      console.warn('booking grids link skipped:', e?.message)
+    }
+
     // Return enriched booking details
     const full = await getBookingRequestByIdModel(booking.requestid)
     return res.status(201).json({ message: 'Booking created', booking: full })
@@ -145,6 +177,7 @@ async function editBookingRequest(req, res) {
       extension_duration,
       event_address,
       grid,
+      grid_ids = null,
       event_name,
       strongest_signal,
       contact_info,
@@ -176,6 +209,46 @@ async function editBookingRequest(req, res) {
       ', '
     )} WHERE requestid = $${values.length + 1} RETURNING *`
     await pool.query(q, [...values, requestid])
+
+    // Update junction links for grids if provided
+    if (
+      (Array.isArray(grid_ids) && grid_ids.length) ||
+      (typeof grid === 'string' && grid.trim())
+    ) {
+      try {
+        const {
+          setBookingGrids,
+          filterVisibleGridIds,
+        } = require('../Model/bookingGridsModel')
+        const { pool } = require('../Config/db')
+        let ids = Array.isArray(grid_ids)
+          ? grid_ids.map((n) => Number(n)).filter(Number.isFinite)
+          : []
+        if (!ids.length && typeof grid === 'string' && grid.trim()) {
+          const parts = grid
+            .split(',')
+            .map((s) => s.trim())
+            .filter(Boolean)
+          if (parts.length) {
+            const q = `SELECT id FROM grids WHERE grid_name = ANY($1::text[])`
+            const r = await pool.query(q, [parts])
+            ids = r.rows.map((row) => row.id)
+          }
+        }
+        if (ids.length) {
+          const visible = await filterVisibleGridIds(ids)
+          await setBookingGrids(requestid, visible.slice(0, 2))
+        } else {
+          // if explicitly empty array, clear links
+          if (Array.isArray(grid_ids) && grid_ids.length === 0) {
+            const { removeBookingGrids } = require('../Model/bookingGridsModel')
+            await removeBookingGrids(requestid)
+          }
+        }
+      } catch (e) {
+        console.warn('edit booking: grid links skipped:', e?.message)
+      }
+    }
 
     const full = await getBookingRequestByIdModel(requestid)
     return res.json({ message: 'Booking updated', booking: full })
