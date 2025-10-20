@@ -42,6 +42,15 @@ async function findUserByUsername(username) {
   ])
   return result.rows[0]
 }
+
+// Find user by username (case-insensitive)
+async function findUserByUsernameCI(username) {
+  const result = await pool.query(
+    'SELECT * FROM users WHERE LOWER(username) = LOWER($1) LIMIT 1',
+    [username]
+  )
+  return result.rows[0]
+}
 // Create user
 async function createUser(
   username,
@@ -211,6 +220,7 @@ module.exports = {
   initUserTable,
   findUserById,
   findUserByUsername,
+  findUserByUsernameCI,
   createUser,
   updateUserProfile,
   updateUserPassword,

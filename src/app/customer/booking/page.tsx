@@ -37,6 +37,7 @@ export default function BookingPage() {
   const isUpdate = !!requestIdParam
 
   const [isEditable, setIsEditable] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
   const [personalForm, setPersonalForm] = useState({
     Firstname: '',
     Lastname: '',
@@ -57,6 +58,15 @@ export default function BookingPage() {
   )
   const [timepickerReady, setTimepickerReady] = useState(false)
   const didPrefillRef = useRef(false)
+  const [currentStatus, setCurrentStatus] = useState<
+    'Approved' | 'Declined' | 'Pending' | 'Cancelled' | null
+  >(null)
+  const [showScheduleConfirm, setShowScheduleConfirm] = useState(false)
+  const [pendingScheduleChange, setPendingScheduleChange] = useState<{
+    eventDate?: Date
+    eventTime?: string
+    eventEndTime?: string
+  } | null>(null)
 
   // Moved UP: booking form state before useEffects
   const initialForm: BookingForm = {
@@ -225,6 +235,19 @@ export default function BookingPage() {
         })
         setSelectedPackageId(res.selectedPackageId)
         setForm((prev) => ({ ...prev, ...res.patch }))
+        // Derive status for UI restrictions from fetched booking
+        try {
+          const st = ((res.booking?.status as string) || '').toLowerCase()
+          const title =
+            st === 'accepted' || st === 'approved'
+              ? 'Approved'
+              : st === 'rejected' || st === 'declined'
+              ? 'Declined'
+              : st === 'cancelled'
+              ? 'Cancelled'
+              : 'Pending'
+          setCurrentStatus(title as any)
+        } catch {}
         didPrefillRef.current = true
         // optional toast
       } catch (e: any) {
@@ -234,7 +257,39 @@ export default function BookingPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [requestIdParam, packages])
 
+  // Intercept schedule changes for approved bookings
+  const requestScheduleChange = (patch: {
+    eventDate?: Date
+    eventTime?: string
+    eventEndTime?: string
+  }) => {
+    if (currentStatus === 'Approved') {
+      setPendingScheduleChange(patch)
+      setShowScheduleConfirm(true)
+      return
+    }
+    if (patch.eventDate) setField('eventDate', patch.eventDate as any)
+    if (patch.eventTime) setField('eventTime', patch.eventTime as any)
+    if (patch.eventEndTime) setField('eventEndTime', patch.eventEndTime as any)
+  }
+
+  const confirmApplyScheduleChange = () => {
+    if (!pendingScheduleChange) return
+    const { eventDate, eventTime, eventEndTime } = pendingScheduleChange
+    if (eventDate) setField('eventDate', eventDate as any)
+    if (eventTime) setField('eventTime', eventTime as any)
+    if (eventEndTime) setField('eventEndTime', eventEndTime as any)
+    setPendingScheduleChange(null)
+    setShowScheduleConfirm(false)
+  }
+
+  const cancelScheduleChange = () => {
+    setPendingScheduleChange(null)
+    setShowScheduleConfirm(false)
+  }
+
   const handleSubmit = async () => {
+    if (submitting) return
     setErrors({})
     const result = bookingFormSchema.safeParse(form)
     if (!result.success) {
@@ -249,6 +304,7 @@ export default function BookingPage() {
     }
 
     try {
+      setSubmitting(true)
       if (isUpdate) {
         const resp = await submitUpdate({
           requestid: Number(requestIdParam),
@@ -303,6 +359,8 @@ export default function BookingPage() {
             ? 'Failed to update booking.'
             : 'Failed to submit booking request.')
       )
+    } finally {
+      setSubmitting(false)
     }
   }
 
@@ -368,6 +426,12 @@ export default function BookingPage() {
         </div>
 
         <div className=" p-4 rounded-lg shadow-md space-y-3">
+          {currentStatus === 'Approved' && (
+            <div className="rounded-md border border-yellow-300 bg-yellow-50 text-yellow-900 px-3 py-2 text-sm">
+              This booking is approved. You can update contact details and
+              preferences. Changing the date or time will resubmit for approval.
+            </div>
+          )}
           <p className="font-semibold text-xl">Please Fill In The Following:</p>
 
           {/* Email */}
@@ -676,7 +740,9 @@ export default function BookingPage() {
               <div>
                 <Calendar
                   value={form.eventDate}
-                  onDateChangeAction={(d) => setField('eventDate', d as any)}
+                  onDateChangeAction={(d) =>
+                    requestScheduleChange({ eventDate: d as any })
+                  }
                 />
                 {errors.eventDate && (
                   <p className="text-red-600 text-sm mt-1">
@@ -693,8 +759,10 @@ export default function BookingPage() {
                     start={form.eventTime}
                     end={form.eventEndTime}
                     onChange={({ start, end }) => {
-                      setField('eventTime', start)
-                      setField('eventEndTime', end)
+                      requestScheduleChange({
+                        eventTime: start,
+                        eventEndTime: end,
+                      })
                     }}
                   />
                 )}
@@ -716,20 +784,68 @@ export default function BookingPage() {
             <button
               onClick={handleClear}
               type="button"
-              className="bg-gray-200 text-litratoblack px-4 py-2 hover:bg-gray-300 rounded"
+              className="bg-gray-200 text-litratoblack px-4 py-2 hover:bg-gray-300 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={submitting}
             >
               Clear
             </button>
             <button
               onClick={handleSubmit}
               type="button"
-              className="bg-litratoblack text-white px-4 py-2 hover:bg-black rounded"
+              className="bg-litratoblack text-white px-4 py-2 hover:bg-black rounded disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={submitting}
+              aria-busy={submitting}
             >
-              {isUpdate ? 'Update' : 'Submit'}
+              {submitting
+                ? isUpdate
+                  ? 'Updating…'
+                  : 'Submitting…'
+                : isUpdate
+                ? 'Update'
+                : 'Submit'}
             </button>
           </div>
         </div>
       </div>
+      {showScheduleConfirm && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center"
+        >
+          <div
+            className="absolute inset-0 bg-black/40"
+            onClick={cancelScheduleChange}
+          />
+          <div className="relative z-10 w-[95%] max-w-md rounded-lg bg-white p-4 shadow-lg">
+            <h3 className="text-lg font-semibold mb-2">Change schedule?</h3>
+            <p className="text-sm text-gray-700 mb-4">
+              This booking is currently approved. Changing the date or time will
+              send it back for approval and may cancel any existing
+              confirmation. Do you want to proceed?
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                className="px-4 py-2 rounded border border-gray-300 hover:bg-gray-100"
+                onClick={cancelScheduleChange}
+              >
+                Keep current schedule
+              </button>
+              <button
+                type="button"
+                className="px-4 py-2 rounded bg-litratoblack text-white hover:bg-black"
+                onClick={confirmApplyScheduleChange}
+              >
+                Change schedule
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </MotionDiv>
   )
 }
+
+// Lightweight modal for schedule change confirmation
+// Rendered at the end of the component above MotionDiv close

@@ -40,14 +40,12 @@ exports.createUser = async (req, res) => {
     } = req.body || {}
 
     if (!username || !password) {
-      return res
-        .status(400)
-        .json({
-          toast: {
-            type: 'error',
-            message: 'Username and password are required',
-          },
-        })
+      return res.status(400).json({
+        toast: {
+          type: 'error',
+          message: 'Username and password are required',
+        },
+      })
     }
 
     const existing = await userModel.findUserByUsername(username)
@@ -101,6 +99,45 @@ exports.createUser = async (req, res) => {
     })
   } catch (e) {
     console.error('Admin createUser error:', e)
+    return res
+      .status(500)
+      .json({ toast: { type: 'error', message: 'Internal server error' } })
+  }
+}
+
+// Fetch a user by email (username) - admin only helper
+exports.fetchUserByEmail = async (req, res) => {
+  try {
+    const { email } = req.query || {}
+    if (!email || typeof email !== 'string') {
+      return res
+        .status(400)
+        .json({ toast: { type: 'error', message: 'Email is required' } })
+    }
+
+    // In our schema, username stores the email address
+    const user = await userModel.findUserByUsername(email)
+    if (!user || user.is_verified !== true) {
+      return res
+        .status(404)
+        .json({ toast: { type: 'error', message: 'User not found' } })
+    }
+
+    return res.json({
+      toast: { type: 'success', message: 'User fetched successfully' },
+      user: {
+        id: String(user.id),
+        firstname: user.firstname || '',
+        lastname: user.lastname || '',
+        email: user.username,
+        contact: user.contact || '',
+        role: user.role || '',
+        isactive: user.isactive === true,
+        is_verified: user.is_verified === true,
+      },
+    })
+  } catch (e) {
+    console.error('Fetch User by Email Error:', e)
     return res
       .status(500)
       .json({ toast: { type: 'error', message: 'Internal server error' } })

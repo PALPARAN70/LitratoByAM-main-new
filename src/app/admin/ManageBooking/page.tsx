@@ -498,14 +498,29 @@ function MasterListPanel({
   // Handlers for actions menu
   const handleEdit = (row: BookingRow) => {
     try {
+      // Derive contact person fields with robust fallbacks
+      const byFieldName = (row.contact_person || '').trim()
+      const byName = [row.firstname, row.lastname]
+        .filter(Boolean)
+        .join(' ')
+        .trim()
+      const contactPersonName = byFieldName || byName || ''
+
+      const directNum = (row.contact_person_number || '').trim()
+      let contactPersonNumber = directNum
+      if (!contactPersonNumber) {
+        const info = (row.contact_info || '').toString()
+        const m = info.match(/(\+?\d[\d\s-]{6,}\d)/)
+        contactPersonNumber = (m?.[1] || '').trim()
+      }
+      // Always build a normalized combined string so the edit page can split reliably
+      const combinedContact = `${contactPersonName} | ${contactPersonNumber}`
       // Build prefill payload for createBooking page
       const prefill = {
         email: row.username || '',
         completeName: [row.firstname, row.lastname].filter(Boolean).join(' '),
         contactNumber: row.contact_info || '',
-        contactPersonAndNumber: [row.contact_person, row.contact_person_number]
-          .filter(Boolean)
-          .join(' | '),
+        contactPersonAndNumber: combinedContact,
         eventName: row.eventName || '',
         eventLocation: row.place || '',
         extensionHours:
@@ -832,7 +847,16 @@ function MasterListPanel({
                             </button>
                             <button
                               type="button"
-                              className="text-left px-2 py-1.5 rounded text-sm hover:bg-gray-100"
+                              className={`text-left px-2 py-1.5 rounded text-sm hover:bg-gray-100 ${
+                                row.status === 'declined' ||
+                                row.status === 'cancelled'
+                                  ? 'opacity-50 cursor-not-allowed'
+                                  : ''
+                              }`}
+                              disabled={
+                                row.status === 'declined' ||
+                                row.status === 'cancelled'
+                              }
                               onClick={() => handleEdit(row)}
                             >
                               Edit
