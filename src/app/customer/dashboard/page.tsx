@@ -337,6 +337,14 @@ export default function DashboardPage() {
       toast.error('Cannot update this entry. Missing request id.')
       return
     }
+    // Prevent edits within 7 days of event
+    try {
+      const days = daysUntil(row.date)
+      if (days <= 7) {
+        toast.error('Editing is disabled within 7 days of the event.')
+        return
+      }
+    } catch {}
     router.push(`/customer/booking?requestid=${row.requestid}`)
   }
 
@@ -646,8 +654,15 @@ export default function DashboardPage() {
                                         {data.action[0] ?? 'Cancel'}
                                       </button>
                                       <button
-                                        className="w-full bg-litratored  text-white rounded px-2 py-1 text-xs sm:text-sm"
+                                        className={`w-full bg-litratored text-white rounded px-2 py-1 text-xs sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed`}
                                         onClick={() => handleReschedule(data)}
+                                        disabled={(() => {
+                                          try {
+                                            return daysUntil(data.date) <= 7
+                                          } catch {
+                                            return false
+                                          }
+                                        })()}
                                       >
                                         {data.action[1] ?? 'Reschedule'}
                                       </button>
@@ -727,4 +742,20 @@ export default function DashboardPage() {
       </div>
     </MotionDiv>
   )
+}
+
+// Helper: days until date (YYYY-MM-DD)
+function daysUntil(dateISO: string): number {
+  if (!dateISO) return Infinity
+  const [y, m, d] = dateISO.split('-').map((n) => parseInt(n || '0', 10))
+  const event = new Date(Date.UTC(y, (m || 1) - 1, d || 1))
+  const now = new Date()
+  const todayUTC = Date.UTC(
+    now.getUTCFullYear(),
+    now.getUTCMonth(),
+    now.getUTCDate()
+  )
+  const eventUTC = event.getTime()
+  const diffMs = eventUTC - todayUTC
+  return Math.floor(diffMs / (24 * 60 * 60 * 1000))
 }

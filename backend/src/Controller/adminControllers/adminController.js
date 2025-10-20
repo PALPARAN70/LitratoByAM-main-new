@@ -19,6 +19,7 @@ module.exports = {
   blockUser: userCtrl.blockUser,
   unblockUser: userCtrl.unblockUser,
   updateUserRole: userCtrl.updateUserRole,
+  fetchUserByEmail: userCtrl.fetchUserByEmail,
   // Inventory & Packages & Material Types
   createInventoryItem: inventoryCtrl.createInventoryItem,
   listInventory: inventoryCtrl.listInventory,

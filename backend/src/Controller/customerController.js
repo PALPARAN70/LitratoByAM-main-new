@@ -163,10 +163,11 @@ async function editBookingRequest(req, res) {
     if (existing.userid !== userid) {
       return res.status(403).json({ message: 'Not your booking' })
     }
-    if (!['pending'].includes(existing.status)) {
+    // Allow edits when status is pending or accepted
+    if (!['pending', 'accepted'].includes(existing.status)) {
       return res
         .status(400)
-        .json({ message: 'Only pending bookings can be edited' })
+        .json({ message: 'Only pending/approved bookings can be edited' })
     }
 
     const {
@@ -204,7 +205,54 @@ async function editBookingRequest(req, res) {
       return res.status(400).json({ message: 'Nothing to update' })
     }
 
+    // If booking is already accepted and user is changing date/time, revert to pending for re-approval
+    let revertToPending = false
+    if (existing.status === 'accepted') {
+      const currentDate = String(
+        existing.event_date || existing.eventdate || ''
+      )
+      const currentTime = String(
+        existing.event_time || existing.eventtime || ''
+      )
+      const currentEnd = String(existing.event_end_time || '')
+      const normalizeTime = (t) => (typeof t === 'string' ? t.slice(0, 5) : '')
+      const newDate = typeof event_date === 'string' ? event_date : undefined
+      const newTime = typeof event_time === 'string' ? event_time : undefined
+      const newEnd =
+        typeof event_end_time === 'string' ? event_end_time : undefined
+
+      const dateChanged = !!(newDate && newDate !== currentDate)
+      const timeChanged = !!(
+        newTime && normalizeTime(newTime) !== normalizeTime(currentTime)
+      )
+      const endChanged = !!(
+        newEnd && normalizeTime(newEnd) !== normalizeTime(currentEnd)
+      )
+      if (dateChanged || timeChanged || endChanged) {
+        revertToPending = true
+        // Optional: conflict check against accepted bookings for proposed slot
+        try {
+          const proposedDate = newDate || currentDate
+          const proposedTime = normalizeTime(newTime || currentTime)
+          if (proposedDate && proposedTime) {
+            const conflicts = await checkBookingConflictsModel({
+              event_date: proposedDate,
+              event_time: proposedTime,
+            })
+            if (conflicts.length) {
+              return res.status(409).json({ message: 'Timeslot not available' })
+            }
+          }
+        } catch (e) {
+          // proceed without blocking if conflict check fails unexpectedly
+        }
+      }
+    }
+
     sets.push(`last_updated = CURRENT_TIMESTAMP`)
+    if (revertToPending) {
+      sets.push(`status = 'pending'`)
+    }
     const q = `UPDATE booking_requests SET ${sets.join(
       ', '
     )} WHERE requestid = $${values.length + 1} RETURNING *`
@@ -247,6 +295,20 @@ async function editBookingRequest(req, res) {
         }
       } catch (e) {
         console.warn('edit booking: grid links skipped:', e?.message)
+      }
+    }
+
+    // If we reverted to pending, optionally cancel any confirmed booking linked to this request
+    if (revertToPending) {
+      try {
+        await pool.query(
+          `UPDATE confirmed_bookings 
+           SET booking_status = 'cancelled', last_updated = CURRENT_TIMESTAMP
+           WHERE requestid = $1 AND booking_status <> 'cancelled'`,
+          [requestid]
+        )
+      } catch (e) {
+        // non-fatal
       }
     }
 

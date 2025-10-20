@@ -30,6 +30,8 @@ const API_BASE =
 export default function BookingPage() {
   const router = useRouter()
   const [isEditable, setIsEditable] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [showConfirmUpdate, setShowConfirmUpdate] = useState(false)
   const [personalForm, setPersonalForm] = useState({
     Firstname: '',
     Lastname: '',
@@ -79,6 +81,11 @@ export default function BookingPage() {
   const [prefillPkgName, setPrefillPkgName] = useState<string | null>(null)
   const [timepickerReady, setTimepickerReady] = useState(false)
   const [editingRequestId, setEditingRequestId] = useState<number | null>(null)
+  // Read-only locks for fields populated from a user record (name & contact only)
+  const [locks, setLocks] = useState({
+    name: false,
+    contact: false,
+  })
 
   // BookingForm['package'] is a union; guard before setting from DB names
   type PkgName = BookingForm['package']
@@ -270,7 +277,152 @@ export default function BookingPage() {
     }
   }
 
+  // Helper: derive a readable name from an email local-part (e.g., john.doe -> John Doe)
+  const deriveNameFromEmail = (email: string) => {
+    try {
+      const local = (email || '').split('@')[0] || ''
+      if (!local) return ''
+      const parts = local
+        .replace(/[._-]+/g, ' ')
+        .split(' ')
+        .filter(Boolean)
+      const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
+      return parts.map(cap).join(' ').trim()
+    } catch {
+      return ''
+    }
+  }
+
+  // Auto-fill Complete name based on email (admin helper)
+  const handleEmailBlur = async (email: string) => {
+    try {
+      const trimmed = (email || '').trim()
+      if (!trimmed) return
+      // Do not override if name already present
+      if (form.completeName) return
+      // If editing existing booking, avoid unexpected overrides
+      if (editingRequestId) return
+      const token =
+        typeof window !== 'undefined'
+          ? localStorage.getItem('access_token')
+          : null
+      if (!token) return
+      const base =
+        process.env.NEXT_PUBLIC_API_BASE?.replace(/\/$/, '') ||
+        'http://localhost:5000'
+      const url = `${base}/api/admin/user/by-email?email=${encodeURIComponent(
+        trimmed
+      )}`
+      const res = await fetch(url, {
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+      })
+      if (res.ok) {
+        const data = await res.json().catch(() => ({} as any))
+        const u = (data as any)?.user
+        if (u) {
+          const full = `${u.firstname || ''} ${u.lastname || ''}`.trim()
+          const nameToUse = full || deriveNameFromEmail(trimmed)
+          if (nameToUse) {
+            setField('completeName', nameToUse as any)
+          }
+          if (!form.contactNumber && u.contact) {
+            setField('contactNumber', u.contact as any)
+          }
+          // Lock only what we actually set
+          setLocks({
+            name: Boolean(nameToUse),
+            contact: Boolean(u.contact),
+          })
+          return
+        }
+      }
+      // Fallback: even if no user, try to derive a name for convenience (no lock on contact)
+      const guess = deriveNameFromEmail(trimmed)
+      if (guess) {
+        setField('completeName', guess as any)
+        setLocks((prev) => ({ ...prev, name: true }))
+      }
+    } catch {}
+  }
+
+  // Core submit routine used by both create and update
+  const performSubmit = async () => {
+    setSubmitting(true)
+    try {
+      // Resolve package id from selection or by name
+      const pkgId =
+        selectedPackageId ??
+        packages.find((p) => p.package_name === form.package)?.id ??
+        null
+      if (!pkgId) throw new Error('Please select a package')
+
+      const fmtDate = (d: Date) => {
+        const dd = new Date(d)
+        const y = dd.getFullYear()
+        const m = String(dd.getMonth() + 1).padStart(2, '0')
+        const day = String(dd.getDate()).padStart(2, '0')
+        return `${y}-${m}-${day}`
+      }
+      const toTimeWithSeconds = (t: string) => (t.length === 5 ? `${t}:00` : t)
+
+      if (editingRequestId) {
+        await submitAdminUpdate({
+          requestid: editingRequestId,
+          form,
+          selectedPackageId: pkgId,
+        })
+        toast.success('Booking updated.')
+        router.push('/admin/ManageBooking')
+      } else {
+        const payload: AdminCreateConfirmPayload = {
+          email: form.email || undefined,
+          packageid: pkgId,
+          event_date: fmtDate(form.eventDate),
+          event_time: toTimeWithSeconds(form.eventTime),
+          event_end_time: toTimeWithSeconds(form.eventEndTime),
+          extension_duration:
+            typeof form.extensionHours === 'number'
+              ? form.extensionHours
+              : Number(form.extensionHours) || 0,
+          event_address: form.eventLocation,
+          grid:
+            Array.isArray(form.selectedGrids) && form.selectedGrids.length
+              ? form.selectedGrids.join(',')
+              : null,
+          contact_info: form.contactNumber || null,
+          contact_person:
+            form.contactPersonName?.trim() ||
+            (form.contactPersonAndNumber?.includes('|')
+              ? form.contactPersonAndNumber.split('|')[0].trim()
+              : null),
+          contact_person_number:
+            form.contactPersonNumber?.trim() ||
+            (form.contactPersonAndNumber?.includes('|')
+              ? form.contactPersonAndNumber.split('|')[1]?.trim() || null
+              : null),
+          notes: null,
+          event_name: form.eventName || null,
+          strongest_signal: form.signal || null,
+        }
+
+        await adminCreateAndConfirm(payload)
+        toast.success('Booking created and confirmed.')
+        // Redirect after creating
+        router.push('/admin/ManageBooking')
+      }
+    } catch (e: any) {
+      toast.error(e?.message || 'Failed to create booking')
+    } finally {
+      setSubmitting(false)
+      setShowConfirmUpdate(false)
+    }
+  }
+
   const handleSubmit = () => {
+    if (submitting) return
     setErrors({})
     const result = bookingFormSchema.safeParse(form)
     if (!result.success) {
@@ -283,81 +435,12 @@ export default function BookingPage() {
       toast.error('Please fill in all required fields.')
       return
     }
-    // Create vs Update flow
-    const doSubmit = async () => {
-      try {
-        // Resolve package id from selection or by name
-        const pkgId =
-          selectedPackageId ??
-          packages.find((p) => p.package_name === form.package)?.id ??
-          null
-        if (!pkgId) throw new Error('Please select a package')
-
-        const fmtDate = (d: Date) => {
-          const dd = new Date(d)
-          const y = dd.getFullYear()
-          const m = String(dd.getMonth() + 1).padStart(2, '0')
-          const day = String(dd.getDate()).padStart(2, '0')
-          return `${y}-${m}-${day}`
-        }
-        const toTimeWithSeconds = (t: string) =>
-          t.length === 5 ? `${t}:00` : t
-
-        if (editingRequestId) {
-          // Update existing booking request (admin role)
-          await submitAdminUpdate({
-            requestid: editingRequestId,
-            form,
-            selectedPackageId: pkgId,
-          })
-          toast.success('Booking updated.')
-          // Redirect back to manage bookings after update
-          router.push('/admin/ManageBooking')
-        } else {
-          // Admin create flow: create and confirm immediately
-          const payload: AdminCreateConfirmPayload = {
-            email: form.email || undefined,
-            packageid: pkgId,
-            event_date: fmtDate(form.eventDate),
-            event_time: toTimeWithSeconds(form.eventTime),
-            event_end_time: toTimeWithSeconds(form.eventEndTime),
-            extension_duration:
-              typeof form.extensionHours === 'number'
-                ? form.extensionHours
-                : Number(form.extensionHours) || 0,
-            event_address: form.eventLocation,
-            grid:
-              Array.isArray(form.selectedGrids) && form.selectedGrids.length
-                ? form.selectedGrids.join(',')
-                : null,
-            contact_info: form.contactNumber || null,
-            // Prefer split fields; fallback to parsing legacy combined
-            contact_person:
-              form.contactPersonName?.trim() ||
-              (form.contactPersonAndNumber?.includes('|')
-                ? form.contactPersonAndNumber.split('|')[0].trim()
-                : null),
-            contact_person_number:
-              form.contactPersonNumber?.trim() ||
-              (form.contactPersonAndNumber?.includes('|')
-                ? form.contactPersonAndNumber.split('|')[1]?.trim() || null
-                : null),
-            notes: null,
-            event_name: form.eventName || null,
-            strongest_signal: form.signal || null,
-          }
-
-          await adminCreateAndConfirm(payload)
-          toast.success('Booking created and confirmed.')
-          // Optionally redirect back to manage bookings
-          // router.push('/admin/ManageBooking')
-        }
-      } catch (e: any) {
-        toast.error(e?.message || 'Failed to create booking')
-      }
+    // If editing, confirm before proceeding
+    if (editingRequestId) {
+      setShowConfirmUpdate(true)
+      return
     }
-
-    void doSubmit()
+    void performSubmit()
   }
 
   const handleClear = () => {
@@ -411,8 +494,16 @@ export default function BookingPage() {
               placeholder="Enter here:"
               className="w-full bg-gray-200 rounded-md px-3 py-2 text-sm focus:outline-none"
               value={form.email}
-              onChange={(e) => setField('email', e.target.value)}
-              onBlur={(e) => setField('email', e.target.value)}
+              onChange={(e) => {
+                // If email changes, unlock any previously locked fields
+                setLocks({ name: false, contact: false })
+                setField('email', e.target.value)
+              }}
+              onBlur={(e) => {
+                const v = e.target.value
+                setField('email', v)
+                void handleEmailBlur(v)
+              }}
             />
             {errors.email && (
               <p className="text-red-600 text-sm mt-1">{errors.email}</p>
@@ -425,9 +516,14 @@ export default function BookingPage() {
             <input
               type="text"
               placeholder="Enter here:"
-              className="w-full bg-gray-200 rounded-md px-3 py-2 text-sm focus:outline-none"
+              className={`w-full rounded-md px-3 py-2 text-sm focus:outline-none ${
+                locks.name ? 'bg-gray-100 cursor-not-allowed' : 'bg-gray-200'
+              }`}
               value={form.completeName}
               onChange={(e) => setField('completeName', e.target.value)}
+              readOnly={locks.name}
+              aria-readonly={locks.name}
+              title={locks.name ? "Auto-filled from user's profile" : undefined}
             />
             {errors.completeName && (
               <p className="text-red-600 text-sm mt-1">{errors.completeName}</p>
@@ -440,10 +536,17 @@ export default function BookingPage() {
             <input
               type="tel"
               placeholder="e.g. +639171234567"
-              className="w-full bg-gray-200 rounded-md px-3 py-2 text-sm focus:outline-none"
+              className={`w-full rounded-md px-3 py-2 text-sm focus:outline-none ${
+                locks.contact ? 'bg-gray-100 cursor-not-allowed' : 'bg-gray-200'
+              }`}
               value={form.contactNumber}
               onChange={(e) => setField('contactNumber', e.target.value)}
               onBlur={(e) => setField('contactNumber', e.target.value)}
+              readOnly={locks.contact}
+              aria-readonly={locks.contact}
+              title={
+                locks.contact ? "Auto-filled from user's profile" : undefined
+              }
             />
             {errors.contactNumber && (
               <p className="text-red-600 text-sm mt-1">
@@ -743,18 +846,62 @@ export default function BookingPage() {
             <button
               onClick={handleClear}
               type="button"
-              className="bg-gray-200 text-litratoblack px-4 py-2 hover:bg-gray-300 rounded"
+              className="bg-gray-200 text-litratoblack px-4 py-2 hover:bg-gray-300 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={submitting}
             >
               Clear
             </button>
             <button
               onClick={handleSubmit}
               type="button"
-              className="bg-litratoblack text-white px-4 py-2 hover:bg-black rounded"
+              className="bg-litratoblack text-white px-4 py-2 hover:bg-black rounded disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={submitting}
+              aria-busy={submitting}
             >
-              {editingRequestId ? 'Update' : 'Submit'}
+              {submitting
+                ? editingRequestId
+                  ? 'Updating…'
+                  : 'Submitting…'
+                : editingRequestId
+                ? 'Update'
+                : 'Submit'}
             </button>
           </div>
+          {showConfirmUpdate && (
+            <div
+              role="dialog"
+              aria-modal="true"
+              className="fixed inset-0 z-50 flex items-center justify-center"
+            >
+              <div
+                className="absolute inset-0 bg-black/40"
+                onClick={() => setShowConfirmUpdate(false)}
+              />
+              <div className="relative z-10 w-[95%] max-w-md rounded-lg bg-white p-4 shadow-lg">
+                <h3 className="text-lg font-semibold mb-2">Confirm update</h3>
+                <p className="text-sm text-gray-700 mb-4">
+                  You are about to update this booking. Proceed?
+                </p>
+                <div className="flex justify-end gap-2">
+                  <button
+                    type="button"
+                    className="px-4 py-2 rounded border border-gray-300 hover:bg-gray-100"
+                    onClick={() => setShowConfirmUpdate(false)}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    className="px-4 py-2 rounded bg-litratoblack text-white hover:bg-black disabled:opacity-50"
+                    onClick={() => void performSubmit()}
+                    disabled={submitting}
+                  >
+                    Proceed
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </MotionDiv>

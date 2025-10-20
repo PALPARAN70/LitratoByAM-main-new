@@ -76,6 +76,14 @@ router.patch(
   adminController.updateUserRole
 )
 
+// fetch a user by email (username) for admin auto-fill
+router.get(
+  '/user/by-email',
+  authMiddleware,
+  roleMiddleware('admin'),
+  adminController.fetchUserByEmail
+)
+
 // -------- inventory management routes -------- //
 //create inventory item
 router.post(

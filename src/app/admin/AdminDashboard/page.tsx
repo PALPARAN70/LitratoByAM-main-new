@@ -1,25 +1,25 @@
-"use client";
-import { useMemo, useState } from "react";
+'use client'
+import { useMemo, useState } from 'react'
 
 type Customer = {
-  id: string;
-  firstname: string;
-  lastname: string;
-  email: string;
-  contact: string;
-};
-type Package = { id: string; name: string; price: number; features: string[] };
+  id: string
+  firstname: string
+  lastname: string
+  email: string
+  contact: string
+}
+type Package = { id: string; name: string; price: number; features: string[] }
 type InventoryItem = {
-  id: string;
-  name: string;
-  quantity: number;
-  status: "in-stock" | "low" | "out";
-};
+  id: string
+  name: string
+  quantity: number
+  status: 'in-stock' | 'low' | 'out'
+}
 
-type TabKey = "customers" | "packages" | "inventory";
+type TabKey = 'customers' | 'packages' | 'inventory'
 
 export default function AdminDashboardPage() {
-  const [active, setActive] = useState<TabKey>("customers");
+  const [active, setActive] = useState<TabKey>('customers')
 
   return (
     <div className="p-4">
@@ -29,32 +29,32 @@ export default function AdminDashboardPage() {
 
       <nav className="flex gap-2 mb-6">
         <TabButton
-          active={active === "customers"}
-          onClick={() => setActive("customers")}
+          active={active === 'customers'}
+          onClick={() => setActive('customers')}
         >
           Customers
         </TabButton>
         <TabButton
-          active={active === "packages"}
-          onClick={() => setActive("packages")}
+          active={active === 'packages'}
+          onClick={() => setActive('packages')}
         >
           Packages
         </TabButton>
         <TabButton
-          active={active === "inventory"}
-          onClick={() => setActive("inventory")}
+          active={active === 'inventory'}
+          onClick={() => setActive('inventory')}
         >
           Inventory
         </TabButton>
       </nav>
 
       <section className="bg-white rounded-xl shadow p-4">
-        {active === "customers" && <CustomersPanel />}
-        {active === "packages" && <PackagesPanel />}
-        {active === "inventory" && <InventoryPanel />}
+        {active === 'customers' && <CustomersPanel />}
+        {active === 'packages' && <PackagesPanel />}
+        {active === 'inventory' && <InventoryPanel />}
       </section>
     </div>
-  );
+  )
 }
 
 function TabButton({
@@ -62,9 +62,9 @@ function TabButton({
   onClick,
   children,
 }: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
+  active: boolean
+  onClick: () => void
+  children: React.ReactNode
 }) {
   return (
     <div
@@ -72,72 +72,72 @@ function TabButton({
       className={`px-4 py-2 rounded-full cursor-pointer border font-semibold transition
         ${
           active
-            ? "bg-litratoblack text-white border-litratoblack"
-            : "bg-white text-litratoblack border-gray-300 hover:bg-gray-100"
+            ? 'bg-litratoblack text-white border-litratoblack'
+            : 'bg-white text-litratoblack border-gray-300 hover:bg-gray-100'
         }`}
     >
       {children}
     </div>
-  );
+  )
 }
 
 /* Customers */
 function CustomersPanel() {
   const [customers, setCustomers] = useState<Customer[]>([
     {
-      id: "c1",
-      firstname: "Juan",
-      lastname: "Dela Cruz",
-      email: "juan@example.com",
-      contact: "09123456789",
+      id: 'c1',
+      firstname: 'Juan',
+      lastname: 'Dela Cruz',
+      email: 'juan@example.com',
+      contact: '09123456789',
     },
-  ]);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [form, setForm] = useState<Omit<Customer, "id">>({
-    firstname: "",
-    lastname: "",
-    email: "",
-    contact: "",
-  });
+  ])
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [form, setForm] = useState<Omit<Customer, 'id'>>({
+    firstname: '',
+    lastname: '',
+    email: '',
+    contact: '',
+  })
 
   const startEdit = (c: Customer) => {
-    setEditingId(c.id);
+    setEditingId(c.id)
     setForm({
       firstname: c.firstname,
       lastname: c.lastname,
       email: c.email,
       contact: c.contact,
-    });
-  };
+    })
+  }
 
   const reset = () => {
-    setEditingId(null);
-    setForm({ firstname: "", lastname: "", email: "", contact: "" });
-  };
+    setEditingId(null)
+    setForm({ firstname: '', lastname: '', email: '', contact: '' })
+  }
 
   const save = () => {
-    if (!form.firstname || !form.lastname || !form.email) return;
+    if (!form.firstname || !form.lastname || !form.email) return
     if (editingId) {
       setCustomers((prev) =>
         prev.map((c) => (c.id === editingId ? { id: editingId, ...form } : c))
-      );
+      )
     } else {
-      setCustomers((prev) => [{ id: `c_${Date.now()}`, ...form }, ...prev]);
+      setCustomers((prev) => [{ id: `c_${Date.now()}`, ...form }, ...prev])
     }
-    reset();
-  };
+    reset()
+  }
 
   const remove = (id: string) => {
-    if (!confirm("Delete this customer?")) return;
-    setCustomers((prev) => prev.filter((c) => c.id !== id));
-    if (editingId === id) reset();
-  };
+    if (!confirm('Delete this customer?')) return
+    setCustomers((prev) => prev.filter((c) => c.id !== id))
+    if (editingId === id) reset()
+  }
 
   return (
     <div className="grid gap-6 md:grid-cols-2">
       <div>
         <h2 className="text-xl font-semibold mb-3">
-          {editingId ? "Edit Customer" : "Add Customer"}
+          {editingId ? 'Edit Customer' : 'Add Customer'}
         </h2>
         <div className="grid gap-3">
           <Input
@@ -230,48 +230,48 @@ function CustomersPanel() {
         </div>
       </div>
     </div>
-  );
+  )
 }
 
 /* Packages */
 function PackagesPanel() {
   const [packages, setPackages] = useState<Package[]>([
     {
-      id: "p1",
-      name: "The OG",
+      id: 'p1',
+      name: 'The OG',
       price: 8000,
-      features: ["2 hours", "Unlimited shots"],
+      features: ['2 hours', 'Unlimited shots'],
     },
-  ]);
-  const [name, setName] = useState("");
-  const [price, setPrice] = useState<number | "">("");
-  const [featureInput, setFeatureInput] = useState("");
-  const [features, setFeatures] = useState<string[]>([]);
+  ])
+  const [name, setName] = useState('')
+  const [price, setPrice] = useState<number | ''>('')
+  const [featureInput, setFeatureInput] = useState('')
+  const [features, setFeatures] = useState<string[]>([])
 
   const addFeature = () => {
-    const f = featureInput.trim();
-    if (!f) return;
-    setFeatures((prev) => [...prev, f]);
-    setFeatureInput("");
-  };
+    const f = featureInput.trim()
+    if (!f) return
+    setFeatures((prev) => [...prev, f])
+    setFeatureInput('')
+  }
   const removeFeature = (i: number) =>
-    setFeatures((prev) => prev.filter((_, idx) => idx !== i));
+    setFeatures((prev) => prev.filter((_, idx) => idx !== i))
 
   const create = () => {
-    if (!name || price === "" || Number(price) < 0) return;
+    if (!name || price === '' || Number(price) < 0) return
     setPackages((prev) => [
       { id: `p_${Date.now()}`, name, price: Number(price), features },
       ...prev,
-    ]);
-    setName("");
-    setPrice("");
-    setFeatures([]);
-  };
+    ])
+    setName('')
+    setPrice('')
+    setFeatures([])
+  }
 
   const del = (id: string) => {
-    if (!confirm("Delete this package?")) return;
-    setPackages((prev) => prev.filter((p) => p.id !== id));
-  };
+    if (!confirm('Delete this package?')) return
+    setPackages((prev) => prev.filter((p) => p.id !== id))
+  }
 
   return (
     <div className="grid gap-6 md:grid-cols-2">
@@ -283,7 +283,7 @@ function PackagesPanel() {
             label="Price (₱)"
             type="number"
             value={String(price)}
-            onChange={(v) => setPrice(v === "" ? "" : Number(v))}
+            onChange={(v) => setPrice(v === '' ? '' : Number(v))}
           />
           <div>
             <label className="block text-sm font-medium mb-1">Features</label>
@@ -342,7 +342,7 @@ function PackagesPanel() {
                   ₱{p.price.toLocaleString()}
                 </p>
                 <p className="text-sm text-gray-700 mt-1">
-                  Features: {p.features.join(", ") || "None"}
+                  Features: {p.features.join(', ') || 'None'}
                 </p>
               </div>
               <div className="flex gap-2">
@@ -361,36 +361,36 @@ function PackagesPanel() {
         </div>
       </div>
     </div>
-  );
+  )
 }
 
 /* Inventory */
 function InventoryPanel() {
   const [items, setItems] = useState<InventoryItem[]>([
     {
-      id: "i1",
-      name: "Vintage Camera",
+      id: 'i1',
+      name: 'Vintage Camera',
       quantity: 4,
-      status: "in-stock",
+      status: 'in-stock',
     },
     {
-      id: "i2",
-      name: "Film Pack",
+      id: 'i2',
+      name: 'Film Pack',
       quantity: 1,
-      status: "low",
+      status: 'low',
     },
-  ]);
+  ])
   const [form, setForm] = useState<{ name: string; quantity: number }>({
-    name: "",
+    name: '',
     quantity: 0,
-  });
+  })
 
-  const statusOf = (q: number): InventoryItem["status"] =>
-    q <= 0 ? "out" : q <= 2 ? "low" : "in-stock";
+  const statusOf = (q: number): InventoryItem['status'] =>
+    q <= 0 ? 'out' : q <= 2 ? 'low' : 'in-stock'
 
   const add = () => {
-    if (!form.name) return;
-    const q = Number(form.quantity) || 0;
+    if (!form.name) return
+    const q = Number(form.quantity) || 0
     setItems((prev) => [
       {
         id: `i_${Date.now()}`,
@@ -399,9 +399,9 @@ function InventoryPanel() {
         status: statusOf(q),
       },
       ...prev,
-    ]);
-    setForm({ name: "", quantity: 0 });
-  };
+    ])
+    setForm({ name: '', quantity: 0 })
+  }
 
   const adjust = (id: string, delta: number) => {
     setItems((prev) =>
@@ -414,23 +414,23 @@ function InventoryPanel() {
             }
           : it
       )
-    );
-  };
+    )
+  }
 
   const remove = (id: string) => {
-    if (!confirm("Delete this item?")) return;
-    setItems((prev) => prev.filter((i) => i.id !== id));
-  };
+    if (!confirm('Delete this item?')) return
+    setItems((prev) => prev.filter((i) => i.id !== id))
+  }
 
   const totals = useMemo(
     () => ({
       count: items.length,
       qty: items.reduce((s, i) => s + i.quantity, 0),
-      low: items.filter((i) => i.status === "low").length,
-      out: items.filter((i) => i.status === "out").length,
+      low: items.filter((i) => i.status === 'low').length,
+      out: items.filter((i) => i.status === 'out').length,
     }),
     [items]
-  );
+  )
 
   return (
     <div className="grid gap-6">
@@ -482,11 +482,11 @@ function InventoryPanel() {
                     Qty: {it.quantity} •
                     <span
                       className={`ml-2 px-2 py-0.5 rounded-full text-xs ${
-                        it.status === "in-stock"
-                          ? "bg-green-100 text-green-700"
-                          : it.status === "low"
-                          ? "bg-yellow-100 text-yellow-700"
-                          : "bg-red-100 text-red-700"
+                        it.status === 'in-stock'
+                          ? 'bg-green-100 text-green-700'
+                          : it.status === 'low'
+                          ? 'bg-yellow-100 text-yellow-700'
+                          : 'bg-red-100 text-red-700'
                       }`}
                     >
                       {it.status}
@@ -522,7 +522,7 @@ function InventoryPanel() {
         </div>
       </div>
     </div>
-  );
+  )
 }
 
 /* UI helpers */
@@ -530,12 +530,12 @@ function Input({
   label,
   value,
   onChange,
-  type = "text",
+  type = 'text',
 }: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  type?: string;
+  label: string
+  value: string
+  onChange: (v: string) => void
+  type?: string
 }) {
   return (
     <label className="block">
@@ -547,24 +547,24 @@ function Input({
         className="w-full border rounded-lg px-3 py-2 outline-none "
       />
     </label>
-  );
+  )
 }
 
 function Th({
   children,
-  className = "",
+  className = '',
 }: {
-  children: React.ReactNode;
-  className?: string;
+  children: React.ReactNode
+  className?: string
 }) {
   return (
     <th className={`px-3 py-2 text-sm font-semibold ${className}`}>
       {children}
     </th>
-  );
+  )
 }
 function Td({ children }: { children: React.ReactNode }) {
-  return <td className="px-3 py-2 text-sm">{children}</td>;
+  return <td className="px-3 py-2 text-sm">{children}</td>
 }
 function Stat({ label, value }: { label: string; value: number }) {
   return (
@@ -572,5 +572,5 @@ function Stat({ label, value }: { label: string; value: number }) {
       <p className="text-sm text-gray-500">{label}</p>
       <p className="text-xl font-bold">{value}</p>
     </div>
-  );
+  )
 }
