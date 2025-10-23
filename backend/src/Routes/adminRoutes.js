@@ -82,20 +82,12 @@ router.get(
   adminPaymentsController.listPayments
 )
 
-// Get single payment
+// Sales report PDF (placed before dynamic :id routes to avoid collision)
 router.get(
-  '/payments/:id',
+  '/payments/report',
   authMiddleware,
   roleMiddleware('admin'),
-  adminPaymentsController.getPayment
-)
-
-// Update payment (status, notes, verified_at, qr_image_url, proof_image_url, reference_no)
-router.patch(
-  '/payments/:id',
-  authMiddleware,
-  roleMiddleware('admin'),
-  adminPaymentsController.updatePayment
+  adminPaymentsController.generateSalesReport
 )
 
 // Payment logs
@@ -114,12 +106,20 @@ router.patch(
   adminPaymentsController.updatePaymentLog
 )
 
-// Sales report PDF
+// Get single payment
 router.get(
-  '/payments/report',
+  '/payments/:id',
   authMiddleware,
   roleMiddleware('admin'),
-  adminPaymentsController.generateSalesReport
+  adminPaymentsController.getPayment
+)
+
+// Update payment (status, notes, verified_at, qr_image_url, proof_image_url, reference_no)
+router.patch(
+  '/payments/:id',
+  authMiddleware,
+  roleMiddleware('admin'),
+  adminPaymentsController.updatePayment
 )
 
 // Admin-only: create user (role limited to customer or employee)
