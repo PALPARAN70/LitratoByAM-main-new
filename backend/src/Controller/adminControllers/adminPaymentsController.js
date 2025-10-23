@@ -32,6 +32,9 @@ async function listPaymentsHandler(req, res) {
 async function getPaymentHandler(req, res) {
   try {
     const id = Number(req.params.id)
+    if (!Number.isInteger(id) || id <= 0) {
+      return res.status(400).json({ error: 'Invalid payment id' })
+    }
     const row = await findPaymentById(id)
     if (!row) return res.status(404).json({ error: 'Payment not found' })
     res.json({ payment: row })
@@ -45,6 +48,9 @@ async function getPaymentHandler(req, res) {
 async function updatePaymentHandler(req, res) {
   try {
     const id = Number(req.params.id)
+    if (!Number.isInteger(id) || id <= 0) {
+      return res.status(400).json({ error: 'Invalid payment id' })
+    }
     const prev = await findPaymentById(id)
     if (!prev) return res.status(404).json({ error: 'Payment not found' })
 

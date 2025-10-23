@@ -1,5 +1,17 @@
 'use client'
 import React, { useEffect, useMemo, useState } from 'react'
+import {
+  getLatestPaymentQR,
+  getAuthHeadersInit,
+} from '../../../../schemas/functions/Payment/createPayment'
+import {
+  listAdminPayments,
+  updateAdminPayment,
+  uploadAdminPaymentQR,
+  listAdminPaymentLogs,
+  updateAdminPaymentLog,
+  type PaymentLog,
+} from '../../../../schemas/functions/Payment/adminPayments'
 
 type Payment = {
   payment_id: number
@@ -25,44 +37,56 @@ export default function AdminPaymentsPage() {
   const [qrUrl, setQrUrl] = useState<string | null>(null)
   const [qrFile, setQrFile] = useState<File | null>(null)
   const [qrUploading, setQrUploading] = useState(false)
+  const [openLogsForId, setOpenLogsForId] = useState<number | null>(null)
+  const [logsByPayment, setLogsByPayment] = useState<
+    Record<number, PaymentLog[]>
+  >({})
+  const [logsLoading, setLogsLoading] = useState(false)
+  const [logEdits, setLogEdits] = useState<
+    Record<number, { additional_notes?: string | null; notes?: string | null }>
+  >({})
 
   const API_ORIGIN =
     process.env.NEXT_PUBLIC_API_ORIGIN ?? 'http://localhost:5000'
   const API_BASE = `${API_ORIGIN}/api`
 
-  const getCookie = (name: string) =>
-    typeof document === 'undefined'
-      ? ''
-      : document.cookie
-          .split('; ')
-          .find((r) => r.startsWith(name + '='))
-          ?.split('=')[1] || ''
-  const getAuthHeaderString = () => {
-    const raw =
-      (typeof window !== 'undefined' && localStorage.getItem('access_token')) ||
-      getCookie('access_token')
-    if (!raw) return ''
-    return raw.startsWith('Bearer ') ? raw : `Bearer ${raw}`
+  const printSalesReport = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/admin/payments/report`, {
+        headers: {
+          ...getAuthHeadersInit(),
+        },
+      })
+      if (res.status === 501) {
+        const msg = await res.text().catch(() => '')
+        alert(
+          msg ||
+            'PDF generator not installed on server. Please install pdfkit in backend.'
+        )
+        return
+      }
+      if (!res.ok) throw new Error(await res.text())
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const w = window.open(url, '_blank')
+      setTimeout(() => {
+        try {
+          w?.print?.()
+        } catch {}
+      }, 500)
+    } catch (e) {
+      console.error('Generate sales report failed:', e)
+      alert('Failed to generate sales report. See console for details.')
+    }
   }
-  const getAuthHeadersInit = (): HeadersInit => {
-    const auth = getAuthHeaderString()
-    const h: Record<string, string> = {}
-    if (auth) h['Authorization'] = auth
-    return h
-  }
+
+  // API calls handled via adminPayments helper
 
   const load = async () => {
     setLoading(true)
     try {
-      const res = await fetch(`${API_BASE}/admin/payments`, {
-        headers: {
-          'Content-Type': 'application/json',
-          ...getAuthHeadersInit(),
-        },
-      })
-      if (!res.ok) throw new Error(await res.text())
-      const data = await res.json()
-      setPayments((data.payments ?? []) as Payment[])
+      const rows = await listAdminPayments()
+      setPayments(rows)
     } catch (e) {
       console.error('Load payments failed:', e)
     } finally {
@@ -75,11 +99,9 @@ export default function AdminPaymentsPage() {
     // Load current QR
     const loadQR = async () => {
       try {
-        const res = await fetch(`${API_BASE}/customer/payment-qr`)
-        if (!res.ok) return setQrUrl(null)
-        const data = await res.json()
-        setQrUrl((data && data.url) || null)
-      } catch (e) {
+        const url = await getLatestPaymentQR()
+        setQrUrl(url)
+      } catch {
         setQrUrl(null)
       }
     }
@@ -104,15 +126,7 @@ export default function AdminPaymentsPage() {
     const body = edit[id]
     if (!body) return
     try {
-      const res = await fetch(`${API_BASE}/admin/payments/${id}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          ...getAuthHeadersInit(),
-        },
-        body: JSON.stringify(body),
-      })
-      if (!res.ok) throw new Error(await res.text())
+      await updateAdminPayment(id, body)
       setEdit((e) => ({ ...e, [id]: {} }))
       await load()
     } catch (e) {
@@ -120,10 +134,67 @@ export default function AdminPaymentsPage() {
     }
   }
 
+  const toggleLogs = async (paymentId: number) => {
+    if (openLogsForId === paymentId) {
+      setOpenLogsForId(null)
+      return
+    }
+    setOpenLogsForId(paymentId)
+    if (!logsByPayment[paymentId]) {
+      setLogsLoading(true)
+      try {
+        const rows = await listAdminPaymentLogs(paymentId)
+        setLogsByPayment((m) => ({ ...m, [paymentId]: rows }))
+        // prime edits map with existing values
+        const nextEdits: Record<
+          number,
+          { additional_notes?: string | null; notes?: string | null }
+        > = {}
+        rows.forEach((lg) => {
+          nextEdits[lg.log_id] = {
+            additional_notes: lg.additional_notes ?? '',
+          }
+        })
+        setLogEdits((s) => ({ ...s, ...nextEdits }))
+      } catch (e) {
+        console.error('Load payment logs failed:', e)
+      } finally {
+        setLogsLoading(false)
+      }
+    }
+  }
+
+  const saveLog = async (log: PaymentLog) => {
+    const body = logEdits[log.log_id]
+    if (!body) return
+    try {
+      const updated = await updateAdminPaymentLog(log.log_id, body)
+      // update local cache
+      if (openLogsForId) {
+        setLogsByPayment((m) => ({
+          ...m,
+          [openLogsForId]: (m[openLogsForId] || []).map((l) =>
+            l.log_id === log.log_id ? updated : l
+          ),
+        }))
+      }
+    } catch (e) {
+      console.error('Update payment log failed:', e)
+    }
+  }
+
   return (
     <div className="h-screen flex flex-col p-4 min-h-0">
       <header className="flex items-center justify-between mb-4">
         <h1 className="text-2xl font-bold">Payments</h1>
+        <div className="flex items-center gap-2">
+          <button
+            className="px-3 py-2 rounded bg-litratoblack text-white"
+            onClick={printSalesReport}
+          >
+            Sales Report (PDF)
+          </button>
+        </div>
       </header>
 
       {/* Top bar with search (mirrors Inventory style) */}
@@ -156,7 +227,7 @@ export default function AdminPaymentsPage() {
               <div className="text-sm text-gray-600">Current</div>
               {qrUrl ? (
                 <img
-                  src={qrUrl}
+                  src={qrUrl || undefined}
                   alt="Current QR"
                   className="border rounded max-h-40 w-auto"
                 />
@@ -177,21 +248,8 @@ export default function AdminPaymentsPage() {
                   if (!qrFile) return
                   setQrUploading(true)
                   try {
-                    const fd = new FormData()
-                    fd.append('image', qrFile)
-                    const res = await fetch(
-                      `${API_BASE}/admin/payment-qr-image`,
-                      {
-                        method: 'POST',
-                        headers: {
-                          ...getAuthHeadersInit(),
-                        },
-                        body: fd,
-                      }
-                    )
-                    if (!res.ok) throw new Error(await res.text())
-                    const data = await res.json()
-                    setQrUrl(data.url || null)
+                    const { url } = await uploadAdminPaymentQR(qrFile)
+                    setQrUrl(url || null)
                     setQrFile(null)
                   } catch (e) {
                     console.error('QR upload failed:', e)
@@ -242,98 +300,187 @@ export default function AdminPaymentsPage() {
                 </thead>
                 <tbody>
                   {filtered.map((p) => (
-                    <tr
-                      key={p.payment_id}
-                      className="text-left bg-gray-100 even:bg-gray-50 align-top"
-                    >
-                      <td className="px-3 py-2 whitespace-nowrap">
-                        {p.payment_id}
-                      </td>
-                      <td className="px-3 py-2 whitespace-nowrap">
-                        {p.booking_id}
-                      </td>
-                      <td className="px-3 py-2 whitespace-nowrap">
-                        {p.user_id}
-                      </td>
-                      <td className="px-3 py-2 whitespace-nowrap">
-                        {Number(p.amount).toFixed(2)}
-                      </td>
-                      <td className="px-3 py-2 whitespace-nowrap">
-                        <input
-                          className="border rounded px-2 py-1 w-24"
-                          type="number"
-                          defaultValue={p.amount_paid}
-                          onChange={(e) =>
-                            setEdit((s) => ({
-                              ...s,
-                              [p.payment_id]: {
-                                ...s[p.payment_id],
-                                amount_paid: Number(e.target.value),
-                              },
-                            }))
-                          }
-                        />
-                      </td>
-                      <td className="px-3 py-2 whitespace-nowrap">
-                        {p.reference_no || ''}
-                      </td>
-                      <td className="px-3 py-2 whitespace-nowrap">
-                        <select
-                          defaultValue={p.payment_status}
-                          className="border rounded px-2 py-1"
-                          onChange={(e) =>
-                            setEdit((s) => ({
-                              ...s,
-                              [p.payment_id]: {
-                                ...s[p.payment_id],
-                                payment_status: e.target.value,
-                              },
-                            }))
-                          }
-                        >
-                          <option value="pending">pending</option>
-                          <option value="completed">completed</option>
-                          <option value="failed">failed</option>
-                          <option value="refunded">refunded</option>
-                        </select>
-                      </td>
-                      <td className="px-3 py-2">
-                        <textarea
-                          className="border rounded px-2 py-1 w-64 h-16"
-                          defaultValue={p.notes || ''}
-                          onChange={(e) =>
-                            setEdit((s) => ({
-                              ...s,
-                              [p.payment_id]: {
-                                ...s[p.payment_id],
-                                notes: e.target.value,
-                              },
-                            }))
-                          }
-                        />
-                      </td>
-                      <td className="px-3 py-2 whitespace-nowrap">
-                        {p.proof_image_url ? (
-                          <a
-                            href={p.proof_image_url}
-                            target="_blank"
-                            className="text-blue-600 underline"
+                    <React.Fragment key={p.payment_id}>
+                      <tr className="text-left bg-gray-100 even:bg-gray-50 align-top">
+                        <td className="px-3 py-2 whitespace-nowrap">
+                          {p.payment_id}
+                        </td>
+                        <td className="px-3 py-2 whitespace-nowrap">
+                          {p.booking_id}
+                        </td>
+                        <td className="px-3 py-2 whitespace-nowrap">
+                          {p.user_id}
+                        </td>
+                        <td className="px-3 py-2 whitespace-nowrap">
+                          {Number(p.amount).toFixed(2)}
+                        </td>
+                        <td className="px-3 py-2 whitespace-nowrap">
+                          <input
+                            className="border rounded px-2 py-1 w-24"
+                            type="number"
+                            defaultValue={p.amount_paid}
+                            onChange={(e) =>
+                              setEdit((s) => ({
+                                ...s,
+                                [p.payment_id]: {
+                                  ...s[p.payment_id],
+                                  amount_paid: Number(e.target.value),
+                                },
+                              }))
+                            }
+                          />
+                        </td>
+                        <td className="px-3 py-2 whitespace-nowrap">
+                          {p.reference_no || ''}
+                        </td>
+                        <td className="px-3 py-2 whitespace-nowrap">
+                          <select
+                            defaultValue={p.payment_status}
+                            className="border rounded px-2 py-1"
+                            onChange={(e) =>
+                              setEdit((s) => ({
+                                ...s,
+                                [p.payment_id]: {
+                                  ...s[p.payment_id],
+                                  payment_status: e.target.value,
+                                },
+                              }))
+                            }
                           >
-                            View
-                          </a>
-                        ) : (
-                          <span className="text-gray-500">—</span>
-                        )}
-                      </td>
-                      <td className="px-3 py-2 whitespace-nowrap">
-                        <button
-                          className="px-3 py-1 rounded bg-litratoblack text-white"
-                          onClick={() => save(p.payment_id)}
-                        >
-                          Save
-                        </button>
-                      </td>
-                    </tr>
+                            <option value="pending">pending</option>
+                            <option value="completed">completed</option>
+                            <option value="failed">failed</option>
+                            <option value="refunded">refunded</option>
+                          </select>
+                        </td>
+                        <td className="px-3 py-2">
+                          <textarea
+                            className="border rounded px-2 py-1 w-64 h-16"
+                            defaultValue={p.notes || ''}
+                            onChange={(e) =>
+                              setEdit((s) => ({
+                                ...s,
+                                [p.payment_id]: {
+                                  ...s[p.payment_id],
+                                  notes: e.target.value,
+                                },
+                              }))
+                            }
+                          />
+                        </td>
+                        <td className="px-3 py-2 whitespace-nowrap">
+                          {p.proof_image_url ? (
+                            <a
+                              href={p.proof_image_url}
+                              target="_blank"
+                              className="text-blue-600 underline"
+                            >
+                              View
+                            </a>
+                          ) : (
+                            <span className="text-gray-500">—</span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2 whitespace-nowrap">
+                          <button
+                            className="px-3 py-1 rounded bg-litratoblack text-white"
+                            onClick={() => save(p.payment_id)}
+                          >
+                            Save
+                          </button>
+                          <button
+                            className="ml-2 px-3 py-1 rounded border"
+                            onClick={() => toggleLogs(p.payment_id)}
+                          >
+                            {openLogsForId === p.payment_id
+                              ? 'Hide Logs'
+                              : 'Logs'}
+                          </button>
+                        </td>
+                      </tr>
+                      {openLogsForId === p.payment_id && (
+                        <tr>
+                          <td colSpan={10} className="px-3 py-2 bg-white">
+                            {logsLoading && !logsByPayment[p.payment_id] ? (
+                              <div className="text-sm text-gray-600">
+                                Loading logs...
+                              </div>
+                            ) : (
+                              <div className="space-y-3">
+                                <div className="text-sm font-medium">
+                                  Payment Logs
+                                </div>
+                                {!(logsByPayment[p.payment_id] || []).length ? (
+                                  <div className="text-sm text-gray-600">
+                                    No logs yet.
+                                  </div>
+                                ) : (
+                                  <div className="space-y-2">
+                                    {(logsByPayment[p.payment_id] || []).map(
+                                      (lg) => (
+                                        <div
+                                          key={lg.log_id}
+                                          className="border rounded p-2"
+                                        >
+                                          <div className="text-xs text-gray-600 mb-1">
+                                            {new Date(
+                                              lg.created_at
+                                            ).toLocaleString()}{' '}
+                                            • {lg.performed_by} • {lg.action}
+                                          </div>
+                                          <div className="text-sm mb-1">
+                                            Status:{' '}
+                                            <span className="font-medium">
+                                              {lg.previous_status}
+                                            </span>{' '}
+                                            →{' '}
+                                            <span className="font-medium">
+                                              {lg.new_status}
+                                            </span>
+                                          </div>
+                                          <div className="text-sm mb-2">
+                                            Notes:{' '}
+                                            <span className="text-gray-700">
+                                              {lg.notes || '—'}
+                                            </span>
+                                          </div>
+                                          <div className="flex items-start gap-2">
+                                            <textarea
+                                              className="border rounded px-2 py-1 w-full h-16"
+                                              placeholder="Additional notes (admin only)"
+                                              value={
+                                                logEdits[lg.log_id]
+                                                  ?.additional_notes ?? ''
+                                              }
+                                              onChange={(e) =>
+                                                setLogEdits((s) => ({
+                                                  ...s,
+                                                  [lg.log_id]: {
+                                                    ...s[lg.log_id],
+                                                    additional_notes:
+                                                      e.target.value,
+                                                  },
+                                                }))
+                                              }
+                                            />
+                                            <button
+                                              className="px-3 py-1 rounded bg-litratoblack text-white whitespace-nowrap"
+                                              onClick={() => saveLog(lg)}
+                                            >
+                                              Update
+                                            </button>
+                                          </div>
+                                        </div>
+                                      )
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
                   ))}
                 </tbody>
               </table>
