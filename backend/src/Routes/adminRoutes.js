@@ -14,8 +14,10 @@ const router = express.Router()
 const ASSETS_DIR = path.resolve(__dirname, '..', '..', 'Assets')
 const PKG_DIR = path.join(ASSETS_DIR, 'Packages')
 const GRIDS_DIR = path.join(ASSETS_DIR, 'Grids')
+const PAYMENTS_QR_DIR = path.join(ASSETS_DIR, 'Payments', 'QR')
 fs.mkdirSync(PKG_DIR, { recursive: true })
 fs.mkdirSync(GRIDS_DIR, { recursive: true })
+fs.mkdirSync(PAYMENTS_QR_DIR, { recursive: true })
 
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => cb(null, PKG_DIR),
@@ -35,6 +37,16 @@ const storageGrids = multer.diskStorage({
   },
 })
 const uploadGrids = multer({ storage: storageGrids })
+
+// storage for Payment QR images
+const storagePaymentQR = multer.diskStorage({
+  destination: (_req, _file, cb) => cb(null, PAYMENTS_QR_DIR),
+  filename: (_req, file, cb) => {
+    const safe = file.originalname.replace(/[^a-z0-9._-]/gi, '_').toLowerCase()
+    cb(null, `${Date.now()}_${safe}`)
+  },
+})
+const uploadPaymentQR = multer({ storage: storagePaymentQR })
 // -------- user management routes -------- //
 // List users by role (?role=customer|employee|admin)
 router.get(
@@ -42,6 +54,72 @@ router.get(
   authMiddleware,
   roleMiddleware('admin'),
   adminController.listUsers
+)
+
+// ---- Payments (admin) ----
+const adminPaymentsController = require('../Controller/adminControllers/adminPaymentsController')
+
+// Upload QR image for payments (e.g., GCash QR)
+router.post(
+  '/payment-qr-image',
+  authMiddleware,
+  roleMiddleware('admin'),
+  uploadPaymentQR.single('image'),
+  (req, res) => {
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' })
+    const url = `${req.protocol}://${req.get(
+      'host'
+    )}/assets/Payments/QR/${path.basename(req.file.path)}`
+    res.json({ url })
+  }
+)
+
+// List payments (filterable)
+router.get(
+  '/payments',
+  authMiddleware,
+  roleMiddleware('admin'),
+  adminPaymentsController.listPayments
+)
+
+// Get single payment
+router.get(
+  '/payments/:id',
+  authMiddleware,
+  roleMiddleware('admin'),
+  adminPaymentsController.getPayment
+)
+
+// Update payment (status, notes, verified_at, qr_image_url, proof_image_url, reference_no)
+router.patch(
+  '/payments/:id',
+  authMiddleware,
+  roleMiddleware('admin'),
+  adminPaymentsController.updatePayment
+)
+
+// Payment logs
+router.get(
+  '/payment-logs',
+  authMiddleware,
+  roleMiddleware('admin'),
+  adminPaymentsController.listPaymentLogs
+)
+
+// Update a specific payment log (e.g., additional_notes)
+router.patch(
+  '/payment-logs/:log_id',
+  authMiddleware,
+  roleMiddleware('admin'),
+  adminPaymentsController.updatePaymentLog
+)
+
+// Sales report PDF
+router.get(
+  '/payments/report',
+  authMiddleware,
+  roleMiddleware('admin'),
+  adminPaymentsController.generateSalesReport
 )
 
 // Admin-only: create user (role limited to customer or employee)
