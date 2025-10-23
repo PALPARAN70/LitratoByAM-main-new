@@ -18,6 +18,8 @@ const { initGridsTable } = require('./src/Model/gridModel')
 const {
   initConfirmedBookingTable,
 } = require('./src/Model/confirmedBookingRequestModel')
+const { initPaymentsTable } = require('./src/Model/paymentModel')
+const { initPaymentLogsTable } = require('./src/Model/paymentLogsModel')
 
 const ROOT = path.resolve(__dirname, '..') // points to backend/
 const UPLOAD_ROOT = path.join(ROOT, 'Assets')
@@ -70,6 +72,8 @@ initUserTable()
   .then(() => initBookingRequestTable())
   .then(() => initBookingGridsTable())
   .then(() => initConfirmedBookingTable())
+  .then(() => initPaymentsTable())
+  .then(() => initPaymentLogsTable())
   .then(() => {
     app.listen(PORT, () => console.log(`Server running on port ${PORT}`))
   })
