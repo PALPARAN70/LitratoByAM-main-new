@@ -3,15 +3,13 @@ import { useState, useCallback, useEffect } from "react";
 import type { KeyboardEvent } from "react";
 import Image from "next/image";
 import { HiMenu } from "react-icons/hi";
-
-import { MdOutlineInventory2 } from "react-icons/md";
 import {
   FiGrid,
   FiCalendar,
-  FiSettings,
+  FiRefreshCcw,
   FiUser,
   FiLogOut,
-  FiCreditCard,
+  FiClipboard,
 } from "react-icons/fi";
 import type { IconType } from "react-icons";
 import { useRouter, usePathname } from "next/navigation";
@@ -32,22 +30,9 @@ type SidebarProps = {
 // Define NavItem type and hoist static items for stability
 type NavItem = { label: string; Icon: IconType; path: string };
 const NAV_ITEMS: NavItem[] = [
-  { label: "Dashboard", Icon: FiGrid, path: "/admin/AdminDashboard" },
-
-  {
-    label: "Manage Inventory",
-    Icon: MdOutlineInventory2,
-    path: "/admin/InventoryManagement",
-  },
-
-  {
-    label: "Manage Bookings",
-    Icon: FiSettings,
-    path: "/admin/ManageBooking",
-  },
-  { label: "Booking", Icon: FiCalendar, path: "/admin/createBooking" },
-  { label: "Manage Users", Icon: FiUser, path: "/admin/AccountManager" },
-  { label: "Payments", Icon: FiCreditCard, path: "/admin/Payments" },
+  { label: "Dashboard", Icon: FiGrid, path: "/staff/staffdashboard" },
+  { label: "Event Logs", Icon: FiCalendar, path: "/staff/eventlogs" },
+  { label: "Staff Logs", Icon: FiClipboard, path: "/staff/stafflogs" },
 ];
 
 export default function LitratoSidebar({
@@ -78,7 +63,7 @@ export default function LitratoSidebar({
     [router, pathname]
   );
   const handleProfileCheck = () => {
-    router.push("/admin/Profile");
+    router.push("/customer/accountmanager");
   };
   const getNavKeyDown = useCallback(
     (path: string) => (e: KeyboardEvent<HTMLDivElement>) => {
