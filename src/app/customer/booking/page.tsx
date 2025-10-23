@@ -1,332 +1,333 @@
-'use client'
-import Image from 'next/image'
-import PromoCard from '../../../../Litratocomponents/Service_Card'
-import Calendar from '../../../../Litratocomponents/LitratoCalendar'
-import Timepicker from '../../../../Litratocomponents/Timepicker'
-import { useState, useEffect, useRef } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
-import { toast } from 'sonner'
-import MotionDiv from '../../../../Litratocomponents/MotionDiv'
+"use client";
+import Image from "next/image";
+import PromoCard from "../../../../Litratocomponents/Service_Card";
+import Calendar from "../../../../Litratocomponents/LitratoCalendar";
+import Timepicker from "../../../../Litratocomponents/Timepicker";
+import { useState, useEffect, useRef } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { toast } from "sonner";
+import MotionDiv from "../../../../Litratocomponents/MotionDiv";
 // Grids now loaded dynamically from backend
 import loadGridsPublic, {
   type PublicGrid,
-} from '../../../../schemas/functions/BookingRequest/loadGridsPublic'
+} from "../../../../schemas/functions/BookingRequest/loadGridsPublic";
 import {
   bookingFormSchema,
   type BookingForm,
-} from '../../../../schemas/schema/requestvalidation'
-import { createBookingRequest } from '../../../../schemas/functions/BookingRequest/createBookingRequest'
+} from "../../../../schemas/schema/requestvalidation";
+import { createBookingRequest } from "../../../../schemas/functions/BookingRequest/createBookingRequest";
 import {
   loadAndPrefill,
   submitUpdate,
-} from '../../../../schemas/functions/BookingRequest/updateBookingRequest'
+} from "../../../../schemas/functions/BookingRequest/updateBookingRequest";
 import {
   loadPackages,
   type PackageDto,
-} from '../../../../schemas/functions/BookingRequest/loadPackages'
+} from "../../../../schemas/functions/BookingRequest/loadPackages";
 
 const API_BASE =
-  (process.env.NEXT_PUBLIC_API_BASE?.replace(/\/$/, '') ||
-    'http://localhost:5000') + '/api/auth/getProfile'
+  (process.env.NEXT_PUBLIC_API_BASE?.replace(/\/$/, "") ||
+    "http://localhost:5000") + "/api/auth/getProfile";
 
 export default function BookingPage() {
-  const router = useRouter()
-  const searchParams = useSearchParams()
+  const router = useRouter();
+  const searchParams = useSearchParams();
   // Prefer ?requestid=, but keep backward-compat with ?id=
-  const requestIdParam = searchParams.get('requestid') || searchParams.get('id')
-  const isUpdate = !!requestIdParam
+  const requestIdParam =
+    searchParams.get("requestid") || searchParams.get("id");
+  const isUpdate = !!requestIdParam;
 
-  const [isEditable, setIsEditable] = useState(false)
-  const [submitting, setSubmitting] = useState(false)
+  const [isEditable, setIsEditable] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [personalForm, setPersonalForm] = useState({
-    Firstname: '',
-    Lastname: '',
-  })
+    Firstname: "",
+    Lastname: "",
+  });
 
   const [profile, setProfile] = useState<{
-    username: string
-    email: string
-    role: string
-    url?: string
-    firstname?: string
-    lastname?: string
-  } | null>(null)
-  const [packages, setPackages] = useState<PackageDto[]>([])
-  const [grids, setGrids] = useState<PublicGrid[]>([])
+    username: string;
+    email: string;
+    role: string;
+    url?: string;
+    firstname?: string;
+    lastname?: string;
+  } | null>(null);
+  const [packages, setPackages] = useState<PackageDto[]>([]);
+  const [grids, setGrids] = useState<PublicGrid[]>([]);
   const [selectedPackageId, setSelectedPackageId] = useState<number | null>(
     null
-  )
-  const [timepickerReady, setTimepickerReady] = useState(false)
-  const didPrefillRef = useRef(false)
+  );
+  const [timepickerReady, setTimepickerReady] = useState(false);
+  const didPrefillRef = useRef(false);
   const [currentStatus, setCurrentStatus] = useState<
-    'Approved' | 'Declined' | 'Pending' | 'Cancelled' | null
-  >(null)
-  const [showScheduleConfirm, setShowScheduleConfirm] = useState(false)
+    "Approved" | "Declined" | "Pending" | "Cancelled" | null
+  >(null);
+  const [showScheduleConfirm, setShowScheduleConfirm] = useState(false);
   const [pendingScheduleChange, setPendingScheduleChange] = useState<{
-    eventDate?: Date
-    eventTime?: string
-    eventEndTime?: string
-  } | null>(null)
+    eventDate?: Date;
+    eventTime?: string;
+    eventEndTime?: string;
+  } | null>(null);
 
   // Moved UP: booking form state before useEffects
   const initialForm: BookingForm = {
-    email: '',
-    completeName: '',
-    contactNumber: '',
+    email: "",
+    completeName: "",
+    contactNumber: "",
     // New split fields; keep legacy combined empty for compatibility
-    contactPersonName: '',
-    contactPersonNumber: '',
-    contactPersonAndNumber: '',
-    eventName: '',
-    eventLocation: '',
+    contactPersonName: "",
+    contactPersonNumber: "",
+    contactPersonAndNumber: "",
+    eventName: "",
+    eventLocation: "",
     extensionHours: 0,
-    boothPlacement: 'Indoor',
-    signal: '',
-    package: 'The Hanz',
+    boothPlacement: "Indoor",
+    signal: "",
+    package: "The Hanz",
     selectedGrids: [],
     eventDate: new Date(),
-    eventTime: '12:00',
-    eventEndTime: '14:00',
-  }
-  const [form, setForm] = useState<BookingForm>(initialForm)
+    eventTime: "12:00",
+    eventEndTime: "14:00",
+  };
+  const [form, setForm] = useState<BookingForm>(initialForm);
   const [errors, setErrors] = useState<
     Partial<Record<keyof BookingForm, string>>
-  >({})
+  >({});
 
   // Type guard for package name coming from API
-  type PkgName = BookingForm['package']
+  type PkgName = BookingForm["package"];
   const KNOWN_PKG_NAMES: readonly PkgName[] = [
-    'The Hanz',
-    'The Corrupt',
-    'The AI',
-    'The OG',
-  ] as const
+    "The Hanz",
+    "The Corrupt",
+    "The AI",
+    "The OG",
+  ] as const;
   const isPkgName = (v: string): v is PkgName =>
-    (KNOWN_PKG_NAMES as readonly string[]).includes(v)
+    (KNOWN_PKG_NAMES as readonly string[]).includes(v);
 
   // Helper to update fields + live-validate
   const setField = <K extends keyof BookingForm>(
     key: K,
     value: BookingForm[K]
   ) => {
-    setForm((prev) => ({ ...prev, [key]: value }))
+    setForm((prev) => ({ ...prev, [key]: value }));
     if (
       [
-        'email',
-        'contactNumber',
-        'contactPersonName',
-        'contactPersonNumber',
-        'eventTime',
-        'eventEndTime',
-        'extensionHours',
+        "email",
+        "contactNumber",
+        "contactPersonName",
+        "contactPersonNumber",
+        "eventTime",
+        "eventEndTime",
+        "extensionHours",
       ].includes(key as string)
     ) {
-      const parsed = bookingFormSchema.safeParse({ ...form, [key]: value })
+      const parsed = bookingFormSchema.safeParse({ ...form, [key]: value });
       const fieldIssues = parsed.success
         ? []
-        : parsed.error.issues.filter((i) => i.path[0] === key)
-      setErrors((e) => ({ ...e, [key]: fieldIssues[0]?.message }))
+        : parsed.error.issues.filter((i) => i.path[0] === key);
+      setErrors((e) => ({ ...e, [key]: fieldIssues[0]?.message }));
     }
-  }
+  };
 
   useEffect(() => {
-    if (typeof window === 'undefined') return
-    const token = localStorage.getItem('access_token')
+    if (typeof window === "undefined") return;
+    const token = localStorage.getItem("access_token");
     if (!token) {
-      router.replace('/login')
-      return
+      router.replace("/login");
+      return;
     }
-    const ac = new AbortController()
-    ;(async () => {
+    const ac = new AbortController();
+    (async () => {
       try {
         const res = await fetch(`${API_BASE}`, {
-          method: 'GET',
+          method: "GET",
           headers: {
-            'Content-Type': 'application/json',
+            "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,
           },
           signal: ac.signal,
-        })
+        });
         if (res.status === 401) {
           try {
-            localStorage.removeItem('access_token')
+            localStorage.removeItem("access_token");
           } catch {}
-          router.replace('/login')
-          return
+          router.replace("/login");
+          return;
         }
-        if (!res.ok) throw new Error('Failed to fetch profile')
-        const data = await res.json()
-        setProfile(data)
+        if (!res.ok) throw new Error("Failed to fetch profile");
+        const data = await res.json();
+        setProfile(data);
         setPersonalForm({
-          Firstname: data.firstname || '',
-          Lastname: data.lastname || '',
-        })
+          Firstname: data.firstname || "",
+          Lastname: data.lastname || "",
+        });
         setForm((prev) => ({
           ...prev,
           email: data.email || prev.email,
           completeName:
-            `${data.firstname ?? ''} ${data.lastname ?? ''}`.trim() ||
+            `${data.firstname ?? ""} ${data.lastname ?? ""}`.trim() ||
             prev.completeName,
-        }))
+        }));
       } catch (err: any) {
-        if (err?.name === 'AbortError') return
-        toast.error('Error fetching profile')
+        if (err?.name === "AbortError") return;
+        toast.error("Error fetching profile");
       }
-    })()
-    return () => ac.abort()
-  }, [router])
+    })();
+    return () => ac.abort();
+  }, [router]);
 
   useEffect(() => {
-    ;(async () => {
+    (async () => {
       try {
-        const list = await loadPackages()
-        setPackages(list)
+        const list = await loadPackages();
+        setPackages(list);
         // Set a default selection only on first load when nothing selected yet
         if (!selectedPackageId && list.length) {
-          const first = list[0]
-          setSelectedPackageId(first.id)
+          const first = list[0];
+          setSelectedPackageId(first.id);
           setForm((p) => ({
             ...p,
-            package: first.package_name as BookingForm['package'],
-          }))
+            package: first.package_name as BookingForm["package"],
+          }));
         }
       } catch {
         // ignore
       }
-    })()
+    })();
     // Load available grids (display=true)
-    ;(async () => {
+    (async () => {
       try {
-        const g = await loadGridsPublic()
-        setGrids(g)
+        const g = await loadGridsPublic();
+        setGrids(g);
         try {
           localStorage.setItem(
-            'public_grids_cache',
+            "public_grids_cache",
             JSON.stringify(g.map(({ id, grid_name }) => ({ id, grid_name })))
-          )
+          );
         } catch {}
       } catch {
         // ignore
       }
-    })()
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, []);
 
   useEffect(() => {
-    setTimepickerReady(true) // enable child onChange after first commit
-  }, [])
+    setTimepickerReady(true); // enable child onChange after first commit
+  }, []);
 
   // Prefill using requestid (after packages are loaded)
   useEffect(() => {
-    if (!requestIdParam) return
-    if (!packages?.length) return
-    if (didPrefillRef.current) return
+    if (!requestIdParam) return;
+    if (!packages?.length) return;
+    if (didPrefillRef.current) return;
     const token =
-      (typeof window !== 'undefined' && localStorage.getItem('access_token')) ||
-      null
-    if (!token) return
-    ;(async () => {
+      (typeof window !== "undefined" && localStorage.getItem("access_token")) ||
+      null;
+    if (!token) return;
+    (async () => {
       try {
         const res = await loadAndPrefill({
           requestid: Number(requestIdParam),
           packages,
           token,
           prevForm: form,
-        })
-        setSelectedPackageId(res.selectedPackageId)
-        setForm((prev) => ({ ...prev, ...res.patch }))
+        });
+        setSelectedPackageId(res.selectedPackageId);
+        setForm((prev) => ({ ...prev, ...res.patch }));
         // Derive status for UI restrictions from fetched booking
         try {
-          const st = ((res.booking?.status as string) || '').toLowerCase()
+          const st = ((res.booking?.status as string) || "").toLowerCase();
           const title =
-            st === 'accepted' || st === 'approved'
-              ? 'Approved'
-              : st === 'rejected' || st === 'declined'
-              ? 'Declined'
-              : st === 'cancelled'
-              ? 'Cancelled'
-              : 'Pending'
-          setCurrentStatus(title as any)
+            st === "accepted" || st === "approved"
+              ? "Approved"
+              : st === "rejected" || st === "declined"
+              ? "Declined"
+              : st === "cancelled"
+              ? "Cancelled"
+              : "Pending";
+          setCurrentStatus(title as any);
         } catch {}
-        didPrefillRef.current = true
+        didPrefillRef.current = true;
         // optional toast
       } catch (e: any) {
-        console.error(e)
+        console.error(e);
       }
-    })()
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [requestIdParam, packages])
+  }, [requestIdParam, packages]);
 
   // Intercept schedule changes for approved bookings
   const requestScheduleChange = (patch: {
-    eventDate?: Date
-    eventTime?: string
-    eventEndTime?: string
+    eventDate?: Date;
+    eventTime?: string;
+    eventEndTime?: string;
   }) => {
-    if (currentStatus === 'Approved') {
-      setPendingScheduleChange(patch)
-      setShowScheduleConfirm(true)
-      return
+    if (currentStatus === "Approved") {
+      setPendingScheduleChange(patch);
+      setShowScheduleConfirm(true);
+      return;
     }
-    if (patch.eventDate) setField('eventDate', patch.eventDate as any)
-    if (patch.eventTime) setField('eventTime', patch.eventTime as any)
-    if (patch.eventEndTime) setField('eventEndTime', patch.eventEndTime as any)
-  }
+    if (patch.eventDate) setField("eventDate", patch.eventDate as any);
+    if (patch.eventTime) setField("eventTime", patch.eventTime as any);
+    if (patch.eventEndTime) setField("eventEndTime", patch.eventEndTime as any);
+  };
 
   const confirmApplyScheduleChange = () => {
-    if (!pendingScheduleChange) return
-    const { eventDate, eventTime, eventEndTime } = pendingScheduleChange
-    if (eventDate) setField('eventDate', eventDate as any)
-    if (eventTime) setField('eventTime', eventTime as any)
-    if (eventEndTime) setField('eventEndTime', eventEndTime as any)
-    setPendingScheduleChange(null)
-    setShowScheduleConfirm(false)
-  }
+    if (!pendingScheduleChange) return;
+    const { eventDate, eventTime, eventEndTime } = pendingScheduleChange;
+    if (eventDate) setField("eventDate", eventDate as any);
+    if (eventTime) setField("eventTime", eventTime as any);
+    if (eventEndTime) setField("eventEndTime", eventEndTime as any);
+    setPendingScheduleChange(null);
+    setShowScheduleConfirm(false);
+  };
 
   const cancelScheduleChange = () => {
-    setPendingScheduleChange(null)
-    setShowScheduleConfirm(false)
-  }
+    setPendingScheduleChange(null);
+    setShowScheduleConfirm(false);
+  };
 
   const handleSubmit = async () => {
-    if (submitting) return
-    setErrors({})
-    const result = bookingFormSchema.safeParse(form)
+    if (submitting) return;
+    setErrors({});
+    const result = bookingFormSchema.safeParse(form);
     if (!result.success) {
-      const fieldErrors: Partial<Record<keyof BookingForm, string>> = {}
+      const fieldErrors: Partial<Record<keyof BookingForm, string>> = {};
       for (const issue of result.error.issues) {
-        const key = issue.path[0] as keyof BookingForm
-        if (!fieldErrors[key]) fieldErrors[key] = issue.message
+        const key = issue.path[0] as keyof BookingForm;
+        if (!fieldErrors[key]) fieldErrors[key] = issue.message;
       }
-      setErrors(fieldErrors)
-      toast.error('Please fill in all required fields.')
-      return
+      setErrors(fieldErrors);
+      toast.error("Please fill in all required fields.");
+      return;
     }
 
     try {
-      setSubmitting(true)
+      setSubmitting(true);
       if (isUpdate) {
         const resp = await submitUpdate({
           requestid: Number(requestIdParam),
           form,
           selectedPackageId,
-        })
-        toast.success(resp?.message || 'Booking updated.')
-        router.push('/customer/dashboard')
-        return
+        });
+        toast.success(resp?.message || "Booking updated.");
+        router.push("/customer/dashboard");
+        return;
       }
 
       // CREATE flow
       const resp = await createBookingRequest({
         form,
         packageid: selectedPackageId ?? undefined,
-      })
+      });
 
       // Use the selected package's actual name from the loaded list for dashboard display
-      const selectedPkg = packages.find((p) => p.id === selectedPackageId)
+      const selectedPkg = packages.find((p) => p.id === selectedPackageId);
       const displayPackageName = (
         selectedPkg?.package_name || form.package
-      ).trim()
+      ).trim();
 
       const row = {
         name: form.eventName,
@@ -335,76 +336,76 @@ export default function BookingPage() {
         endTime: to12h(form.eventEndTime),
         package: displayPackageName,
         place: form.eventLocation,
-        paymentStatus: 'Pending',
-        status: 'Pending' as 'Approved' | 'Declined' | 'Pending',
-        action: ['Cancel', 'Reschedule'] as string[],
+        paymentStatus: "Pending",
+        status: "Pending" as "Approved" | "Declined" | "Pending",
+        action: ["Cancel", "Reschedule"] as string[],
         requestid: resp?.booking?.requestid, // keep id for reschedule
-      }
+      };
       const raw =
-        (typeof window !== 'undefined' &&
+        (typeof window !== "undefined" &&
           localStorage.getItem(DASHBOARD_KEY)) ||
-        '[]'
+        "[]";
       const arr = Array.isArray(JSON.parse(raw))
         ? (JSON.parse(raw) as any[])
-        : []
-      arr.unshift(row)
-      localStorage.setItem(DASHBOARD_KEY, JSON.stringify(arr))
+        : [];
+      arr.unshift(row);
+      localStorage.setItem(DASHBOARD_KEY, JSON.stringify(arr));
 
-      toast.success(resp?.message || 'Booking request submitted.')
-      router.push('/customer/dashboard')
+      toast.success(resp?.message || "Booking request submitted.");
+      router.push("/customer/dashboard");
     } catch (e: any) {
       toast.error(
         e?.message ||
           (isUpdate
-            ? 'Failed to update booking.'
-            : 'Failed to submit booking request.')
-      )
+            ? "Failed to update booking."
+            : "Failed to submit booking request.")
+      );
     } finally {
-      setSubmitting(false)
+      setSubmitting(false);
     }
-  }
+  };
 
   const handleClear = () => {
     setForm((prev) => ({
       ...initialForm,
       email: prev.email,
       completeName: prev.completeName,
-    }))
-    setErrors({})
-    toast.message('Form cleared. Email and name kept from your profile.')
-  }
+    }));
+    setErrors({});
+    toast.message("Form cleared. Email and name kept from your profile.");
+  };
 
   const formFields = [
-    'Email:',
-    'Complete name:',
-    'Contact #:',
-    'Contact Person & Number:',
-    'Name of event (Ex. Maria & Jose Wedding):',
-    'Location of event:',
-    'Extension? (Our Minimum is 2hrs. Additional hour is Php2000):',
-    'Placement of booth (Indoor/Outdoor):',
-    'What signal is currently strong in the event area?:',
-  ]
+    "Email:",
+    "Complete name:",
+    "Contact #:",
+    "Contact Person & Number:",
+    "Name of event (Ex. Maria & Jose Wedding):",
+    "Location of event:",
+    "Extension? (Our Minimum is 2hrs. Additional hour is Php2000):",
+    "Placement of booth (Indoor/Outdoor):",
+    "What signal is currently strong in the event area?:",
+  ];
 
   // Add: dashboard storage key and formatters
-  const DASHBOARD_KEY = 'litrato_dashboard_table'
+  const DASHBOARD_KEY = "litrato_dashboard_table";
   const to12h = (t: string) => {
-    const [HH, MM] = t.split(':').map((n) => parseInt(n || '0', 10))
-    const ampm = HH >= 12 ? 'pm' : 'am'
-    const h12 = (HH % 12 || 12).toString().padStart(2, '0')
-    return `${h12}:${String(MM || 0).padStart(2, '0')} ${ampm}`
-  }
+    const [HH, MM] = t.split(":").map((n) => parseInt(n || "0", 10));
+    const ampm = HH >= 12 ? "pm" : "am";
+    const h12 = (HH % 12 || 12).toString().padStart(2, "0");
+    return `${h12}:${String(MM || 0).padStart(2, "0")} ${ampm}`;
+  };
   const fmtDate = (d: Date) => {
     try {
-      const dd = new Date(d)
-      const y = dd.getFullYear()
-      const m = String(dd.getMonth() + 1).padStart(2, '0')
-      const day = String(dd.getDate()).padStart(2, '0')
-      return `${y}-${m}-${day}`
+      const dd = new Date(d);
+      const y = dd.getFullYear();
+      const m = String(dd.getMonth() + 1).padStart(2, "0");
+      const day = String(dd.getDate()).padStart(2, "0");
+      return `${y}-${m}-${day}`;
     } catch {
-      return ''
+      return "";
     }
-  }
+  };
 
   return (
     <MotionDiv>
@@ -412,7 +413,7 @@ export default function BookingPage() {
         <div className="w-full">
           <div className="relative h-[160px]">
             <Image
-              src={'/Images/litratobg.jpg'}
+              src={"/Images/litratobg.jpg"}
               alt="Booking Header"
               fill
               className="object-cover rounded-b-lg"
@@ -426,7 +427,7 @@ export default function BookingPage() {
         </div>
 
         <div className=" p-4 rounded-lg shadow-md space-y-3">
-          {currentStatus === 'Approved' && (
+          {currentStatus === "Approved" && (
             <div className="rounded-md border border-yellow-300 bg-yellow-50 text-yellow-900 px-3 py-2 text-sm">
               This booking is approved. You can update contact details and
               preferences. Changing the date or time will resubmit for approval.
@@ -476,8 +477,8 @@ export default function BookingPage() {
               placeholder="e.g. +639171234567"
               className="w-full bg-gray-200 rounded-md px-3 py-2 text-sm focus:outline-none"
               value={form.contactNumber}
-              onChange={(e) => setField('contactNumber', e.target.value)}
-              onBlur={(e) => setField('contactNumber', e.target.value)}
+              onChange={(e) => setField("contactNumber", e.target.value)}
+              onBlur={(e) => setField("contactNumber", e.target.value)}
             />
             {errors.contactNumber && (
               <p className="text-red-600 text-sm mt-1">
@@ -494,9 +495,9 @@ export default function BookingPage() {
                 type="text"
                 placeholder="Enter here:"
                 className="w-full bg-gray-200 rounded-md px-3 py-2 text-sm focus:outline-none"
-                value={form.contactPersonName || ''}
+                value={form.contactPersonName || ""}
                 onChange={(e) =>
-                  setField('contactPersonName', e.target.value as any)
+                  setField("contactPersonName", e.target.value as any)
                 }
               />
               {errors.contactPersonName && (
@@ -513,12 +514,12 @@ export default function BookingPage() {
                 type="tel"
                 placeholder="e.g. +639171234567"
                 className="w-full bg-gray-200 rounded-md px-3 py-2 text-sm focus:outline-none"
-                value={form.contactPersonNumber || ''}
+                value={form.contactPersonNumber || ""}
                 onChange={(e) =>
-                  setField('contactPersonNumber', e.target.value as any)
+                  setField("contactPersonNumber", e.target.value as any)
                 }
                 onBlur={(e) =>
-                  setField('contactPersonNumber', e.target.value as any)
+                  setField("contactPersonNumber", e.target.value as any)
                 }
               />
               {errors.contactPersonNumber && (
@@ -539,7 +540,7 @@ export default function BookingPage() {
               placeholder="Enter here:"
               className="w-full bg-gray-200 rounded-md px-3 py-2 text-sm focus:outline-none"
               value={form.eventName}
-              onChange={(e) => setField('eventName', e.target.value)}
+              onChange={(e) => setField("eventName", e.target.value)}
             />
             {errors.eventName && (
               <p className="text-red-600 text-sm mt-1">{errors.eventName}</p>
@@ -554,7 +555,7 @@ export default function BookingPage() {
               placeholder="Enter here:"
               className="w-full bg-gray-200 rounded-md px-3 py-2 text-sm focus:outline-none"
               value={form.eventLocation}
-              onChange={(e) => setField('eventLocation', e.target.value)}
+              onChange={(e) => setField("eventLocation", e.target.value)}
             />
             {errors.eventLocation && (
               <p className="text-red-600 text-sm mt-1">
@@ -572,7 +573,7 @@ export default function BookingPage() {
               className="w-full bg-gray-200 rounded-md px-3 py-2 text-sm focus:outline-none"
               value={String(form.extensionHours)}
               onChange={(e) =>
-                setField('extensionHours', Number(e.target.value))
+                setField("extensionHours", Number(e.target.value))
               }
             >
               <option value="0">0</option>
@@ -594,8 +595,8 @@ export default function BookingPage() {
                 <input
                   type="radio"
                   name="boothPlacement"
-                  checked={form.boothPlacement === 'Indoor'}
-                  onChange={() => setField('boothPlacement', 'Indoor')}
+                  checked={form.boothPlacement === "Indoor"}
+                  onChange={() => setField("boothPlacement", "Indoor")}
                 />
                 Indoor
               </label>
@@ -603,8 +604,8 @@ export default function BookingPage() {
                 <input
                   type="radio"
                   name="boothPlacement"
-                  checked={form.boothPlacement === 'Outdoor'}
-                  onChange={() => setField('boothPlacement', 'Outdoor')}
+                  checked={form.boothPlacement === "Outdoor"}
+                  onChange={() => setField("boothPlacement", "Outdoor")}
                 />
                 Outdoor
               </label>
@@ -626,7 +627,7 @@ export default function BookingPage() {
               placeholder="Enter here:"
               className="w-full bg-gray-200 rounded-md px-3 py-2 text-sm focus:outline-none"
               value={form.signal}
-              onChange={(e) => setField('signal', e.target.value)}
+              onChange={(e) => setField("signal", e.target.value)}
             />
             {errors.signal && (
               <p className="text-red-600 text-sm mt-1">{errors.signal}</p>
@@ -640,21 +641,21 @@ export default function BookingPage() {
               {packages.map((pkg) => (
                 <PromoCard
                   key={pkg.id}
-                  imageSrc={pkg.image_url || '/Images/litratobg.jpg'}
+                  imageSrc={pkg.image_url || "/Images/litratobg.jpg"}
                   title={pkg.package_name}
                   price={`₱${Number(pkg.price).toLocaleString()}`}
                   descriptions={[
-                    pkg.description || 'Package',
+                    pkg.description || "Package",
                     // you can extend with more feature fields if you add them
                   ]}
                   selected={selectedPackageId === pkg.id}
                   onSelect={() => {
-                    setSelectedPackageId(pkg.id)
+                    setSelectedPackageId(pkg.id);
                     // Always set the package name from DB now that validation allows any non-empty string
                     setField(
-                      'package',
-                      pkg.package_name as BookingForm['package']
-                    )
+                      "package",
+                      pkg.package_name as BookingForm["package"]
+                    );
                   }}
                 />
               ))}
@@ -678,9 +679,9 @@ export default function BookingPage() {
                 </span>
               ) : (
                 grids.map((g) => {
-                  const picked = form.selectedGrids.includes(g.grid_name)
-                  const atLimit = form.selectedGrids.length >= 2 && !picked
-                  const imgSrc = g.image_url || '/Images/litratobg.jpg'
+                  const picked = form.selectedGrids.includes(g.grid_name);
+                  const atLimit = form.selectedGrids.length >= 2 && !picked;
+                  const imgSrc = g.image_url || "/Images/litratobg.jpg";
                   return (
                     <button
                       key={g.id}
@@ -689,18 +690,18 @@ export default function BookingPage() {
                       aria-pressed={picked}
                       className={`group w-[270px] overflow-hidden rounded-xl border shadow-sm transition focus:outline-none ${
                         picked
-                          ? 'border-2 border-red-500 ring-2 ring-red-500 ring-offset-2 ring-offset-white'
-                          : 'border-gray-200 focus-visible:ring-2 focus-visible:ring-litratored'
+                          ? "border-2 border-red-500 ring-2 ring-red-500 ring-offset-2 ring-offset-white"
+                          : "border-gray-200 focus-visible:ring-2 focus-visible:ring-litratored"
                       } ${
                         atLimit
-                          ? 'opacity-60 cursor-not-allowed'
-                          : 'hover:shadow-md'
+                          ? "opacity-60 cursor-not-allowed"
+                          : "hover:shadow-md"
                       }`}
                       onClick={() => {
                         const next = picked
                           ? form.selectedGrids.filter((n) => n !== g.grid_name)
-                          : [...form.selectedGrids, g.grid_name]
-                        setField('selectedGrids', next)
+                          : [...form.selectedGrids, g.grid_name];
+                        setField("selectedGrids", next);
                       }}
                     >
                       <div className="relative w-full h-[200px] bg-gray-100">
@@ -720,7 +721,7 @@ export default function BookingPage() {
                         </span>
                       </div>
                     </button>
-                  )
+                  );
                 })
               )}
             </div>
@@ -762,7 +763,7 @@ export default function BookingPage() {
                       requestScheduleChange({
                         eventTime: start,
                         eventEndTime: end,
-                      })
+                      });
                     }}
                   />
                 )}
@@ -798,11 +799,11 @@ export default function BookingPage() {
             >
               {submitting
                 ? isUpdate
-                  ? 'Updating…'
-                  : 'Submitting…'
+                  ? "Updating…"
+                  : "Submitting…"
                 : isUpdate
-                ? 'Update'
-                : 'Submit'}
+                ? "Update"
+                : "Submit"}
             </button>
           </div>
         </div>
@@ -844,7 +845,7 @@ export default function BookingPage() {
         </div>
       )}
     </MotionDiv>
-  )
+  );
 }
 
 // Lightweight modal for schedule change confirmation
