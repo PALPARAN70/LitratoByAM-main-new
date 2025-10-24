@@ -1,116 +1,116 @@
-"use client";
-import { useState } from "react";
-import { useRouter } from "next/navigation";
-import Image from "next/image";
-import LitratoBranding from "../../../Litratocomponents/Branding";
-import LitratoFooter from "../../../Litratocomponents/Footer";
-import { toast } from "sonner";
-import { jwtDecode } from "jwt-decode";
+'use client'
+import { useState } from 'react'
+import { useRouter } from 'next/navigation'
+import Image from 'next/image'
+import LitratoBranding from '../../../Litratocomponents/Branding'
+import LitratoFooter from '../../../Litratocomponents/Footer'
+import { toast } from 'sonner'
+import { jwtDecode } from 'jwt-decode'
 
 export default function LoginPage() {
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-  const [showForgotModal, setShowForgotModal] = useState(false);
-  const [forgotEmail, setForgotEmail] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const router = useRouter();
+  const [username, setUsername] = useState('')
+  const [password, setPassword] = useState('')
+  const [showForgotModal, setShowForgotModal] = useState(false)
+  const [forgotEmail, setForgotEmail] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const router = useRouter()
 
   const handleLogin = async () => {
     try {
-      const res = await fetch("http://localhost:5000/api/auth/login", {
-        method: "POST",
+      const res = await fetch('http://localhost:5000/api/auth/login', {
+        method: 'POST',
         headers: {
-          "Content-Type": "application/json",
+          'Content-Type': 'application/json',
         },
         body: JSON.stringify({ username, password }),
-      });
+      })
 
       if (res.ok) {
-        const data = await res.json();
-        console.log("Login response:", data);
+        const data = await res.json()
+        console.log('Login response:', data)
 
         // If backend sends "Bearer <token>", strip the prefix
-        const token = data.token.startsWith("Bearer ")
-          ? data.token.split(" ")[1]
-          : data.token;
+        const token = data.token.startsWith('Bearer ')
+          ? data.token.split(' ')[1]
+          : data.token
 
         try {
-          localStorage.setItem("access_token", token);
+          localStorage.setItem('access_token', token)
         } catch {
-          toast.error("Failed to save access token. Please try again.");
+          toast.error('Failed to save access token. Please try again.')
         }
 
         // Either use data.role (if backend sends it) OR decode from token
-        let role = data.role;
+        let role = data.role
         if (!role) {
           try {
-            const decoded: any = jwtDecode(token);
-            role = decoded.role;
+            const decoded: any = jwtDecode(token)
+            role = decoded.role
           } catch {
-            toast.error("Invalid token received.");
-            return;
+            toast.error('Invalid token received.')
+            return
           }
         }
 
-        if (role === "admin") {
-          router.push("/admin");
-          toast.success("Welcome Admin!");
-        } else if (role === "customer") {
-          router.push("/customer/dashboard");
-          toast.success("Welcome Customer!");
+        if (role === 'admin') {
+          router.push('/admin/AdminDashboard')
+          toast.success('Welcome Admin!')
+        } else if (role === 'customer') {
+          router.push('/customer/dashboard')
+          toast.success('Welcome Customer!')
         } else {
-          router.push("/employee");
-          toast.success("Welcome Employee!");
+          router.push('/staff/staffdashboard')
+          toast.success('Welcome Employee!')
         }
       } else {
-        let message = "Login failed";
+        let message = 'Login failed'
         try {
-          const errorData = await res.json();
+          const errorData = await res.json()
           if (res.status === 401) {
-            message = "Invalid username or password";
+            message = 'Invalid username or password'
           } else if (errorData?.message) {
-            message = errorData.message;
+            message = errorData.message
           }
         } catch {}
-        toast.error(message);
+        toast.error(message)
       }
     } catch (e) {
-      toast.error("Unable to connect to server. Please try again later.");
+      toast.error('Unable to connect to server. Please try again later.')
     }
-  };
+  }
   //forgot password
   const handleForgotPassword = async () => {
     if (!forgotEmail) {
-      toast.error("Please enter your email.");
-      return;
+      toast.error('Please enter your email.')
+      return
     }
-    setIsSubmitting(true);
+    setIsSubmitting(true)
     try {
-      const res = await fetch("http://localhost:5000/api/auth/forgotPassword", {
-        method: "POST",
+      const res = await fetch('http://localhost:5000/api/auth/forgotPassword', {
+        method: 'POST',
         headers: {
-          "Content-Type": "application/json",
+          'Content-Type': 'application/json',
         },
         body: JSON.stringify({ email: forgotEmail }),
-      });
+      })
       if (res.ok) {
-        toast.success("Verification email sent. Please check your inbox.");
-        setShowForgotModal(false);
-        setForgotEmail("");
+        toast.success('Verification email sent. Please check your inbox.')
+        setShowForgotModal(false)
+        setForgotEmail('')
       } else {
-        let message = "Failed to send verification email.";
+        let message = 'Failed to send verification email.'
         try {
-          const errorData = await res.json();
-          if (errorData?.message) message = errorData.message;
+          const errorData = await res.json()
+          if (errorData?.message) message = errorData.message
         } catch {}
-        toast.error(message);
+        toast.error(message)
       }
     } catch {
-      toast.error("Failed to send verification email.");
+      toast.error('Failed to send verification email.')
     } finally {
-      setIsSubmitting(false);
+      setIsSubmitting(false)
     }
-  };
+  }
 
   return (
     <div>
@@ -144,7 +144,7 @@ export default function LoginPage() {
               className="bg-litratoblack text-white px-4 py-2 rounded w-full font-bold hover:bg-black transition-all"
               disabled={isSubmitting}
             >
-              {isSubmitting ? "Submitting..." : "Verify Email"}
+              {isSubmitting ? 'Submitting...' : 'Verify Email'}
             </button>
           </div>
         </div>
@@ -187,7 +187,7 @@ export default function LoginPage() {
           <div className="text-right mt-2">
             <button
               type="button"
-              style={{ textDecoration: "none" }}
+              style={{ textDecoration: 'none' }}
               className="text-litratoblack hover bg-transparent border-none p-0 m-0 cursor-pointer"
               onClick={() => setShowForgotModal(true)}
             >
@@ -203,10 +203,10 @@ export default function LoginPage() {
           LOGIN
         </div>
         <div>
-          Don't have an account?{" "}
+          Don't have an account?{' '}
           <a
             href="/registration"
-            style={{ textDecoration: "none" }}
+            style={{ textDecoration: 'none' }}
             className="text-blue-600"
           >
             Register
@@ -216,5 +216,5 @@ export default function LoginPage() {
 
       <LitratoFooter />
     </div>
-  );
+  )
 }

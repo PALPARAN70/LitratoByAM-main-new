@@ -524,6 +524,20 @@ router.post(
   adminConfirmedBookingController.createAndConfirm
 )
 
+// ---- confirmed booking staff assignment ----
+router.get(
+  '/confirmed-bookings/:id/staff',
+  authMiddleware,
+  roleMiddleware('admin'),
+  adminConfirmedBookingController.listStaffForBooking
+)
+router.post(
+  '/confirmed-bookings/:id/assign-staff',
+  authMiddleware,
+  roleMiddleware('admin'),
+  adminConfirmedBookingController.assignStaff
+)
+
 module.exports = router
 
 // keep module.exports at end
