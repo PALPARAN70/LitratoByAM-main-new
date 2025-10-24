@@ -25,4 +25,20 @@ router.get(
   employeeController.listAssignedConfirmedBookings
 )
 
+// Update booking status for an assigned confirmed booking (employee-only)
+router.patch(
+  '/assigned-confirmed-bookings/:id/booking-status',
+  authMiddleware,
+  roleMiddleware('employee'),
+  employeeController.setAssignedBookingStatus
+)
+
+// Payment summary for an assigned confirmed booking (employee-only)
+router.get(
+  '/assigned-confirmed-bookings/:id/payment-summary',
+  authMiddleware,
+  roleMiddleware('employee'),
+  employeeController.getAssignedBookingPaymentSummary
+)
+
 module.exports = router

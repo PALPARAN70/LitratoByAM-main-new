@@ -66,6 +66,10 @@ type BookingRow = {
   username?: string | null
   firstname?: string | null
   lastname?: string | null
+  // Pricing summary (base + extension) for quick reference
+  baseTotal?: number | null
+  extHours?: number | null
+  amountDue?: number | null
 }
 export default function ManageBookingPage() {
   const [active, setActive] = useState<TabKey>('masterlist')
@@ -431,6 +435,20 @@ function MasterListPanel({
           const date = toISODateString(r.event_date)
           const startTime = (r.event_time || '').toString().slice(0, 5)
           const endTime = (r.event_end_time || '').toString().slice(0, 5)
+          // Pricing: prefer confirmed base total, else package price; add extension @ ₱2000/hr
+          const baseCandidate =
+            (r as any).total_booking_price ??
+            (r as any).package_price ??
+            (r as any).price ??
+            0
+          const baseTotal = Number(baseCandidate)
+          const extHoursNum = Number(r.extension_duration ?? 0)
+          const extHours = Number.isFinite(extHoursNum)
+            ? Math.max(0, extHoursNum)
+            : 0
+          const amountDue = Number.isFinite(baseTotal)
+            ? Math.max(0, Number(baseTotal) + extHours * 2000)
+            : null
           return {
             id: String(r.requestid || r.confirmed_id || Math.random()),
             requestid: r.requestid ?? null,
@@ -451,6 +469,9 @@ function MasterListPanel({
             username: r.username ?? null,
             firstname: r.firstname ?? null,
             lastname: r.lastname ?? null,
+            baseTotal: Number.isFinite(baseTotal) ? Number(baseTotal) : null,
+            extHours,
+            amountDue,
           }
         }
         const mapped = list.map(toRow)
@@ -896,6 +917,19 @@ function MasterListPanel({
                               <div className="text-gray-700">
                                 {row.extension_duration ?? '—'}
                                 {row.extension_duration != null ? ' hr' : ''}
+                              </div>
+                            </div>
+                            <div>
+                              <div className="font-semibold">
+                                Total price (incl. extension)
+                              </div>
+                              <div className="text-gray-700">
+                                {typeof row.amountDue === 'number'
+                                  ? `₱${row.amountDue.toLocaleString('en-PH', {
+                                      minimumFractionDigits: 2,
+                                      maximumFractionDigits: 2,
+                                    })}`
+                                  : '—'}
                               </div>
                             </div>
                             <div>

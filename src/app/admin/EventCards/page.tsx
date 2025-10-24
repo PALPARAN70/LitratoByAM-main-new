@@ -23,11 +23,13 @@ type Payment = 'unpaid' | 'partially-paid' | 'paid'
 type Item = { name: string; qty?: number }
 
 type AdminEvent = {
+  id: string | number
   title: string
   dateTime: string
   location: string
   status: Status
   payment: Payment
+  totalPrice?: number
   imageUrl?: string
   damagedItems?: Item[]
   missingItems?: Item[]
@@ -102,12 +104,17 @@ export default function AdminEventCardsPage() {
             const time = b.event_time || ''
             const dateTime = [date, time].filter(Boolean).join(' - ')
             const location = b.event_address || ''
+            const extHours = Number(b.extension_duration || 0)
+            const base = Number(b.total_booking_price || 0)
+            const totalPrice = base + extHours * 2000
             return {
+              id: b.id ?? b.confirmed_id ?? '',
               title,
               dateTime,
               location,
               status: mapBookingStatus(b.booking_status),
               payment: mapPaymentStatus(b.payment_status),
+              totalPrice,
               imageUrl: undefined,
               damagedItems: [],
               missingItems: [],
@@ -250,10 +257,13 @@ export default function AdminEventCardsPage() {
               {paginated.map((ev, idx) => (
                 <EventCard
                   key={`${ev.title}-${idx}`}
+                  bookingId={ev.id}
                   title={ev.title}
                   dateTime={ev.dateTime}
                   location={ev.location}
                   status={ev.status}
+                  payment={ev.payment}
+                  totalPrice={ev.totalPrice}
                   imageUrl={ev.imageUrl}
                   damagedItems={ev.damagedItems}
                   missingItems={ev.missingItems}

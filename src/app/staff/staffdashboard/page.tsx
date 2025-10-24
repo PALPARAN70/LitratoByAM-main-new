@@ -26,6 +26,7 @@ type Status = 'ongoing' | 'standby' | 'finished'
 type Payment = 'unpaid' | 'partially-paid' | 'paid'
 type Item = { name: string; qty?: number }
 type StaffEvent = {
+  id: string | number
   title: string
   dateTime: string
   location: string
@@ -106,6 +107,7 @@ export default function DashboardPage() {
             const dateTime = [date, time].filter(Boolean).join(' - ')
             const location = b.event_address || ''
             return {
+              id: b.id ?? b.confirmed_id ?? '',
               title,
               dateTime,
               location,
@@ -254,10 +256,13 @@ export default function DashboardPage() {
               {paginated.map((ev, idx) => (
                 <EventCard
                   key={`${ev.title}-${idx}`}
+                  bookingId={ev.id}
+                  summaryRole="employee"
                   title={ev.title}
                   dateTime={ev.dateTime}
                   location={ev.location}
                   status={ev.status}
+                  payment={ev.payment}
                   imageUrl={ev.imageUrl}
                   damagedItems={ev.damagedItems}
                   missingItems={ev.missingItems}

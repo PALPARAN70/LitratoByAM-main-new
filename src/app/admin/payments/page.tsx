@@ -26,6 +26,9 @@ type Payment = {
   reference_no?: string | null
   payment_status: string
   booking_payment_status?: 'unpaid' | 'partial' | 'paid' | 'refunded' | 'failed'
+  booking_base_total?: number
+  booking_ext_hours?: number
+  booking_amount_due?: number
   notes?: string | null
   verified_at?: string | null
   created_at: string
@@ -537,7 +540,7 @@ export default function AdminPaymentsPage() {
                           {p.user_id}
                         </td>
                         <td className="px-3 py-2 whitespace-nowrap">
-                          {Number(p.amount).toFixed(2)}
+                          {Number(p.booking_amount_due ?? p.amount).toFixed(2)}
                         </td>
                         <td className="px-3 py-2 whitespace-nowrap">
                           <input

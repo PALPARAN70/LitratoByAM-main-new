@@ -13,6 +13,8 @@ const {
 const {
   getConfirmedBookingById,
   updatePaymentStatus: updateBookingPaymentStatus,
+  recalcAndPersistPaymentStatus,
+  getPaymentSummary,
 } = require('../../Model/confirmedBookingRequestModel')
 
 // List payments with optional filters: status, user_id, booking_id
@@ -228,31 +230,8 @@ async function generateSalesReportHandler(req, res) {
 
 // Helper: determine booking payment_status from all payments
 async function recalcBookingPaymentStatus(bookingId) {
-  const booking = await getConfirmedBookingById(Number(bookingId))
-  if (!booking) return
-  const total = Number(booking.total_booking_price || 0)
-  const pays = await modelListPayments({ booking_id: Number(bookingId) })
-  let paid = 0
-  let hasCompleted = false
-  let hasRefunded = false
-  let hasFailed = false
-  for (const p of pays) {
-    if (p.payment_status === 'completed') {
-      hasCompleted = true
-      paid += Number(p.amount_paid || 0)
-    } else if (p.payment_status === 'refunded') {
-      hasRefunded = true
-    } else if (p.payment_status === 'failed') {
-      hasFailed = true
-    }
-  }
-  let status = 'unpaid'
-  if (paid >= total && total > 0) status = 'paid'
-  else if (paid > 0 && paid < total) status = 'partial'
-  else if (!hasCompleted && hasRefunded) status = 'refunded'
-  else if (!hasCompleted && hasFailed && paid === 0) status = 'failed'
-
-  await updateBookingPaymentStatus(Number(bookingId), status)
+  // Use centralized summary that includes extension charges
+  await recalcAndPersistPaymentStatus(Number(bookingId))
 }
 
 // Admin creates a payment entry (e.g., cash during event)
@@ -281,7 +260,12 @@ async function createPaymentHandler(req, res) {
     if (!booking) return res.status(404).json({ error: 'Booking not found' })
 
     const userId = Number(booking.userid)
-    const amount = Number(booking.total_booking_price || 0)
+    // Use computed amount due (base + extension)
+    let amount = Number(booking.total_booking_price || 0)
+    try {
+      const sum = await getPaymentSummary(bId)
+      amount = Number(sum.amountDue || amount)
+    } catch {}
 
     const row = await createPayment({
       booking_id: bId,

@@ -8,6 +8,8 @@ const {
   updatePaymentStatus,
   updateBookingStatus,
   updateTotalPrice,
+  getPaymentSummary: getPaymentSummaryModel,
+  recalcAndPersistPaymentStatus: recalcPaymentStatusModel,
 } = require('../../Model/confirmedBookingRequestModel')
 const { sendEmail } = require('../../Util/sendEmail')
 const {
@@ -91,27 +93,11 @@ async function markContractSigned(req, res) {
 }
 
 async function setPaymentStatus(req, res) {
-  try {
-    const id = parseInt(req.params.id, 10)
-    if (Number.isNaN(id)) return res.status(400).json({ message: 'Invalid id' })
-    const { status } = req.body || {}
-    if (!status) return res.status(400).json({ message: 'status required' })
-    const row = await updatePaymentStatus(id, status)
-    if (!row) return res.status(404).json({ message: 'Not found' })
-    // Notify user about payment status change (best-effort)
-    try {
-      const full = await getConfirmedBookingById(id)
-      await notifyBookingUpdate(full, { payment_status: status })
-    } catch (e) {
-      console.warn('email notify (payment) failed:', e?.message)
-    }
-    return res.json({ booking: row })
-  } catch (err) {
-    console.error('confirmed.setPaymentStatus error:', err)
-    return res
-      .status(400)
-      .json({ message: err?.message || 'Error updating payment status' })
-  }
+  // Manual changes to payment_status are disabled. Status is computed from verified payments.
+  return res.status(405).json({
+    message:
+      'Manual payment status updates are disabled. Payment status is computed automatically from verified payments. Create/update a payment instead.',
+  })
 }
 
 async function setBookingStatus(req, res) {
@@ -184,14 +170,10 @@ async function updateConfirmedCombined(req, res) {
     }
 
     if (typeof paymentStatus === 'string') {
-      try {
-        last = await updatePaymentStatus(id, paymentStatus)
-        changes.payment_status = paymentStatus
-      } catch (e) {
-        return res
-          .status(400)
-          .json({ message: e?.message || 'Invalid payment status' })
-      }
+      return res.status(405).json({
+        message:
+          'Manual payment status updates are disabled. Payment status is computed automatically from verified payments.',
+      })
     }
 
     if (typeof bookingStatus === 'string') {
@@ -486,6 +468,20 @@ module.exports = {
   updateConfirmedCombined,
   cancelConfirmed,
   createAndConfirm,
+  // Payment summary for a confirmed booking (admin)
+  async getPaymentSummary(req, res) {
+    try {
+      const id = parseInt(req.params.id, 10)
+      if (Number.isNaN(id))
+        return res.status(400).json({ message: 'Invalid id' })
+      const summary = await getPaymentSummaryModel(id)
+      return res.json({ bookingid: id, ...summary })
+    } catch (err) {
+      return res
+        .status(400)
+        .json({ message: err?.message || 'Failed to compute payment summary' })
+    }
+  },
   // staff assignment
   async listStaffForBooking(req, res) {
     try {

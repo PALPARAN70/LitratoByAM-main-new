@@ -262,4 +262,78 @@ module.exports = {
   updatePaymentStatus,
   updateBookingStatus,
   updateTotalPrice,
+  // Compute payment summary and status based on total price + extensions and VERIFIED successful payments
+  async getPaymentSummary(bookingid) {
+    const id = Number(bookingid)
+    if (!Number.isFinite(id)) throw new Error('Invalid booking id')
+
+    // Fetch base total and extension hours (prefer value stored on confirmed, fallback to request)
+    const q = `
+      SELECT 
+        cb.id,
+        COALESCE(cb.total_booking_price, 0)::numeric AS base_total,
+        COALESCE(cb.extension_duration, br.extension_duration, 0)::int AS ext_hours
+      FROM confirmed_bookings cb
+      JOIN booking_requests br ON br.requestid = cb.requestid
+      WHERE cb.id = $1
+    `
+    const { rows } = await pool.query(q, [id])
+    const row = rows[0]
+    if (!row) throw new Error('Booking not found')
+
+    const EXT_RATE = 2000
+    const baseTotal = Number(row.base_total || 0)
+    const extHours = Math.max(0, Number(row.ext_hours || 0))
+    const extCharge = extHours * EXT_RATE
+    const amountDue = Math.max(0, baseTotal + extCharge)
+
+    // Sum only VERIFIED successful payments
+    const payQ = `
+      SELECT COALESCE(SUM(amount_paid), 0)::numeric AS paid_total
+      FROM payments
+      WHERE booking_id = $1
+        AND LOWER(payment_status) IN ('completed','paid','succeeded')
+        AND verified_at IS NOT NULL
+    `
+    let paidTotal = 0
+    try {
+      const r = await pool.query(payQ, [id])
+      paidTotal = Number(r.rows?.[0]?.paid_total || 0)
+    } catch {
+      paidTotal = 0
+    }
+
+    let computedStatus = 'unpaid'
+    if (paidTotal >= amountDue && amountDue > 0) computedStatus = 'paid'
+    else if (paidTotal > 0 && paidTotal < amountDue) computedStatus = 'partial'
+
+    return {
+      baseTotal,
+      extHours,
+      extCharge,
+      amountDue,
+      paidTotal,
+      computedStatus,
+    }
+  },
+
+  // Recalculate and persist payment_status on confirmed_bookings
+  async recalcAndPersistPaymentStatus(bookingid) {
+    const sum = await this.getPaymentSummary(bookingid)
+    await pool.query(
+      `UPDATE confirmed_bookings SET payment_status = $2, last_updated = CURRENT_TIMESTAMP WHERE id = $1`,
+      [bookingid, sum.computedStatus]
+    )
+    return sum
+  },
+
+  // Update extension_duration on confirmed_bookings and recalc payment_status
+  async updateExtensionDuration(bookingid, hours) {
+    const ext = Math.max(0, Number(hours) || 0)
+    await pool.query(
+      `UPDATE confirmed_bookings SET extension_duration = $2, last_updated = CURRENT_TIMESTAMP WHERE id = $1`,
+      [bookingid, ext]
+    )
+    return this.recalcAndPersistPaymentStatus(bookingid)
+  },
 }

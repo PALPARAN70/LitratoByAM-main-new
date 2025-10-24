@@ -502,6 +502,14 @@ router.patch(
   adminConfirmedBookingController.setTotalPrice
 )
 
+// Payment summary for a confirmed booking
+router.get(
+  '/confirmed-bookings/:id/payment-summary',
+  authMiddleware,
+  roleMiddleware('admin'),
+  adminConfirmedBookingController.getPaymentSummary
+)
+
 // Combined update (any subset of fields) and explicit cancel endpoints
 router.patch(
   '/confirmed-bookings/:id',
