@@ -8,7 +8,7 @@ async function initConfirmedBookingTable() {
       requestid INTEGER NOT NULL UNIQUE REFERENCES booking_requests(requestid) ON DELETE CASCADE,
       userid INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       contract_signed BOOLEAN DEFAULT FALSE,
-      payment_status VARCHAR(20) NOT NULL DEFAULT 'unpaid' CHECK (payment_status IN ('unpaid','partial','paid','refunded')),
+      payment_status VARCHAR(20) NOT NULL DEFAULT 'unpaid' CHECK (payment_status IN ('unpaid','partial','paid','refunded','failed')),
       booking_status VARCHAR(20) NOT NULL DEFAULT 'scheduled' CHECK (booking_status IN ('scheduled','in_progress','completed','cancelled')),
       total_booking_price NUMERIC(10,2) DEFAULT 0.00,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -30,6 +30,36 @@ async function initConfirmedBookingTable() {
   await pool
     .query('ALTER TABLE confirmed_bookings ADD COLUMN IF NOT EXISTS grid TEXT')
     .catch(() => {})
+
+  // Ensure CHECK constraint allows 'failed' as a payment_status for existing DBs
+  try {
+    const q = `
+      SELECT c.conname, pg_get_constraintdef(c.oid) as def
+      FROM pg_constraint c
+      JOIN pg_class t ON c.conrelid = t.oid
+      WHERE t.relname = 'confirmed_bookings' AND c.contype = 'c'
+    `
+    const { rows } = await pool.query(q)
+    const target = rows.find(
+      (r) =>
+        typeof r.def === 'string' &&
+        r.def.toLowerCase().includes('payment_status')
+    )
+    if (target && !target.def.includes("'failed'")) {
+      const name = target.conname
+      await pool.query(
+        `ALTER TABLE confirmed_bookings DROP CONSTRAINT "${name}"`
+      )
+      await pool.query(
+        `ALTER TABLE confirmed_bookings ADD CONSTRAINT "${name}" CHECK (payment_status IN ('unpaid','partial','paid','refunded','failed'))`
+      )
+    }
+  } catch (e) {
+    console.warn(
+      'confirmed_bookings: ensure payment_status check includes failed - skipped:',
+      e?.message
+    )
+  }
 }
 
 /**
@@ -175,7 +205,7 @@ async function setContractSigned(bookingid, signed = true) {
 }
 
 async function updatePaymentStatus(bookingid, status) {
-  const allowed = new Set(['unpaid', 'partial', 'paid', 'refunded'])
+  const allowed = new Set(['unpaid', 'partial', 'paid', 'refunded', 'failed'])
   if (!allowed.has(status)) throw new Error('Invalid payment status')
   const { rows } = await pool.query(
     `

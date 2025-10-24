@@ -10,6 +10,7 @@ import {
   uploadAdminPaymentQR,
   listAdminPaymentLogs,
   updateAdminPaymentLog,
+  createAdminPayment,
   type PaymentLog,
 } from '../../../../schemas/functions/Payment/adminPayments'
 
@@ -24,6 +25,7 @@ type Payment = {
   proof_image_url?: string | null
   reference_no?: string | null
   payment_status: string
+  booking_payment_status?: 'unpaid' | 'partial' | 'paid' | 'refunded' | 'failed'
   notes?: string | null
   verified_at?: string | null
   created_at: string
@@ -45,6 +47,23 @@ export default function AdminPaymentsPage() {
   const [logEdits, setLogEdits] = useState<
     Record<number, { additional_notes?: string | null; notes?: string | null }>
   >({})
+  const [createOpen, setCreateOpen] = useState(false)
+  const [createForm, setCreateForm] = useState({
+    booking_id: '' as string,
+    amount_paid: '' as string,
+    payment_method: 'cash',
+    reference_no: '' as string,
+    notes: '' as string,
+    verified: true,
+    payment_status: 'completed' as
+      | 'pending'
+      | 'completed'
+      | 'failed'
+      | 'refunded',
+  })
+  const [eventOptions, setEventOptions] = useState<
+    Array<{ id: number; label: string; userLabel: string }>
+  >([])
 
   const API_ORIGIN =
     process.env.NEXT_PUBLIC_API_ORIGIN ?? 'http://localhost:5000'
@@ -108,6 +127,47 @@ export default function AdminPaymentsPage() {
     loadQR()
   }, [])
 
+  // Load confirmed bookings when the create panel opens (for dropdown)
+  useEffect(() => {
+    if (!createOpen) return
+    let ignore = false
+    ;(async () => {
+      try {
+        const res = await fetch(`${API_BASE}/admin/confirmed-bookings`, {
+          headers: {
+            'Content-Type': 'application/json',
+            ...getAuthHeadersInit(),
+          },
+          cache: 'no-store',
+        })
+        if (!res.ok) throw new Error(await res.text())
+        const data = await res.json().catch(() => ({} as any))
+        const rows: any[] = Array.isArray(data?.bookings) ? data.bookings : []
+        const opts = rows.map((b) => {
+          const userLabel = [b.firstname, b.lastname]
+            .filter(Boolean)
+            .join(' ')
+            .trim()
+          const fallback = b.username || 'Customer'
+          const who = userLabel || fallback
+          const when = [b.event_date, b.event_time].filter(Boolean).join(' ')
+          const title = b.event_name || b.package_name || 'Event'
+          return {
+            id: Number(b.id),
+            label: `#${b.id} • ${title} • ${when} • ${who}`,
+            userLabel: who,
+          }
+        })
+        if (!ignore) setEventOptions(opts)
+      } catch (e) {
+        console.error('Load confirmed bookings for dropdown failed:', e)
+      }
+    })()
+    return () => {
+      ignore = true
+    }
+  }, [createOpen, API_BASE])
+
   const filtered = useMemo(() => {
     const q = filter.trim().toLowerCase()
     if (!q) return payments
@@ -117,6 +177,7 @@ export default function AdminPaymentsPage() {
         p.booking_id,
         p.user_id,
         p.payment_status,
+        p.booking_payment_status || '',
         p.reference_no || '',
       ].some((v) => String(v).toLowerCase().includes(q))
     )
@@ -194,8 +255,172 @@ export default function AdminPaymentsPage() {
           >
             Sales Report (PDF)
           </button>
+          <button
+            className="px-3 py-2 rounded border"
+            onClick={() => setCreateOpen((v) => !v)}
+          >
+            {createOpen ? 'Close' : 'Create Payment'}
+          </button>
         </div>
       </header>
+
+      {createOpen && (
+        <section className="border rounded-xl p-4 mb-4 bg-white">
+          <h2 className="font-medium mb-2">Create Payment (Admin)</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div>
+              <label className="text-sm">Event (Confirmed Booking)</label>
+              <select
+                className="border rounded px-2 py-1 w-full"
+                value={createForm.booking_id}
+                onChange={(e) =>
+                  setCreateForm((p) => ({ ...p, booking_id: e.target.value }))
+                }
+              >
+                <option value="">Select an event…</option>
+                {eventOptions.map((opt) => (
+                  <option key={opt.id} value={String(opt.id)}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="text-sm">Customer</label>
+              <input
+                className="border rounded px-2 py-1 w-full bg-gray-50"
+                value={
+                  (createForm.booking_id &&
+                    (eventOptions.find(
+                      (o) => String(o.id) === String(createForm.booking_id)
+                    )?.userLabel ||
+                      '')) ||
+                  ''
+                }
+                readOnly
+                placeholder="Auto-filled when event is selected"
+              />
+            </div>
+            <div>
+              <label className="text-sm">Amount Paid</label>
+              <input
+                className="border rounded px-2 py-1 w-full"
+                type="number"
+                value={createForm.amount_paid}
+                onChange={(e) =>
+                  setCreateForm((p) => ({ ...p, amount_paid: e.target.value }))
+                }
+                placeholder="e.g., 5000"
+              />
+            </div>
+            <div>
+              <label className="text-sm">Method</label>
+              <select
+                className="border rounded px-2 py-1 w-full"
+                value={createForm.payment_method}
+                onChange={(e) =>
+                  setCreateForm((p) => ({
+                    ...p,
+                    payment_method: e.target.value,
+                  }))
+                }
+              >
+                <option value="cash">cash</option>
+                <option value="gcash">gcash</option>
+                <option value="bank">bank</option>
+              </select>
+            </div>
+            <div className="sm:col-span-3">
+              <label className="text-sm">Reference No. (optional)</label>
+              <input
+                className="border rounded px-2 py-1 w-full"
+                value={createForm.reference_no}
+                onChange={(e) =>
+                  setCreateForm((p) => ({ ...p, reference_no: e.target.value }))
+                }
+                placeholder="e.g., CASH-ON-EVENT"
+              />
+            </div>
+            <div className="sm:col-span-3">
+              <label className="text-sm">Notes (optional)</label>
+              <textarea
+                className="border rounded px-2 py-1 w-full h-20"
+                value={createForm.notes}
+                onChange={(e) =>
+                  setCreateForm((p) => ({ ...p, notes: e.target.value }))
+                }
+                placeholder="Any remarks about the payment"
+              />
+            </div>
+            <div className="flex items-center gap-3 sm:col-span-3">
+              <label className="text-sm">Mark as verified</label>
+              <input
+                type="checkbox"
+                checked={createForm.verified}
+                onChange={(e) =>
+                  setCreateForm((p) => ({ ...p, verified: e.target.checked }))
+                }
+              />
+              <label className="text-sm">Status</label>
+              <select
+                className="border rounded px-2 py-1"
+                value={createForm.payment_status}
+                onChange={(e) =>
+                  setCreateForm((p) => ({
+                    ...p,
+                    payment_status: e.target.value as any,
+                  }))
+                }
+              >
+                <option value="completed">completed</option>
+                <option value="pending">pending</option>
+                <option value="failed">failed</option>
+                <option value="refunded">refunded</option>
+              </select>
+              <button
+                className="ml-auto px-3 py-2 rounded bg-litratoblack text-white"
+                onClick={async () => {
+                  const booking_id = Number(createForm.booking_id)
+                  const amount_paid = Number(createForm.amount_paid)
+                  if (!booking_id || !amount_paid) {
+                    alert('Booking ID and Amount Paid are required')
+                    return
+                  }
+                  try {
+                    await createAdminPayment({
+                      booking_id,
+                      amount_paid,
+                      payment_method: createForm.payment_method,
+                      reference_no:
+                        createForm.reference_no.trim() || 'CASH-ON-EVENT',
+                      notes: createForm.notes.trim() || undefined,
+                      verified: createForm.verified,
+                      payment_status: createForm.payment_status,
+                    })
+                    // reset
+                    setCreateOpen(false)
+                    setCreateForm({
+                      booking_id: '',
+                      amount_paid: '',
+                      payment_method: 'cash',
+                      reference_no: '',
+                      notes: '',
+                      verified: true,
+                      payment_status: 'completed',
+                    })
+                    await load()
+                  } catch (e) {
+                    console.error('Create admin payment failed:', e)
+                    alert('Failed to create payment')
+                  }
+                }}
+              >
+                Create
+              </button>
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* Top bar with search (mirrors Inventory style) */}
       <nav className="flex gap-2 mb-6">
@@ -334,24 +559,62 @@ export default function AdminPaymentsPage() {
                           {p.reference_no || ''}
                         </td>
                         <td className="px-3 py-2 whitespace-nowrap">
-                          <select
-                            defaultValue={p.payment_status}
-                            className="border rounded px-2 py-1"
-                            onChange={(e) =>
-                              setEdit((s) => ({
-                                ...s,
-                                [p.payment_id]: {
-                                  ...s[p.payment_id],
-                                  payment_status: e.target.value,
-                                },
-                              }))
-                            }
-                          >
-                            <option value="pending">pending</option>
-                            <option value="completed">completed</option>
-                            <option value="failed">failed</option>
-                            <option value="refunded">refunded</option>
-                          </select>
+                          <div className="flex flex-col gap-1">
+                            <div className="text-xs text-gray-600">
+                              Payment:{' '}
+                              <span className="font-medium">
+                                {p.payment_status}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-gray-600">
+                                Booking:
+                              </span>
+                              <select
+                                className="border rounded px-2 py-1"
+                                value={p.booking_payment_status || 'unpaid'}
+                                onChange={async (e) => {
+                                  const val = e.target.value as
+                                    | 'unpaid'
+                                    | 'partial'
+                                    | 'paid'
+                                    | 'refunded'
+                                    | 'failed'
+                                  try {
+                                    const res = await fetch(
+                                      `${API_BASE}/admin/confirmed-bookings/${p.booking_id}/payment-status`,
+                                      {
+                                        method: 'PATCH',
+                                        headers: {
+                                          'Content-Type': 'application/json',
+                                          ...getAuthHeadersInit(),
+                                        },
+                                        body: JSON.stringify({ status: val }),
+                                      }
+                                    )
+                                    if (!res.ok)
+                                      throw new Error(await res.text())
+                                    // reload to reflect both booking status and any derived changes
+                                    await load()
+                                  } catch (err) {
+                                    console.error(
+                                      'Update booking payment_status failed:',
+                                      err
+                                    )
+                                    alert(
+                                      'Failed to update booking payment status'
+                                    )
+                                  }
+                                }}
+                              >
+                                <option value="unpaid">unpaid</option>
+                                <option value="partial">partial</option>
+                                <option value="paid">paid</option>
+                                <option value="refunded">refunded</option>
+                                <option value="failed">failed</option>
+                              </select>
+                            </div>
+                          </div>
                         </td>
                         <td className="px-3 py-2">
                           <textarea

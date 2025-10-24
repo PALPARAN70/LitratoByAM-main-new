@@ -176,15 +176,23 @@ async function listPayments({ booking_id = null, user_id = null } = {}) {
   const values = []
   let idx = 1
   if (booking_id != null) {
-    clauses.push(`booking_id = $${idx++}`)
+    clauses.push(`p.booking_id = $${idx++}`)
     values.push(booking_id)
   }
   if (user_id != null) {
-    clauses.push(`user_id = $${idx++}`)
+    clauses.push(`p.user_id = $${idx++}`)
     values.push(user_id)
   }
   const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : ''
-  const query = `SELECT * FROM payments ${where} ORDER BY created_at DESC`
+  const query = `
+    SELECT 
+      p.*, 
+      cb.payment_status AS booking_payment_status
+    FROM payments p
+    LEFT JOIN confirmed_bookings cb ON cb.id = p.booking_id
+    ${where}
+    ORDER BY p.created_at DESC
+  `
   const result = await pool.query(query, values)
   return result.rows
 }

@@ -1,7 +1,8 @@
 const {
-  listPayments,
+  listPayments: modelListPayments,
   findPaymentById,
   updatePayment,
+  createPayment,
 } = require('../../Model/paymentModel')
 const {
   createPaymentLog,
@@ -9,13 +10,16 @@ const {
   listAllPaymentLogs,
   updatePaymentLog,
 } = require('../../Model/paymentLogsModel')
+const {
+  getConfirmedBookingById,
+  updatePaymentStatus: updateBookingPaymentStatus,
+} = require('../../Model/confirmedBookingRequestModel')
 
-// List payments with optional filters: status, user_id, booking_id, date range
+// List payments with optional filters: status, user_id, booking_id
 async function listPaymentsHandler(req, res) {
   try {
     const { status, user_id, booking_id } = req.query
-    // For now, reuse model listPayments with user/booking filters; status filter in JS
-    const rows = await listPayments({
+    const rows = await modelListPayments({
       user_id: user_id ? Number(user_id) : null,
       booking_id: booking_id ? Number(booking_id) : null,
     })
@@ -44,7 +48,7 @@ async function getPaymentHandler(req, res) {
   }
 }
 
-// Update payment; if status changes, log it
+// Update payment; log changes; propagate to booking payment_status
 async function updatePaymentHandler(req, res) {
   try {
     const id = Number(req.params.id)
@@ -111,6 +115,13 @@ async function updatePaymentHandler(req, res) {
       }
     }
 
+    // Propagate to booking payment_status
+    try {
+      await recalcBookingPaymentStatus(next.booking_id)
+    } catch (e) {
+      console.warn('recalc booking payment status (update) failed:', e?.message)
+    }
+
     res.json({ payment: next })
   } catch (err) {
     console.error('admin updatePayment error:', err)
@@ -164,8 +175,7 @@ async function generateSalesReportHandler(req, res) {
       })
     }
 
-    // Fetch all payments; add filters later if needed (e.g., from/to)
-    const rows = await listPayments({})
+    const rows = await modelListPayments({})
 
     const doc = new PDFDocument({ size: 'A4', margin: 36 })
     res.setHeader('Content-Type', 'application/pdf')
@@ -216,6 +226,112 @@ async function generateSalesReportHandler(req, res) {
   }
 }
 
+// Helper: determine booking payment_status from all payments
+async function recalcBookingPaymentStatus(bookingId) {
+  const booking = await getConfirmedBookingById(Number(bookingId))
+  if (!booking) return
+  const total = Number(booking.total_booking_price || 0)
+  const pays = await modelListPayments({ booking_id: Number(bookingId) })
+  let paid = 0
+  let hasCompleted = false
+  let hasRefunded = false
+  let hasFailed = false
+  for (const p of pays) {
+    if (p.payment_status === 'completed') {
+      hasCompleted = true
+      paid += Number(p.amount_paid || 0)
+    } else if (p.payment_status === 'refunded') {
+      hasRefunded = true
+    } else if (p.payment_status === 'failed') {
+      hasFailed = true
+    }
+  }
+  let status = 'unpaid'
+  if (paid >= total && total > 0) status = 'paid'
+  else if (paid > 0 && paid < total) status = 'partial'
+  else if (!hasCompleted && hasRefunded) status = 'refunded'
+  else if (!hasCompleted && hasFailed && paid === 0) status = 'failed'
+
+  await updateBookingPaymentStatus(Number(bookingId), status)
+}
+
+// Admin creates a payment entry (e.g., cash during event)
+async function createPaymentHandler(req, res) {
+  try {
+    const {
+      booking_id,
+      amount_paid,
+      payment_method = 'cash',
+      reference_no = null,
+      notes = null,
+      payment_status = 'completed',
+      verified = true,
+    } = req.body || {}
+
+    const bId = Number(booking_id)
+    const paid = Number(amount_paid)
+    if (!Number.isInteger(bId) || bId <= 0) {
+      return res.status(400).json({ error: 'booking_id is required' })
+    }
+    if (!Number.isFinite(paid) || paid <= 0) {
+      return res.status(400).json({ error: 'amount_paid must be > 0' })
+    }
+
+    const booking = await getConfirmedBookingById(bId)
+    if (!booking) return res.status(404).json({ error: 'Booking not found' })
+
+    const userId = Number(booking.userid)
+    const amount = Number(booking.total_booking_price || 0)
+
+    const row = await createPayment({
+      booking_id: bId,
+      user_id: userId,
+      amount,
+      amount_paid: paid,
+      payment_method: String(payment_method || 'cash'),
+      proof_image_url: null,
+      reference_no: reference_no ? String(reference_no) : null,
+      payment_status: String(payment_status || 'completed'),
+      notes: notes == null ? null : String(notes),
+      verified_at: verified ? new Date() : null,
+    })
+
+    try {
+      await createPaymentLog({
+        payment_id: row.payment_id,
+        previous_status: 'n/a',
+        new_status: row.payment_status,
+        performed_by: 'admin',
+        user_id: req.user?.id,
+        notes: row.notes || null,
+        action: 'admin-create',
+      })
+      await createPaymentLog({
+        payment_id: row.payment_id,
+        previous_status: 'n/a',
+        new_status: row.payment_status,
+        performed_by: 'customer',
+        user_id: userId,
+        notes: row.notes || null,
+        action: 'customer-cash-payment',
+      })
+    } catch (e) {
+      console.error('admin create payment log failed:', e)
+    }
+
+    try {
+      await recalcBookingPaymentStatus(row.booking_id)
+    } catch (e) {
+      console.warn('recalc booking payment status (create) failed:', e?.message)
+    }
+
+    res.status(201).json({ payment: row })
+  } catch (err) {
+    console.error('admin createPayment error:', err)
+    res.status(500).json({ error: 'Failed to create payment' })
+  }
+}
+
 module.exports = {
   listPayments: listPaymentsHandler,
   getPayment: getPaymentHandler,
@@ -223,4 +339,5 @@ module.exports = {
   listPaymentLogs: listPaymentLogsHandler,
   updatePaymentLog: updatePaymentLogHandler,
   generateSalesReport: generateSalesReportHandler,
+  createPayment: createPaymentHandler,
 }
