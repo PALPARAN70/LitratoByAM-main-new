@@ -1,29 +1,29 @@
-"use client";
-import { useState, useEffect } from "react";
-import AdminSidebar from "./Adminsidebar";
+'use client'
+import { useState, useEffect } from 'react'
+import AdminSidebar from './Adminsidebar'
 
 export default function AdminLayoutShell({
   children,
 }: {
-  children: React.ReactNode;
+  children: React.ReactNode
 }) {
-  const [open, setOpen] = useState(true);
-  const [mounted, setMounted] = useState(false);
+  const [open, setOpen] = useState(true)
+  const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
-    setMounted(true);
-  }, []);
+    setMounted(true)
+  }, [])
 
   if (!mounted) {
     // Prevent hydration mismatch while keeping page background
-    return <div className="min-h-screen bg-gray-100" />;
+    return <div className="min-h-screen bg-gray-100" />
   }
 
   return (
     <div className="flex min-h-screen bg-gray-100">
       {/* Sidebar */}
       <div className="fixed left-0 top-0 h-full z-20">
-        <AdminSidebar isOpen={open} onToggle={setOpen} />
+        <AdminSidebar isOpen={open} onToggleAction={setOpen} />
       </div>
 
       {/* Main content: animate margin-left as sidebar width changes */}
@@ -34,5 +34,5 @@ export default function AdminLayoutShell({
         {children}
       </main>
     </div>
-  );
+  )
 }

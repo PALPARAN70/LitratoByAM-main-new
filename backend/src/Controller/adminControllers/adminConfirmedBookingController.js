@@ -11,6 +11,11 @@ const {
 } = require('../../Model/confirmedBookingRequestModel')
 const { sendEmail } = require('../../Util/sendEmail')
 const {
+  assignStaff: assignStaffToModel,
+  getStaffForBooking,
+  initConfirmedBookingStaffTable,
+} = require('../../Model/confirmedBookingStaffModel')
+const {
   createBookingRequest,
   updateBookingRequestStatus,
   checkBookingConflicts,
@@ -20,6 +25,10 @@ const { findUserById, findUserByUsername } = require('../../Model/userModel')
 // Ensure table exists once when the controller is loaded (best-effort)
 initConfirmedBookingTable().catch((e) =>
   console.warn('Init confirmed_bookings table failed:', e?.message)
+)
+// Ensure staff assignment junction table exists
+initConfirmedBookingStaffTable().catch((e) =>
+  console.warn('Init confirmed_booking_staff table failed:', e?.message)
 )
 
 async function list(req, res) {
@@ -476,4 +485,39 @@ module.exports = {
   updateConfirmedCombined,
   cancelConfirmed,
   createAndConfirm,
+  // staff assignment
+  async listStaffForBooking(req, res) {
+    try {
+      const id = parseInt(req.params.id, 10)
+      if (Number.isNaN(id))
+        return res.status(400).json({ message: 'Invalid id' })
+      const staff = await getStaffForBooking(id)
+      return res.json({ staff })
+    } catch (err) {
+      console.error('confirmed.listStaffForBooking error:', err)
+      return res
+        .status(500)
+        .json({ message: 'Error loading assigned staff for booking' })
+    }
+  },
+  async assignStaff(req, res) {
+    try {
+      const id = parseInt(req.params.id, 10)
+      if (Number.isNaN(id))
+        return res.status(400).json({ message: 'Invalid id' })
+      const { staffUserIds } = req.body || {}
+      if (!Array.isArray(staffUserIds) || staffUserIds.length === 0)
+        return res
+          .status(400)
+          .json({ message: 'staffUserIds array is required' })
+      // model enforces max 2 including existing assignments
+      const staff = await assignStaffToModel(id, staffUserIds)
+      return res.json({ staff })
+    } catch (err) {
+      console.error('confirmed.assignStaff error:', err)
+      return res
+        .status(400)
+        .json({ message: err?.message || 'Error assigning staff' })
+    }
+  },
 }

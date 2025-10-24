@@ -52,7 +52,7 @@ export default function AuthGuard({
           // Redirect users who don't have permission to a sensible destination
           const byRole: Record<string, string> = {
             admin: '/admin',
-            employee: '/employee',
+            employee: '/staff',
             customer: '/customer/dashboard',
           }
           router.replace(byRole[userRole] || '/')

@@ -26,7 +26,7 @@ const cx = (...classes: Array<string | false | null | undefined>) =>
 
 type SidebarProps = {
   isOpen?: boolean
-  onToggle?: (open: boolean) => void
+  onToggleAction?: (open: boolean) => void
 }
 
 // Define NavItem type and hoist static items for stability
@@ -45,6 +45,7 @@ const NAV_ITEMS: NavItem[] = [
     Icon: FiSettings,
     path: '/admin/ManageBooking',
   },
+  { label: 'Events', Icon: FiCalendar, path: '/admin/Events' },
   { label: 'Booking', Icon: FiCalendar, path: '/admin/createBooking' },
   { label: 'Manage Users', Icon: FiUser, path: '/admin/AccountManager' },
   { label: 'Payments', Icon: FiCreditCard, path: '/admin/payments' },
@@ -52,7 +53,7 @@ const NAV_ITEMS: NavItem[] = [
 
 export default function LitratoSidebar({
   isOpen: controlledOpen,
-  onToggle,
+  onToggleAction,
 }: SidebarProps) {
   // fetch admin profile
   const [User, setUser] = useState<{
@@ -67,9 +68,9 @@ export default function LitratoSidebar({
   const isOpen = controlledOpen ?? internalOpen
 
   const toggleOpen = useCallback(() => {
-    if (onToggle) onToggle(!isOpen)
+    if (onToggleAction) onToggleAction(!isOpen)
     else setInternalOpen((prev) => !prev)
-  }, [onToggle, isOpen])
+  }, [onToggleAction, isOpen])
 
   const handleNavigation = useCallback(
     (path: string) => {
