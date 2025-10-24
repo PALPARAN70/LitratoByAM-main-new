@@ -204,15 +204,51 @@ exports.createPackage = async (req, res) => {
       status,
       display,
       image_url,
-    } = req.body
+    } = req.body || {}
+
+    // Basic validation and coercion to prevent DB errors
+    const name = String(package_name || '').trim()
+    if (!name) {
+      return res
+        .status(400)
+        .json({ toast: { type: 'error', message: 'package_name is required' } })
+    }
+
+    const priceNum = Number(price)
+    if (!Number.isFinite(priceNum) || priceNum < 0) {
+      return res.status(400).json({
+        toast: {
+          type: 'error',
+          message: 'price must be a non-negative number',
+        },
+      })
+    }
+
+    const dur =
+      duration_hours == null || duration_hours === ''
+        ? null
+        : Number(duration_hours)
+    if (!(dur === null || (Number.isInteger(dur) && dur >= 0))) {
+      return res.status(400).json({
+        toast: {
+          type: 'error',
+          message: 'duration_hours must be an integer >= 0 or null',
+        },
+      })
+    }
+
+    const statusBool = status === undefined ? true : Boolean(status)
+    const displayBool = display === undefined ? true : Boolean(display)
+    const imageUrl = image_url == null ? '' : String(image_url)
+
     const newPackage = await packageModel.createPackage(
-      package_name,
-      description,
-      price,
-      duration_hours,
-      status,
-      display,
-      image_url
+      name,
+      description == null ? '' : String(description),
+      priceNum,
+      dur,
+      statusBool,
+      displayBool,
+      imageUrl
     )
     try {
       await inventoryStatusLogModel.createStatusLog(
@@ -239,9 +275,18 @@ exports.createPackage = async (req, res) => {
     })
   } catch (e) {
     console.error('Create Package Error:', e)
-    res
-      .status(500)
-      .json({ toast: { type: 'error', message: 'Internal server error' } })
+    // Provide clearer client errors for common DB issues
+    if (e && (e.code === '22P02' || e.code === '23502')) {
+      return res.status(400).json({
+        toast: {
+          type: 'error',
+          message: 'Invalid package fields. Check price/duration/name.',
+        },
+      })
+    }
+    res.status(500).json({
+      toast: { type: 'error', message: 'Internal server error' },
+    })
   }
 }
 

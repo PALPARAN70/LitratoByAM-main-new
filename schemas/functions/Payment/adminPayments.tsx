@@ -59,6 +59,32 @@ export async function updateAdminPayment(
   return data.payment as Payment
 }
 
+export type AdminCreatePaymentInput = {
+  booking_id: number
+  amount_paid: number
+  payment_method?: string // default 'cash'
+  reference_no?: string | null
+  notes?: string | null
+  payment_status?: 'pending' | 'completed' | 'failed' | 'refunded'
+  verified?: boolean // default true for cash
+}
+
+export async function createAdminPayment(
+  body: AdminCreatePaymentInput
+): Promise<Payment> {
+  const res = await fetch(`${API_BASE}/admin/payments`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...getAuthHeadersInit(),
+    },
+    body: JSON.stringify(body ?? {}),
+  })
+  if (!res.ok) throw new Error(await safeText(res, 'Failed to create payment'))
+  const data = await res.json().catch(() => ({}))
+  return data.payment as Payment
+}
+
 export async function uploadAdminPaymentQR(
   file: File
 ): Promise<{ url: string }> {

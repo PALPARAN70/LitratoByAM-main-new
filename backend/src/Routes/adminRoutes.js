@@ -82,6 +82,14 @@ router.get(
   adminPaymentsController.listPayments
 )
 
+// Create a payment (admin)
+router.post(
+  '/payments',
+  authMiddleware,
+  roleMiddleware('admin'),
+  adminPaymentsController.createPayment
+)
+
 // Sales report PDF (placed before dynamic :id routes to avoid collision)
 router.get(
   '/payments/report',

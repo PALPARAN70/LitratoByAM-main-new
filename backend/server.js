@@ -20,6 +20,15 @@ const {
 } = require('./src/Model/confirmedBookingRequestModel')
 const { initPaymentsTable } = require('./src/Model/paymentModel')
 const { initPaymentLogsTable } = require('./src/Model/paymentLogsModel')
+// ADD: ensure inventory/packages/status log tables are initialized on startup
+const { initInventoryTable } = require('./src/Model/inventoryModel')
+const { initPackagesTable } = require('./src/Model/packageModel')
+const {
+  initPackageInventoryItemsTable,
+} = require('./src/Model/packageInventoryItemModel')
+const {
+  initInventoryStatusLogTable,
+} = require('./src/Model/inventoryStatusLogModel')
 
 const ROOT = path.resolve(__dirname, '..') // points to backend/
 const UPLOAD_ROOT = path.join(ROOT, 'Assets')
@@ -72,6 +81,11 @@ initUserTable()
   .then(() => initBookingRequestTable())
   .then(() => initBookingGridsTable())
   .then(() => initConfirmedBookingTable())
+  // Ensure core inventory/packages schemas exist before requests hit them
+  .then(() => initInventoryTable())
+  .then(() => initPackagesTable())
+  .then(() => initPackageInventoryItemsTable())
+  .then(() => initInventoryStatusLogTable())
   .then(() => initPaymentsTable())
   .then(() => initPaymentLogsTable())
   .then(() => {
