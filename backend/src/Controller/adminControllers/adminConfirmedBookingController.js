@@ -14,6 +14,7 @@ const {
   assignStaff: assignStaffToModel,
   getStaffForBooking,
   initConfirmedBookingStaffTable,
+  setStaff: setStaffForModel,
 } = require('../../Model/confirmedBookingStaffModel')
 const {
   createBookingRequest,
@@ -518,6 +519,25 @@ module.exports = {
       return res
         .status(400)
         .json({ message: err?.message || 'Error assigning staff' })
+    }
+  },
+  async replaceStaff(req, res) {
+    try {
+      const id = parseInt(req.params.id, 10)
+      if (Number.isNaN(id))
+        return res.status(400).json({ message: 'Invalid id' })
+      const { staffUserIds } = req.body || {}
+      if (!Array.isArray(staffUserIds))
+        return res
+          .status(400)
+          .json({ message: 'staffUserIds array is required' })
+      const staff = await setStaffForModel(id, staffUserIds)
+      return res.json({ staff })
+    } catch (err) {
+      console.error('confirmed.replaceStaff error:', err)
+      return res
+        .status(400)
+        .json({ message: err?.message || 'Error replacing staff' })
     }
   },
 }

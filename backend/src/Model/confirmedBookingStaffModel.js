@@ -87,9 +87,97 @@ async function getStaffForBooking(bookingid) {
   return rows
 }
 
+// Replace all staff assignments for a booking with the provided list (max 2)
+async function setStaff(bookingid, staffUserIds = []) {
+  if (!Array.isArray(staffUserIds)) staffUserIds = []
+
+  // ensure booking exists
+  const b = await pool.query(
+    `SELECT id FROM confirmed_bookings WHERE id = $1`,
+    [bookingid]
+  )
+  if (!b.rows[0]) throw new Error('Confirmed booking not found')
+
+  // normalize staff ids (unique, numeric)
+  const uniqueIds = Array.from(
+    new Set(staffUserIds.map((n) => Number(n)).filter(Boolean))
+  )
+  if (uniqueIds.length > 2) {
+    throw new Error('You can assign at most 2 staff per booking')
+  }
+
+  // validate users are employees
+  if (uniqueIds.length) {
+    const { rows: validStaff } = await pool.query(
+      `SELECT id FROM users WHERE id = ANY($1) AND role = 'employee'`,
+      [uniqueIds]
+    )
+    const validIds = new Set(validStaff.map((r) => r.id))
+    const invalid = uniqueIds.filter((id) => !validIds.has(id))
+    if (invalid.length)
+      throw new Error(`Invalid staff userId(s): ${invalid.join(', ')}`)
+  }
+
+  // transaction: clear existing and insert new
+  const client = await pool.connect()
+  try {
+    await client.query('BEGIN')
+    await client.query(
+      `DELETE FROM confirmed_booking_staff WHERE bookingid = $1`,
+      [bookingid]
+    )
+    for (const staffId of uniqueIds) {
+      await client.query(
+        `INSERT INTO confirmed_booking_staff (bookingid, staff_userid) VALUES ($1, $2)`,
+        [bookingid, staffId]
+      )
+    }
+    await client.query('COMMIT')
+  } catch (e) {
+    await client.query('ROLLBACK')
+    throw e
+  } finally {
+    client.release()
+  }
+  return getStaffForBooking(bookingid)
+}
+
 module.exports = {
   initConfirmedBookingStaffTable,
   assignStaff,
   removeStaff,
   getStaffForBooking,
+  setStaff,
+  // List confirmed bookings assigned to a specific staff user, with details
+  async listAssignedConfirmedBookings(staffUserId) {
+    const { rows } = await pool.query(
+      `
+      SELECT 
+        cb.*,
+        TO_CHAR(br.event_date, 'YYYY-MM-DD') AS event_date,
+        TO_CHAR(br.event_time, 'HH24:MI') AS event_time,
+        COALESCE(cb.event_end_time, br.event_end_time) AS event_end_time,
+        COALESCE(cb.extension_duration, br.extension_duration) AS extension_duration,
+        COALESCE(cb.grid, br.grid) AS grid,
+        br.event_address,
+        br.contact_info,
+        br.event_name,
+        br.strongest_signal,
+        p.package_name,
+        p.price AS package_price,
+        u.username,
+        u.firstname,
+        u.lastname
+      FROM confirmed_booking_staff cbs
+      JOIN confirmed_bookings cb ON cb.id = cbs.bookingid
+      JOIN booking_requests br ON br.requestid = cb.requestid
+      JOIN packages p ON p.id = br.packageid
+      JOIN users u ON u.id = cb.userid
+      WHERE cbs.staff_userid = $1
+      ORDER BY cb.created_at DESC
+      `,
+      [staffUserId]
+    )
+    return rows
+  },
 }

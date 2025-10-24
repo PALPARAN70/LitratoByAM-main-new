@@ -40,7 +40,7 @@ import {
   listEmployees,
   getConfirmedBookingIdByRequest,
   listAssignedStaff,
-  assignStaffToBooking,
+  replaceAssignedStaff,
   type StaffUser,
 } from '../../../../schemas/functions/staffFunctions/staffAssignment'
 
@@ -637,8 +637,9 @@ function MasterListPanel({
     }
     try {
       setAssignBusy(true)
-      await assignStaffToBooking(cid, ids)
-      toast.success('Staff assigned')
+      // Replace the current assigned staff set with the newly selected ones
+      await replaceAssignedStaff(cid, ids)
+      toast.success('Staff assignment updated')
       setAssignOpen(false)
       setAssignTarget(null)
     } catch (e: any) {

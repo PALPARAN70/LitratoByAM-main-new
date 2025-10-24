@@ -538,6 +538,14 @@ router.post(
   adminConfirmedBookingController.assignStaff
 )
 
+// Replace staff assignments for a confirmed booking
+router.put(
+  '/confirmed-bookings/:id/staff',
+  authMiddleware,
+  roleMiddleware('admin'),
+  adminConfirmedBookingController.replaceStaff
+)
+
 module.exports = router
 
 // keep module.exports at end

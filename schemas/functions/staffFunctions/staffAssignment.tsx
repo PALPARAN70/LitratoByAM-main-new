@@ -109,3 +109,25 @@ export async function assignStaffToBooking(
     throw new Error(err?.message || 'Failed to assign staff')
   }
 }
+
+// Replace assigned staff for a booking (up to two)
+export async function replaceAssignedStaff(
+  confirmedId: number,
+  staffUserIds: number[]
+): Promise<void> {
+  const res = await fetch(
+    `${API_BASE}/api/admin/confirmed-bookings/${confirmedId}/staff`,
+    {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(authHeaders() || {}),
+      },
+      body: JSON.stringify({ staffUserIds }),
+    }
+  )
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err?.message || 'Failed to replace staff')
+  }
+}
