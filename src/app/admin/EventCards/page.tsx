@@ -9,10 +9,6 @@ import {
   PaginationPrevious,
   PaginationNext,
 } from '@/components/ui/pagination'
-// REMOVE unused card imports and icon
-// import { Card, CardHeader, CardContent } from "@/components/ui/card";
-// import { HiOutlineExternalLink } from "react-icons/hi";
-// ADD: select for filters
 import {
   Select,
   SelectContent,
@@ -21,23 +17,24 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 
+// Keep types aligned with staff dashboard
 type Status = 'ongoing' | 'standby' | 'finished'
-// CHANGED: include 'paid' for filter consistency
 type Payment = 'unpaid' | 'partially-paid' | 'paid'
 type Item = { name: string; qty?: number }
-type StaffEvent = {
+
+type AdminEvent = {
   id: string | number
   title: string
   dateTime: string
   location: string
   status: Status
   payment: Payment
+  totalPrice?: number
   imageUrl?: string
   damagedItems?: Item[]
   missingItems?: Item[]
 }
 
-// shared 3-page window helper
 function pageWindow(current: number, total: number, size = 3): number[] {
   if (total <= 0) return []
   const start = Math.floor((Math.max(1, current) - 1) / size) * size + 1
@@ -45,16 +42,17 @@ function pageWindow(current: number, total: number, size = 3): number[] {
   return Array.from({ length: end - start + 1 }, (_, i) => start + i)
 }
 
-export default function DashboardPage() {
-  // Load only events assigned to the logged-in staff
-  const [events, setEvents] = useState<StaffEvent[]>([])
+export default function AdminEventCardsPage() {
+  // Derived from backend confirmed bookings
+  const [events, setEvents] = useState<AdminEvent[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   const API_BASE =
     (process.env.NEXT_PUBLIC_API_BASE?.replace(/\/$/, '') ||
-      'http://localhost:5000') + '/api/employee/assigned-confirmed-bookings'
+      'http://localhost:5000') + '/api/admin/confirmed-bookings'
 
+  // helpers to map backend -> UI
   const mapBookingStatus = (s?: string): Status => {
     switch ((s || '').toLowerCase()) {
       case 'in_progress':
@@ -96,7 +94,7 @@ export default function DashboardPage() {
         const bookings = Array.isArray(data?.bookings) ? data.bookings : []
         // Only include scheduled, in_progress, completed
         const allowed = new Set(['scheduled', 'in_progress', 'completed'])
-        const mapped: StaffEvent[] = bookings
+        const mapped: AdminEvent[] = bookings
           .filter((b: any) =>
             allowed.has(String(b?.booking_status || '').toLowerCase())
           )
@@ -106,6 +104,9 @@ export default function DashboardPage() {
             const time = b.event_time || ''
             const dateTime = [date, time].filter(Boolean).join(' - ')
             const location = b.event_address || ''
+            const extHours = Number(b.extension_duration || 0)
+            const base = Number(b.total_booking_price || 0)
+            const totalPrice = base + extHours * 2000
             return {
               id: b.id ?? b.confirmed_id ?? '',
               title,
@@ -113,6 +114,7 @@ export default function DashboardPage() {
               location,
               status: mapBookingStatus(b.booking_status),
               payment: mapPaymentStatus(b.payment_status),
+              totalPrice,
               imageUrl: undefined,
               damagedItems: [],
               missingItems: [],
@@ -131,7 +133,7 @@ export default function DashboardPage() {
     }
   }, [])
 
-  // REPLACED: standalone status-only filter with 3 filters + search
+  // Filters + search
   const [statusFilter, setStatusFilter] = useState<Status | 'all'>('all')
   const [itemsFilter, setItemsFilter] = useState<'all' | 'with' | 'without'>(
     'all'
@@ -143,7 +145,6 @@ export default function DashboardPage() {
     setPage(1)
   }, [statusFilter, itemsFilter, paymentFilter, search])
 
-  // CHANGED: combine all filters + search
   const filteredEvents = useMemo(() => {
     const tokens = search.trim().toLowerCase().split(/\s+/).filter(Boolean)
     return events.filter((e) => {
@@ -166,7 +167,7 @@ export default function DashboardPage() {
     })
   }, [events, statusFilter, itemsFilter, paymentFilter, search])
 
-  // CHANGED: pagination uses filtered list
+  // Pagination
   const PER_PAGE = 5
   const [page, setPage] = useState(1)
   const totalPages = Math.max(1, Math.ceil(filteredEvents.length / PER_PAGE))
@@ -186,10 +187,10 @@ export default function DashboardPage() {
       <div className="mx-auto max-w-screen-2xl px-4 sm:px-6 lg:px-8 py-8">
         <div className="flex flex-col gap-6">
           <h1 className="text-2xl sm:text-3xl md:text-4xl font-semibold">
-            Hello Staff
+            Event cards
           </h1>
           <div className="p-4 bg-white shadow rounded-xl gap-2 flex flex-col">
-            {/* NEW: Filters toolbar (replaces status cards) */}
+            {/* Filters */}
             <div className="flex flex-wrap items-center gap-2">
               {/* Status filter */}
               <Select
@@ -251,18 +252,18 @@ export default function DashboardPage() {
               />
             </div>
 
-            {/* cards grid (unchanged) */}
+            {/* Cards grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2">
               {paginated.map((ev, idx) => (
                 <EventCard
                   key={`${ev.title}-${idx}`}
                   bookingId={ev.id}
-                  summaryRole="employee"
                   title={ev.title}
                   dateTime={ev.dateTime}
                   location={ev.location}
                   status={ev.status}
                   payment={ev.payment}
+                  totalPrice={ev.totalPrice}
                   imageUrl={ev.imageUrl}
                   damagedItems={ev.damagedItems}
                   missingItems={ev.missingItems}
@@ -270,7 +271,7 @@ export default function DashboardPage() {
               ))}
             </div>
 
-            {/* pagination (unchanged) */}
+            {/* Pagination */}
             <div className="mt-2">
               <Pagination>
                 <PaginationContent>

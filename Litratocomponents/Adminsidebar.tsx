@@ -46,6 +46,7 @@ const NAV_ITEMS: NavItem[] = [
     path: '/admin/ManageBooking',
   },
   { label: 'Events', Icon: FiCalendar, path: '/admin/Events' },
+  { label: 'Event cards', Icon: FiCalendar, path: '/admin/EventCards' },
   { label: 'Booking', Icon: FiCalendar, path: '/admin/createBooking' },
   { label: 'Manage Users', Icon: FiUser, path: '/admin/AccountManager' },
   { label: 'Payments', Icon: FiCreditCard, path: '/admin/payments' },

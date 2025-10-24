@@ -214,9 +214,11 @@ async function getBookingRequestsByUserId(userid) {
       p.package_name,
       p.description as package_description,
       p.price,
-      p.image_url
+      p.image_url,
+      cb.payment_status
     FROM booking_requests br
     JOIN packages p ON br.packageid = p.id
+    LEFT JOIN confirmed_bookings cb ON cb.requestid = br.requestid
     WHERE br.userid = $1
     ORDER BY br.created_at DESC
   `

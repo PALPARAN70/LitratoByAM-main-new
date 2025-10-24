@@ -29,6 +29,10 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Ellipsis } from 'lucide-react'
+import {
+  fetchAdminConfirmedBookings,
+  updateAdminBookingStatus,
+} from '../../../../schemas/functions/ConfirmedBookings/admin'
 
 // Reuse the same types as staff event logs for now
 type EventStatus = 'ongoing' | 'standby' | 'finished'
@@ -79,66 +83,111 @@ const paymentBadgeClass = (p: PaymentStatus) => {
 }
 
 export default function AdminEventsPage() {
-  // Static mocked data (same structure as staff page)
-  const [rows, setRows] = useState<EventLogRow[]>(() => [
-    {
-      id: '1',
-      eventName: 'Acosta Wedding',
-      clientName: 'Maria Acosta',
-      location: 'Tagaytay Highlands',
-      date: '2025-10-20',
-      startTime: '13:00',
-      endTime: '17:00',
-      packageName: 'The Hanz',
-      contactPerson: 'Coordinator Jane',
-      contactNumber: '+63 912 345 6789',
-      notes: 'Outdoor setup near pavilion',
-      status: 'ongoing',
-      payment: 'partially-paid',
-      items: {
-        damaged: [{ name: 'LED Panel', qty: 1 }],
-        missing: [],
-      },
-    },
-    {
-      id: '2',
-      eventName: 'Dellara Debut',
-      clientName: 'Alyssa Dellara',
-      location: 'Okada Manila',
-      date: '2025-10-18',
-      startTime: '18:00',
-      endTime: '22:00',
-      packageName: 'The Marco',
-      contactPerson: 'Mr. Cruz',
-      contactNumber: '0917 000 1122',
-      notes: 'Ballroom B, 2nd floor',
-      status: 'finished',
-      payment: 'paid',
-      items: {
-        damaged: [],
-        missing: [{ name: 'Tripod Screw', qty: 2 }],
-      },
-    },
-    {
-      id: '3',
-      eventName: 'Corp Year-End Party',
-      clientName: 'ABC Corp',
-      location: 'BGC, Taguig',
-      date: '2025-10-25',
-      startTime: '19:00',
-      endTime: '23:00',
-      packageName: 'The Aed',
-      contactPerson: 'HR - Leo',
-      contactNumber: '0918 222 3344',
-      notes: 'Requires ethernet for backup',
-      status: 'standby',
-      payment: 'unpaid',
-      items: {
-        damaged: [],
-        missing: [],
-      },
-    },
-  ])
+  // Live data derived from admin confirmed bookings
+  const [rows, setRows] = useState<EventLogRow[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  const mapBookingStatus = (s?: string): EventStatus => {
+    switch ((s || '').toLowerCase()) {
+      case 'in_progress':
+        return 'ongoing'
+      case 'completed':
+      case 'cancelled':
+        return 'finished'
+      case 'scheduled':
+      default:
+        return 'standby'
+    }
+  }
+  const toBackendStatus = (s: EventStatus): string => {
+    switch (s) {
+      case 'ongoing':
+        return 'in_progress'
+      case 'finished':
+        return 'completed'
+      case 'standby':
+      default:
+        return 'scheduled'
+    }
+  }
+  const mapPaymentStatus = (s?: string): PaymentStatus => {
+    switch ((s || '').toLowerCase()) {
+      case 'paid':
+        return 'paid'
+      case 'partial':
+        return 'partially-paid'
+      case 'unpaid':
+      case 'refunded':
+      case 'failed':
+      default:
+        return 'unpaid'
+    }
+  }
+
+  useEffect(() => {
+    let active = true
+    async function load() {
+      setLoading(true)
+      setError(null)
+      try {
+        const bookings: any[] = await fetchAdminConfirmedBookings()
+        // Exclude cancelled for Events view
+        const allowed = new Set(['scheduled', 'in_progress', 'completed'])
+        const mapped: EventLogRow[] = bookings
+          .filter((b) =>
+            allowed.has(String(b?.booking_status || '').toLowerCase())
+          )
+          .map((b) => {
+            const clientName =
+              [b?.firstname, b?.lastname].filter(Boolean).join(' ').trim() ||
+              String(b?.username || '')
+            const contactInfo = String(b?.contact_info || '')
+            const phoneMatch = contactInfo.match(/(\+?\d[\d\s-]{6,}\d)/)
+            const contactNumber = (phoneMatch?.[1] || '').trim()
+            return {
+              id: String(b?.id || b?.confirmed_id || Math.random()),
+              eventName: String(b?.event_name || b?.package_name || 'Event'),
+              clientName,
+              location: String(b?.event_address || ''),
+              date: String(b?.event_date || ''),
+              startTime: String(b?.event_time || ''),
+              endTime: b?.event_end_time
+                ? String(b.event_end_time).slice(0, 5)
+                : undefined,
+              packageName: String(b?.package_name || ''),
+              contactPerson: clientName,
+              contactNumber: contactNumber || undefined,
+              notes: '',
+              status: mapBookingStatus(b?.booking_status),
+              payment: mapPaymentStatus(b?.payment_status),
+              items: { damaged: [], missing: [] },
+            }
+          })
+        if (active) setRows(mapped)
+      } catch (e: any) {
+        if (active) setError(e?.message || 'Failed to load events')
+      } finally {
+        if (active) setLoading(false)
+      }
+    }
+    load()
+    return () => {
+      active = false
+    }
+  }, [])
+
+  // Change status handler (admin endpoint)
+  const changeStatus = async (row: EventLogRow, next: EventStatus) => {
+    try {
+      await updateAdminBookingStatus(row.id, toBackendStatus(next) as any)
+      setRows((prev) =>
+        prev.map((r) => (r.id === row.id ? { ...r, status: next } : r))
+      )
+    } catch (e) {
+      console.error('Change status failed:', e)
+    }
+  }
 
   // Filters
   const [statusFilter, setStatusFilter] = useState<EventStatus | 'all'>('all')
@@ -379,13 +428,31 @@ export default function AdminEventsPage() {
                         </Popover>
                       </td>
                       <td className="px-3 sm:px-4 py-2 whitespace-nowrap">
-                        <span
-                          className={`inline-block px-2 py-1 w-18 text-center rounded-full text-xs font-medium ${statusBadgeClass(
-                            row.status
-                          )}`}
+                        <Select
+                          value={row.status}
+                          onValueChange={(v) =>
+                            changeStatus(row, v as EventStatus)
+                          }
                         >
-                          {statusLabel(row.status)}
-                        </span>
+                          <SelectTrigger
+                            className={`h-7 text-xs w-32 px-3 border-0 rounded-full ${statusBadgeClass(
+                              row.status
+                            )}`}
+                          >
+                            <SelectValue placeholder="Status" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="standby">
+                              {statusLabel('standby')}
+                            </SelectItem>
+                            <SelectItem value="ongoing">
+                              {statusLabel('ongoing')}
+                            </SelectItem>
+                            <SelectItem value="finished">
+                              {statusLabel('finished')}
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
                       </td>
                       <td className="px-3 sm:px-4 py-2 whitespace-nowrap">
                         <button
