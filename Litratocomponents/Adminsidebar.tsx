@@ -1,10 +1,10 @@
-'use client'
-import { useState, useCallback, useEffect } from 'react'
-import type { KeyboardEvent } from 'react'
-import Image from 'next/image'
-import { HiMenu } from 'react-icons/hi'
+"use client";
+import { useState, useCallback, useEffect } from "react";
+import type { KeyboardEvent } from "react";
+import Image from "next/image";
+import { HiMenu } from "react-icons/hi";
 
-import { MdOutlineInventory2 } from 'react-icons/md'
+import { MdOutlineInventory2 } from "react-icons/md";
 import {
   FiGrid,
   FiCalendar,
@@ -12,45 +12,42 @@ import {
   FiUser,
   FiLogOut,
   FiCreditCard,
-} from 'react-icons/fi'
-import type { IconType } from 'react-icons'
-import { useRouter, usePathname } from 'next/navigation'
+} from "react-icons/fi";
+import type { IconType } from "react-icons";
+import { useRouter, usePathname } from "next/navigation";
 
 const API_BASE =
-  (process.env.NEXT_PUBLIC_API_BASE?.replace(/\/$/, '') ||
-    'http://localhost:5000') + '/api/auth/getProfile'
+  (process.env.NEXT_PUBLIC_API_BASE?.replace(/\/$/, "") ||
+    "http://localhost:5000") + "/api/auth/getProfile";
 
 // Small utility for composing classes
 const cx = (...classes: Array<string | false | null | undefined>) =>
-  classes.filter(Boolean).join(' ')
+  classes.filter(Boolean).join(" ");
 
 type SidebarProps = {
-  isOpen?: boolean
-  onToggleAction?: (open: boolean) => void
-}
+  isOpen?: boolean;
+  onToggleAction?: (open: boolean) => void;
+};
 
 // Define NavItem type and hoist static items for stability
-type NavItem = { label: string; Icon: IconType; path: string }
+type NavItem = { label: string; Icon: IconType; path: string };
 const NAV_ITEMS: NavItem[] = [
-  { label: 'Dashboard', Icon: FiGrid, path: '/admin/AdminDashboard' },
-
+  { label: "Dashboard", Icon: FiGrid, path: "/admin/AdminDashboard" },
   {
-    label: 'Manage Inventory',
-    Icon: MdOutlineInventory2,
-    path: '/admin/InventoryManagement',
-  },
-
-  {
-    label: 'Manage Bookings',
+    label: "Manage Bookings",
     Icon: FiSettings,
-    path: '/admin/ManageBooking',
+    path: "/admin/ManageBooking",
   },
-  { label: 'Events', Icon: FiCalendar, path: '/admin/Events' },
-  { label: 'Event cards', Icon: FiCalendar, path: '/admin/EventCards' },
-  { label: 'Booking', Icon: FiCalendar, path: '/admin/createBooking' },
-  { label: 'Manage Users', Icon: FiUser, path: '/admin/AccountManager' },
-  { label: 'Payments', Icon: FiCreditCard, path: '/admin/payments' },
-]
+  { label: "Booking", Icon: FiCalendar, path: "/admin/createBooking" },
+  {
+    label: "Manage Inventory",
+    Icon: MdOutlineInventory2,
+    path: "/admin/InventoryManagement",
+  },
+
+  { label: "Payments", Icon: FiCreditCard, path: "/admin/payments" },
+  { label: "Manage Users", Icon: FiUser, path: "/admin/AccountManager" },
+];
 
 export default function LitratoSidebar({
   isOpen: controlledOpen,
@@ -58,51 +55,51 @@ export default function LitratoSidebar({
 }: SidebarProps) {
   // fetch admin profile
   const [User, setUser] = useState<{
-    firstname?: string
-    lastname?: string
-  } | null>(null)
-  const [internalOpen, setInternalOpen] = useState(true)
-  const [showLogoutModal, setShowLogoutModal] = useState(false)
-  const router = useRouter()
-  const pathname = usePathname()
+    firstname?: string;
+    lastname?: string;
+  } | null>(null);
+  const [internalOpen, setInternalOpen] = useState(true);
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const router = useRouter();
+  const pathname = usePathname();
 
-  const isOpen = controlledOpen ?? internalOpen
+  const isOpen = controlledOpen ?? internalOpen;
 
   const toggleOpen = useCallback(() => {
-    if (onToggleAction) onToggleAction(!isOpen)
-    else setInternalOpen((prev) => !prev)
-  }, [onToggleAction, isOpen])
+    if (onToggleAction) onToggleAction(!isOpen);
+    else setInternalOpen((prev) => !prev);
+  }, [onToggleAction, isOpen]);
 
   const handleNavigation = useCallback(
     (path: string) => {
-      if (pathname !== path) router.push(path)
+      if (pathname !== path) router.push(path);
     },
     [router, pathname]
-  )
+  );
   const handleProfileCheck = () => {
-    router.push('/admin/Profile')
-  }
+    router.push("/admin/Profile");
+  };
   const getNavKeyDown = useCallback(
     (path: string) => (e: KeyboardEvent<HTMLDivElement>) => {
-      if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault()
-        handleNavigation(path)
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        handleNavigation(path);
       }
     },
     [handleNavigation]
-  )
+  );
 
-  const handleLogout = useCallback(() => setShowLogoutModal(true), [])
+  const handleLogout = useCallback(() => setShowLogoutModal(true), []);
   const confirmLogout = useCallback(() => {
-    localStorage.removeItem('access_token')
-    router.push('/home')
-    setShowLogoutModal(false)
-  }, [router])
-  const cancelLogout = useCallback(() => setShowLogoutModal(false), [])
+    localStorage.removeItem("access_token");
+    router.push("/home");
+    setShowLogoutModal(false);
+  }, [router]);
+  const cancelLogout = useCallback(() => setShowLogoutModal(false), []);
 
   useEffect(() => {
-    const token = localStorage.getItem('access_token')
-    if (!token) return
+    const token = localStorage.getItem("access_token");
+    if (!token) return;
     fetch(API_BASE, {
       headers: {
         Authorization: `Bearer ${token}`,
@@ -111,18 +108,18 @@ export default function LitratoSidebar({
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (data && data.firstname) {
-          setUser({ firstname: data.firstname })
+          setUser({ firstname: data.firstname });
         }
       })
-      .catch(() => {})
-  }, [])
+      .catch(() => {});
+  }, []);
 
   return (
     <div
       className={cx(
-        'h-screen',
-        isOpen ? 'w-64' : 'w-16',
-        'bg-white flex flex-col transition-[width] duration-500 ease-in-out overflow-hidden'
+        "h-screen",
+        isOpen ? "w-64" : "w-16",
+        "bg-white flex flex-col transition-[width] duration-500 ease-in-out overflow-hidden"
       )}
     >
       <div className="flex flex-col">
@@ -135,18 +132,18 @@ export default function LitratoSidebar({
             fill
             priority
             className={cx(
-              'mr-2 transition-all duration-300 ease-in-out',
+              "mr-2 transition-all duration-300 ease-in-out",
               isOpen
-                ? 'opacity-0 scale-95 pointer-events-none'
-                : 'opacity-100 scale-100'
+                ? "opacity-0 scale-95 pointer-events-none"
+                : "opacity-100 scale-100"
             )}
           />
           <span
             className={cx(
-              'transition-all ml-10 duration-300 ease-in-out',
+              "transition-all ml-10 duration-300 ease-in-out",
               isOpen
-                ? 'opacity-100 translate-y-0'
-                : 'opacity-0 -translate-y-1 pointer-events-none'
+                ? "opacity-100 translate-y-0"
+                : "opacity-0 -translate-y-1 pointer-events-none"
             )}
           >
             LitratoByAM
@@ -169,7 +166,7 @@ export default function LitratoSidebar({
 
         {/* Navigation Items */}
         {NAV_ITEMS.map((item) => {
-          const active = pathname?.startsWith(item.path)
+          const active = pathname?.startsWith(item.path);
           return (
             <div
               key={item.label}
@@ -178,13 +175,13 @@ export default function LitratoSidebar({
               onClick={() => handleNavigation(item.path)}
               onKeyDown={getNavKeyDown(item.path)}
               className={cx(
-                'flex items-center py-2 font-bold rounded-lg cursor-pointer transition-all duration-300 ease-in-out relative group',
-                isOpen ? 'gap-2 pl-[18px]' : 'gap-0 pl-[17.5px]',
+                "flex items-center py-2 font-bold rounded-lg cursor-pointer transition-all duration-300 ease-in-out relative group",
+                isOpen ? "gap-2 pl-[18px]" : "gap-0 pl-[17.5px]",
                 active
-                  ? 'bg-litratored text-white'
-                  : 'text-litratoblack hover:bg-gray-200 hover:text-litratored'
+                  ? "bg-litratored text-white"
+                  : "text-litratoblack hover:bg-gray-200 hover:text-litratored"
               )}
-              aria-current={active ? 'page' : undefined}
+              aria-current={active ? "page" : undefined}
             >
               <item.Icon
                 size={28}
@@ -194,10 +191,10 @@ export default function LitratoSidebar({
               <span
                 aria-hidden={!isOpen}
                 className={cx(
-                  'whitespace-nowrap transition-all duration-300 ease-in-out',
+                  "whitespace-nowrap transition-all duration-300 ease-in-out",
                   isOpen
-                    ? 'opacity-100 w-auto'
-                    : 'opacity-0 w-0 overflow-hidden pointer-events-none'
+                    ? "opacity-100 w-auto"
+                    : "opacity-0 w-0 overflow-hidden pointer-events-none"
                 )}
               >
                 {item.label}
@@ -208,7 +205,7 @@ export default function LitratoSidebar({
                 </span>
               )}
             </div>
-          )
+          );
         })}
       </div>
 
@@ -266,10 +263,10 @@ export default function LitratoSidebar({
             <div
               className={cx(
                 // Animate width + position + opacity for smooth/stable reveal
-                'flex flex-col ml-2 min-w-0 overflow-hidden transition-all duration-300 ease-in-out',
+                "flex flex-col ml-2 min-w-0 overflow-hidden transition-all duration-300 ease-in-out",
                 isOpen
-                  ? 'opacity-100 translate-y-0 duration-300 max-w-[180px]'
-                  : 'opacity-0 -translate-y-2 duration-300 transition-all max-w-0 pointer-events-none'
+                  ? "opacity-100 translate-y-0 duration-300 max-w-[180px]"
+                  : "opacity-0 -translate-y-2 duration-300 transition-all max-w-0 pointer-events-none"
               )}
             >
               {User.firstname} <br />
@@ -280,13 +277,13 @@ export default function LitratoSidebar({
         <div
           onClick={handleLogout}
           className={`relative ${
-            isOpen ? 'w-[50%]' : 'w-10'
+            isOpen ? "w-[50%]" : "w-10"
           } h-14 bg-litratoblack cursor-pointer self-center  font-semibold w-full text-center flex items-center justify-center group
             transition-[width,background-color,transform,opacity] duration-300 ease-in-out
            hover:bg-red-600 text-white`}
         >
           {isOpen ? (
-            'Logout'
+            "Logout"
           ) : (
             <FiLogOut
               className="text-xl transition-transform duration-300 ease-in-out"
@@ -301,5 +298,5 @@ export default function LitratoSidebar({
         </div>
       </div>
     </div>
-  )
+  );
 }

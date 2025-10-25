@@ -6,6 +6,8 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import MotionDiv from "../../../Litratocomponents/MotionDiv";
+import { makeRegistrationSchema } from "../../../schemas/schema/registrations";
+
 export default function RegistrationPage() {
   const router = useRouter();
   const [form, setForm] = useState({
@@ -26,6 +28,22 @@ export default function RegistrationPage() {
 
   const [error, setError] = useState<string | null>(null);
 
+  // Async uniqueness check against your API. Adjust URL/response shape if needed.
+  const checkUsernameUnique = async (email: string) => {
+    try {
+      const res = await fetch(
+        `http://localhost:5000/api/auth/check-username?username=${encodeURIComponent(
+          email
+        )}`
+      );
+      if (!res.ok) return true; // fall back to allowing; server will validate again
+      const data = await res.json();
+      return !data.exists; // expects { exists: boolean }
+    } catch {
+      return true; // network failure -> let server enforce uniqueness
+    }
+  };
+
   const handleBack = () => {
     router.push("/home");
   };
@@ -39,8 +57,11 @@ export default function RegistrationPage() {
     e.preventDefault();
     setError(null);
 
-    if (form.password !== form.confirmPassword) {
-      setError("Passwords do not match");
+    // Zod validation with async duplicate email check
+    const schema = makeRegistrationSchema(checkUsernameUnique);
+    const parsed = await schema.safeParseAsync(form);
+    if (!parsed.success) {
+      setError(parsed.error.issues[0]?.message || "Invalid input");
       return;
     }
 
@@ -49,18 +70,19 @@ export default function RegistrationPage() {
         method: "POST",
         headers: { "Content-type": "application/json" },
         body: JSON.stringify({
-          username: form.username,
-          password: form.password,
-          firstname: form.firstname,
-          lastname: form.lastname,
-          birthdate: form.birthdate,
-          sex: form.sex,
-          region: form.region,
-          province: form.province,
-          city: form.city,
-          barangay: form.barangay,
-          postal_code: form.postalCode,
-          contact: form.contact,
+          // use normalized data from Zod
+          username: parsed.data.username,
+          password: parsed.data.password,
+          firstname: parsed.data.firstname,
+          lastname: parsed.data.lastname,
+          birthdate: parsed.data.birthdate,
+          sex: parsed.data.sex,
+          region: parsed.data.region,
+          province: parsed.data.province,
+          city: parsed.data.city,
+          barangay: parsed.data.barangay,
+          postal_code: parsed.data.postalCode,
+          contact: parsed.data.contact,
         }),
       });
       const data = await res.json();
