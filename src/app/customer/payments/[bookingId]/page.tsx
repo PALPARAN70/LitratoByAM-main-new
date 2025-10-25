@@ -1,63 +1,64 @@
-'use client'
-import React, { useEffect, useMemo, useState } from 'react'
-import { useParams } from 'next/navigation'
+"use client";
+import React, { useEffect, useMemo, useState } from "react";
+import { useParams } from "next/navigation";
 import {
   getLatestPaymentQR,
   uploadPaymentProof,
   createCustomerPayment,
-} from '../../../../../schemas/functions/Payment/createPayment'
+} from "../../../../../schemas/functions/Payment/createPayment";
+import { toast } from "sonner";
 
 export default function CustomerPaymentPage() {
-  const params = useParams()
-  const bookingId = useMemo(() => Number(params?.bookingId), [params])
-  const [qrUrl, setQrUrl] = useState<string>('')
-  const [amountPaid, setAmountPaid] = useState<string>('')
-  const [referenceNo, setReferenceNo] = useState<string>('')
-  const [proofUrl, setProofUrl] = useState<string>('')
-  const [submitting, setSubmitting] = useState(false)
+  const params = useParams();
+  const bookingId = useMemo(() => Number(params?.bookingId), [params]);
+  const [qrUrl, setQrUrl] = useState<string>("");
+  const [amountPaid, setAmountPaid] = useState<string>("");
+  const [referenceNo, setReferenceNo] = useState<string>("");
+  const [proofUrl, setProofUrl] = useState<string>("");
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    ;(async () => {
-      const url = await getLatestPaymentQR()
-      if (url) setQrUrl(url)
-    })()
-  }, [])
+    (async () => {
+      const url = await getLatestPaymentQR();
+      if (url) setQrUrl(url);
+    })();
+  }, []);
 
   const handleUploadProof: React.ChangeEventHandler<HTMLInputElement> = async (
     e
   ) => {
-    const file = e.target.files?.[0]
-    if (!file) return
+    const file = e.target.files?.[0];
+    if (!file) return;
     try {
-      const { url } = await uploadPaymentProof(file)
-      setProofUrl(url)
+      const { url } = await uploadPaymentProof(file);
+      setProofUrl(url);
     } catch (err) {
-      console.error('Upload proof failed:', err)
+      console.error("Upload proof failed:", err);
     }
-  }
+  };
 
   const handleSubmit = async () => {
-    if (!bookingId || !amountPaid || !referenceNo) return
-    setSubmitting(true)
+    if (!bookingId || !amountPaid || !referenceNo) return;
+    setSubmitting(true);
     try {
       await createCustomerPayment({
         bookingId,
         amountPaid: Number(amountPaid),
         referenceNo,
         proofImageUrl: proofUrl || null,
-        paymentMethod: 'gcash',
-      })
+        paymentMethod: "gcash",
+      });
       // you could redirect or show success
-      setAmountPaid('')
-      setReferenceNo('')
-      setProofUrl('')
-      alert('Payment submitted. Awaiting verification.')
+      setAmountPaid("");
+      setReferenceNo("");
+      setProofUrl("");
+      toast.success("Payment submitted. Awaiting verification.");
     } catch (err) {
-      console.error('Submit payment failed:', err)
+      console.error("Submit payment failed:", err);
     } finally {
-      setSubmitting(false)
+      setSubmitting(false);
     }
-  }
+  };
 
   return (
     <div className="max-w-xl mx-auto p-4 space-y-4">
@@ -115,8 +116,8 @@ export default function CustomerPaymentPage() {
         onClick={handleSubmit}
         className="px-4 py-2 rounded bg-black text-white"
       >
-        {submitting ? 'Submitting...' : 'Submit Payment'}
+        {submitting ? "Submitting..." : "Submit Payment"}
       </button>
     </div>
-  )
+  );
 }

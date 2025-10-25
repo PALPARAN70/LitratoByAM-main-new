@@ -1,5 +1,5 @@
-'use client'
-import { useMemo, useState, useEffect } from 'react'
+"use client";
+import { useMemo, useState, useEffect } from "react";
 import {
   Pagination,
   PaginationContent,
@@ -7,12 +7,12 @@ import {
   PaginationLink,
   PaginationNext,
   PaginationPrevious,
-} from '@/components/ui/pagination'
+} from "@/components/ui/pagination";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from '@/components/ui/popover'
+} from "@/components/ui/popover";
 import {
   Dialog,
   DialogContent,
@@ -20,204 +20,205 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog'
+} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select'
-import { Ellipsis } from 'lucide-react'
+} from "@/components/ui/select";
+import { Ellipsis } from "lucide-react";
 import {
   fetchAssignedConfirmedBookings,
   updateAssignedBookingStatus,
-} from '../../../../schemas/functions/ConfirmedBookings/staff'
+} from "../../../../schemas/functions/ConfirmedBookings/staff";
 
-type EventStatus = 'ongoing' | 'standby' | 'finished'
-type PaymentStatus = 'paid' | 'unpaid' | 'partially-paid'
+type EventStatus = "ongoing" | "standby" | "finished";
+type PaymentStatus = "paid" | "unpaid" | "partially-paid";
 
 type EventLogRow = {
-  id: string
-  eventName: string
-  clientName: string
-  location: string
-  date?: string
-  startTime?: string
-  endTime?: string
-  packageName?: string
-  contactPerson?: string
-  contactNumber?: string
-  notes?: string
-  status: EventStatus
-  payment: PaymentStatus
+  id: string;
+  eventName: string;
+  clientName: string;
+  location: string;
+  date?: string;
+  startTime?: string;
+  endTime?: string;
+  packageName?: string;
+  contactPerson?: string;
+  contactNumber?: string;
+  notes?: string;
+  status: EventStatus;
+  payment: PaymentStatus;
   items: {
-    damaged: Array<{ name: string; qty?: number }>
-    missing: Array<{ name: string; qty?: number }>
-  }
-}
+    damaged: Array<{ name: string; qty?: number }>;
+    missing: Array<{ name: string; qty?: number }>;
+  };
+};
 
 // simple pagination window like in ManageBooking master list
 function pageWindow(current: number, total: number, size = 3): number[] {
-  if (total <= 0) return []
-  const start = Math.floor((Math.max(1, current) - 1) / size) * size + 1
-  const end = Math.min(total, start + size - 1)
-  return Array.from({ length: end - start + 1 }, (_, i) => start + i)
+  if (total <= 0) return [];
+  const start = Math.floor((Math.max(1, current) - 1) / size) * size + 1;
+  const end = Math.min(total, start + size - 1);
+  return Array.from({ length: end - start + 1 }, (_, i) => start + i);
 }
 
 // badge helpers (match customer dashboard look)
 const statusLabel = (s: EventStatus) =>
-  s === 'standby' ? 'Standby' : s === 'ongoing' ? 'Ongoing' : 'Finished'
+  s === "standby" ? "Standby" : s === "ongoing" ? "Ongoing" : "Finished";
 const paymentLabel = (p: PaymentStatus) =>
-  p === 'paid' ? 'Paid' : p === 'unpaid' ? 'Unpaid' : 'Partially Paid'
+  p === "paid" ? "Paid" : p === "unpaid" ? "Unpaid" : "Partially Paid";
 const statusBadgeClass = (s: EventStatus) => {
-  if (s === 'ongoing') return 'bg-yellow-700 text-white'
-  if (s === 'finished') return 'bg-green-700 text-white'
-  return 'bg-gray-700 text-white' // standby
-}
+  if (s === "ongoing") return "bg-yellow-700 text-white";
+  if (s === "finished") return "bg-green-700 text-white";
+  return "bg-gray-700 text-white"; // standby
+};
 const paymentBadgeClass = (p: PaymentStatus) => {
-  if (p === 'paid') return 'bg-green-700 text-white'
-  if (p === 'partially-paid') return 'bg-yellow-700 text-white'
-  return 'bg-red-700 text-white' // unpaid
-}
+  if (p === "paid") return "bg-green-700 text-white";
+  if (p === "partially-paid") return "bg-yellow-700 text-white";
+  return "bg-red-700 text-white"; // unpaid
+};
 
 export default function StaffEventLogsPage() {
   // Live data from backend: events assigned to the logged-in staff
-  const [rows, setRows] = useState<EventLogRow[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const [rows, setRows] = useState<EventLogRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const mapBookingStatus = (s?: string): EventStatus => {
-    switch ((s || '').toLowerCase()) {
-      case 'in_progress':
-        return 'ongoing'
-      case 'completed':
-      case 'cancelled':
-        return 'finished'
-      case 'scheduled':
+    switch ((s || "").toLowerCase()) {
+      case "in_progress":
+        return "ongoing";
+      case "completed":
+      case "cancelled":
+        return "finished";
+      case "scheduled":
       default:
-        return 'standby'
+        return "standby";
     }
-  }
+  };
   const toBackendStatus = (s: EventStatus): string => {
     switch (s) {
-      case 'ongoing':
-        return 'in_progress'
-      case 'finished':
-        return 'completed'
-      case 'standby':
+      case "ongoing":
+        return "in_progress";
+      case "finished":
+        return "completed";
+      case "standby":
       default:
-        return 'scheduled'
+        return "scheduled";
     }
-  }
+  };
   const mapPaymentStatus = (s?: string): PaymentStatus => {
-    switch ((s || '').toLowerCase()) {
-      case 'paid':
-        return 'paid'
-      case 'partial':
-        return 'partially-paid'
-      case 'unpaid':
-      case 'refunded':
-      case 'failed':
+    switch ((s || "").toLowerCase()) {
+      case "paid":
+        return "paid";
+      case "partial":
+        return "partially-paid";
+      case "unpaid":
+      case "refunded":
+      case "failed":
       default:
-        return 'unpaid'
+        return "unpaid";
     }
-  }
+  };
 
   useEffect(() => {
-    let active = true
+    let active = true;
     async function load() {
-      setLoading(true)
-      setError(null)
+      setLoading(true);
+      setError(null);
       try {
-        const bookings: any[] = await fetchAssignedConfirmedBookings()
+        const bookings: any[] = await fetchAssignedConfirmedBookings();
         // Exclude cancelled from logs view
-        const allowed = new Set(['scheduled', 'in_progress', 'completed'])
+        const allowed = new Set(["scheduled", "in_progress", "completed"]);
         const mapped: EventLogRow[] = bookings
           .filter((b) =>
-            allowed.has(String(b?.booking_status || '').toLowerCase())
+            allowed.has(String(b?.booking_status || "").toLowerCase())
           )
           .map((b) => {
             // Derive client name from firstname/lastname fallback to username
             const clientName =
-              [b?.firstname, b?.lastname].filter(Boolean).join(' ').trim() ||
-              String(b?.username || '')
+              [b?.firstname, b?.lastname].filter(Boolean).join(" ").trim() ||
+              String(b?.username || "");
             // Extract phone-like number from contact_info if available
-            const contactInfo = String(b?.contact_info || '')
-            const phoneMatch = contactInfo.match(/(\+?\d[\d\s-]{6,}\d)/)
-            const contactNumber = (phoneMatch?.[1] || '').trim()
+            const contactInfo = String(b?.contact_info || "");
+            const phoneMatch = contactInfo.match(/(\+?\d[\d\s-]{6,}\d)/);
+            const contactNumber = (phoneMatch?.[1] || "").trim();
             return {
               id: String(b?.id || b?.confirmed_id || Math.random()),
-              eventName: String(b?.event_name || b?.package_name || 'Event'),
+              eventName: String(b?.event_name || b?.package_name || "Event"),
               clientName,
-              location: String(b?.event_address || ''),
-              date: String(b?.event_date || ''),
-              startTime: String(b?.event_time || ''),
+              location: String(b?.event_address || ""),
+              date: String(b?.event_date || ""),
+              startTime: String(b?.event_time || ""),
               endTime: b?.event_end_time
                 ? String(b.event_end_time).slice(0, 5)
                 : undefined,
-              packageName: String(b?.package_name || ''),
+              packageName: String(b?.package_name || ""),
               contactPerson: clientName,
               contactNumber: contactNumber || undefined,
-              notes: '',
+              notes: "",
               status: mapBookingStatus(b?.booking_status),
               payment: mapPaymentStatus(b?.payment_status),
               items: { damaged: [], missing: [] },
-            }
-          })
-        if (active) setRows(mapped)
+            };
+          });
+        if (active) setRows(mapped);
       } catch (e: any) {
-        if (active) setError(e?.message || 'Failed to load event logs')
+        if (active) setError(e?.message || "Failed to load event logs");
       } finally {
-        if (active) setLoading(false)
+        if (active) setLoading(false);
       }
     }
-    load()
+    load();
     return () => {
-      active = false
-    }
-  }, [])
+      active = false;
+    };
+  }, []);
 
   // Change status handler (staff endpoint)
   const changeStatus = async (row: EventLogRow, next: EventStatus) => {
     try {
-      await updateAssignedBookingStatus(row.id, toBackendStatus(next) as any)
-      updateRow(row.id, { status: next })
+      await updateAssignedBookingStatus(row.id, toBackendStatus(next) as any);
+      updateRow(row.id, { status: next });
     } catch (e) {
-      console.error('Change status failed:', e)
+      console.error("Change status failed:", e);
       // Optional: toast error UI could be added here
     }
-  }
+  };
 
   // Filters
-  const [statusFilter, setStatusFilter] = useState<EventStatus | 'all'>('all')
-  const [itemsFilter, setItemsFilter] = useState<'all' | 'with' | 'without'>(
-    'all'
-  )
-  const [paymentFilter, setPaymentFilter] = useState<PaymentStatus | 'all'>(
-    'all'
-  )
+  const [statusFilter, setStatusFilter] = useState<EventStatus | "all">("all");
+  const [itemsFilter, setItemsFilter] = useState<"all" | "with" | "without">(
+    "all"
+  );
+  const [paymentFilter, setPaymentFilter] = useState<PaymentStatus | "all">(
+    "all"
+  );
   // NEW: search text
-  const [search, setSearch] = useState('')
+  const [search, setSearch] = useState("");
 
   // Pagination derived from filtered rows
-  const [page, setPage] = useState(1)
-  const pageSize = 5
+  const [page, setPage] = useState(1);
+  const pageSize = 5;
 
   const filteredRows = useMemo(() => {
-    const tokens = search.trim().toLowerCase().split(/\s+/).filter(Boolean)
+    const tokens = search.trim().toLowerCase().split(/\s+/).filter(Boolean);
     return rows.filter((r) => {
-      const statusOk = statusFilter === 'all' ? true : r.status === statusFilter
+      const statusOk =
+        statusFilter === "all" ? true : r.status === statusFilter;
       const itemsCount =
-        (r.items?.damaged?.length || 0) + (r.items?.missing?.length || 0)
+        (r.items?.damaged?.length || 0) + (r.items?.missing?.length || 0);
       const itemsOk =
-        itemsFilter === 'all'
+        itemsFilter === "all"
           ? true
-          : itemsFilter === 'with'
+          : itemsFilter === "with"
           ? itemsCount > 0
-          : itemsCount === 0
+          : itemsCount === 0;
       const paymentOk =
-        paymentFilter === 'all' ? true : r.payment === paymentFilter
+        paymentFilter === "all" ? true : r.payment === paymentFilter;
 
       // NEW: search across key fields (AND across tokens)
       const hay = [
@@ -235,37 +236,37 @@ export default function StaffEventLogsPage() {
         paymentLabel(r.payment),
       ]
         .filter(Boolean)
-        .join(' ')
-        .toLowerCase()
+        .join(" ")
+        .toLowerCase();
       const searchOk = tokens.length
         ? tokens.every((t) => hay.includes(t))
-        : true
+        : true;
 
-      return statusOk && itemsOk && paymentOk && searchOk
-    })
-  }, [rows, statusFilter, itemsFilter, paymentFilter, search])
+      return statusOk && itemsOk && paymentOk && searchOk;
+    });
+  }, [rows, statusFilter, itemsFilter, paymentFilter, search]);
 
   useEffect(() => {
-    setPage(1)
-  }, [statusFilter, itemsFilter, paymentFilter, search])
+    setPage(1);
+  }, [statusFilter, itemsFilter, paymentFilter, search]);
 
-  const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize))
-  const startIdx = (page - 1) * pageSize
-  const pageRows = filteredRows.slice(startIdx, startIdx + pageSize)
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize));
+  const startIdx = (page - 1) * pageSize;
+  const pageRows = filteredRows.slice(startIdx, startIdx + pageSize);
   const windowPages = useMemo(
     () => pageWindow(page, totalPages, 3),
     [page, totalPages]
-  )
+  );
 
   // Items modal state
-  const [itemsOpen, setItemsOpen] = useState(false)
-  const [itemsTarget, setItemsTarget] = useState<EventLogRow | null>(null)
+  const [itemsOpen, setItemsOpen] = useState(false);
+  const [itemsTarget, setItemsTarget] = useState<EventLogRow | null>(null);
 
   // Optional: update function if you later wire PATCH to backend
   const updateRow = (id: string, patch: Partial<EventLogRow>) => {
-    setRows((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch } : r)))
+    setRows((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch } : r)));
     // ...existing code... persist via API
-  }
+  };
 
   return (
     <div className="p-4 flex flex-col min-h-screen w-full overflow-x-hidden">
@@ -279,7 +280,7 @@ export default function StaffEventLogsPage() {
           {/* Event Status filter */}
           <Select
             value={statusFilter}
-            onValueChange={(v) => setStatusFilter(v as EventStatus | 'all')}
+            onValueChange={(v) => setStatusFilter(v as EventStatus | "all")}
           >
             <SelectTrigger size="sm" className="w-[180px] rounded">
               <SelectValue placeholder="Status: All" />
@@ -296,7 +297,7 @@ export default function StaffEventLogsPage() {
           <Select
             value={itemsFilter}
             onValueChange={(v) =>
-              setItemsFilter((v as 'all' | 'with' | 'without') ?? 'all')
+              setItemsFilter((v as "all" | "with" | "without") ?? "all")
             }
           >
             <SelectTrigger size="sm" className="w-[180px] rounded">
@@ -312,7 +313,7 @@ export default function StaffEventLogsPage() {
           {/* Payment Status filter */}
           <Select
             value={paymentFilter}
-            onValueChange={(v) => setPaymentFilter(v as PaymentStatus | 'all')}
+            onValueChange={(v) => setPaymentFilter(v as PaymentStatus | "all")}
           >
             <SelectTrigger size="sm" className="w-[180px] rounded">
               <SelectValue placeholder="Payment: All" />
@@ -345,19 +346,19 @@ export default function StaffEventLogsPage() {
               <thead>
                 <tr className="bg-gray-300">
                   {[
-                    'Event Name',
-                    'Client Name',
-                    'Event Location',
-                    'More Details',
-                    'Event Status',
-                    'Items',
-                    'Payment',
+                    "Event Name",
+                    "Client Name",
+                    "Event Location",
+                    "More Details",
+                    "Event Status",
+                    "Items",
+                    "Payment",
                   ].map((title, i, arr) => (
                     <th
                       key={title}
                       className={`px-3 sm:px-4 py-2 text-left text-xs sm:text-sm md:text-base ${
-                        i === 0 ? 'rounded-tl-xl' : ''
-                      } ${i === arr.length - 1 ? 'rounded-tr-xl' : ''}`}
+                        i === 0 ? "rounded-tl-xl" : ""
+                      } ${i === arr.length - 1 ? "rounded-tr-xl" : ""}`}
                     >
                       {title}
                     </th>
@@ -405,23 +406,23 @@ export default function StaffEventLogsPage() {
                               <div className="grid grid-cols-2 gap-x-2">
                                 <div className="font-semibold">Date</div>
                                 <div className="text-gray-700">
-                                  {row.date || '—'}
+                                  {row.date || "—"}
                                 </div>
                                 <div className="font-semibold">Time</div>
                                 <div className="text-gray-700">
-                                  {row.startTime || '—'}
-                                  {row.endTime ? ` - ${row.endTime}` : ''}
+                                  {row.startTime || "—"}
+                                  {row.endTime ? ` - ${row.endTime}` : ""}
                                 </div>
                                 <div className="font-semibold">Package</div>
                                 <div className="text-gray-700">
-                                  {row.packageName || '—'}
+                                  {row.packageName || "—"}
                                 </div>
                                 <div className="font-semibold">Contact</div>
                                 <div className="text-gray-700">
-                                  {(row.contactPerson || '').trim() || '—'}
+                                  {(row.contactPerson || "").trim() || "—"}
                                   {row.contactNumber
                                     ? ` | ${row.contactNumber}`
-                                    : ''}
+                                    : ""}
                                 </div>
                               </div>
                               {row.notes ? (
@@ -444,7 +445,7 @@ export default function StaffEventLogsPage() {
                           }
                         >
                           <SelectTrigger
-                            className={`h-7 text-xs w-32 px-3 border-0 rounded-full ${statusBadgeClass(
+                            className={`h-7 text-xs w-32 px-3 border-0 rounded text-center  ${statusBadgeClass(
                               row.status
                             )}`}
                           >
@@ -452,13 +453,13 @@ export default function StaffEventLogsPage() {
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="standby">
-                              {statusLabel('standby')}
+                              {statusLabel("standby")}
                             </SelectItem>
                             <SelectItem value="ongoing">
-                              {statusLabel('ongoing')}
+                              {statusLabel("ongoing")}
                             </SelectItem>
                             <SelectItem value="finished">
-                              {statusLabel('finished')}
+                              {statusLabel("finished")}
                             </SelectItem>
                           </SelectContent>
                         </Select>
@@ -467,8 +468,8 @@ export default function StaffEventLogsPage() {
                         <button
                           className="px-2 py-1.5 rounded border text-sm"
                           onClick={() => {
-                            setItemsTarget(row)
-                            setItemsOpen(true)
+                            setItemsTarget(row);
+                            setItemsOpen(true);
                           }}
                         >
                           View
@@ -497,10 +498,10 @@ export default function StaffEventLogsPage() {
                 <PaginationPrevious
                   href="#"
                   className="text-black no-underline hover:no-underline hover:text-black"
-                  style={{ textDecoration: 'none' }}
+                  style={{ textDecoration: "none" }}
                   onClick={(e) => {
-                    e.preventDefault()
-                    setPage((p) => Math.max(1, p - 1))
+                    e.preventDefault();
+                    setPage((p) => Math.max(1, p - 1));
                   }}
                 />
               </PaginationItem>
@@ -510,10 +511,10 @@ export default function StaffEventLogsPage() {
                     href="#"
                     isActive={n === page}
                     className="text-black no-underline hover:no-underline hover:text-black"
-                    style={{ textDecoration: 'none' }}
+                    style={{ textDecoration: "none" }}
                     onClick={(e) => {
-                      e.preventDefault()
-                      setPage(n)
+                      e.preventDefault();
+                      setPage(n);
                     }}
                   >
                     {n}
@@ -524,10 +525,10 @@ export default function StaffEventLogsPage() {
                 <PaginationNext
                   href="#"
                   className="text-black no-underline hover:no-underline hover:text-black"
-                  style={{ textDecoration: 'none' }}
+                  style={{ textDecoration: "none" }}
                   onClick={(e) => {
-                    e.preventDefault()
-                    setPage((p) => Math.min(totalPages, p + 1))
+                    e.preventDefault();
+                    setPage((p) => Math.min(totalPages, p + 1));
                   }}
                 />
               </PaginationItem>
@@ -541,8 +542,8 @@ export default function StaffEventLogsPage() {
         open={itemsOpen}
         onOpenChange={(o) => {
           if (!o) {
-            setItemsOpen(false)
-            setItemsTarget(null)
+            setItemsOpen(false);
+            setItemsTarget(null);
           }
         }}
       >
@@ -562,7 +563,7 @@ export default function StaffEventLogsPage() {
                   {itemsTarget.items.damaged.map((it, idx) => (
                     <li key={`d-${idx}`}>
                       {it.name}
-                      {it.qty ? ` × ${it.qty}` : ''}
+                      {it.qty ? ` × ${it.qty}` : ""}
                     </li>
                   ))}
                 </ul>
@@ -577,7 +578,7 @@ export default function StaffEventLogsPage() {
                   {itemsTarget.items.missing.map((it, idx) => (
                     <li key={`m-${idx}`}>
                       {it.name}
-                      {it.qty ? ` × ${it.qty}` : ''}
+                      {it.qty ? ` × ${it.qty}` : ""}
                     </li>
                   ))}
                 </ul>
@@ -592,8 +593,8 @@ export default function StaffEventLogsPage() {
               type="button"
               className="px-4 py-2 rounded border text-sm"
               onClick={() => {
-                setItemsOpen(false)
-                setItemsTarget(null)
+                setItemsOpen(false);
+                setItemsTarget(null);
               }}
             >
               Close
@@ -602,5 +603,5 @@ export default function StaffEventLogsPage() {
         </DialogContent>
       </Dialog>
     </div>
-  )
+  );
 }
