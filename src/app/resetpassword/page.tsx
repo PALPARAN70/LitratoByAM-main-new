@@ -60,8 +60,12 @@ export default function ResetPasswordPage() {
 
       toast.success('Password reset successfully.')
       router.push('/login')
-    } catch (err: any) {
-      toast.error(err.message || 'Error resetting password.')
+    } catch (err: unknown) {
+      const message =
+        typeof err === 'object' && err !== null && 'message' in err
+          ? String((err as { message?: unknown }).message || '')
+          : ''
+      toast.error(message || 'Error resetting password.')
     } finally {
       setSubmitting(false)
       setConfirmReset(false)

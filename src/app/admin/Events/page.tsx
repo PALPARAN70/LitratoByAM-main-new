@@ -33,6 +33,7 @@ import {
   fetchAdminConfirmedBookings,
   updateAdminBookingStatus,
 } from '../../../../schemas/functions/ConfirmedBookings/admin'
+import type { AdminBookingStatus } from '../../../../schemas/functions/ConfirmedBookings/admin'
 
 // Reuse the same types as staff event logs for now
 type EventStatus = 'ongoing' | 'standby' | 'finished'
@@ -85,8 +86,7 @@ const paymentBadgeClass = (p: PaymentStatus) => {
 export default function AdminEventsPage() {
   // Live data derived from admin confirmed bookings
   const [rows, setRows] = useState<EventLogRow[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  // removed unused loading/error state
 
   const mapBookingStatus = (s?: string): EventStatus => {
     switch ((s || '').toLowerCase()) {
@@ -100,7 +100,7 @@ export default function AdminEventsPage() {
         return 'standby'
     }
   }
-  const toBackendStatus = (s: EventStatus): string => {
+  const toBackendStatus = (s: EventStatus): AdminBookingStatus => {
     switch (s) {
       case 'ongoing':
         return 'in_progress'
@@ -127,11 +127,25 @@ export default function AdminEventsPage() {
 
   useEffect(() => {
     let active = true
+    type AdminBooking = {
+      id?: string | number
+      confirmed_id?: string | number
+      booking_status?: string
+      firstname?: string
+      lastname?: string
+      username?: string
+      contact_info?: string
+      event_name?: string
+      package_name?: string
+      event_address?: string
+      event_date?: string
+      event_time?: string
+      event_end_time?: string
+      payment_status?: string
+    }
     async function load() {
-      setLoading(true)
-      setError(null)
       try {
-        const bookings: any[] = await fetchAdminConfirmedBookings()
+        const bookings = (await fetchAdminConfirmedBookings()) as AdminBooking[]
         // Exclude cancelled for Events view
         const allowed = new Set(['scheduled', 'in_progress', 'completed'])
         const mapped: EventLogRow[] = bookings
@@ -165,10 +179,11 @@ export default function AdminEventsPage() {
             }
           })
         if (active) setRows(mapped)
-      } catch (e: any) {
-        if (active) setError(e?.message || 'Failed to load events')
-      } finally {
-        if (active) setLoading(false)
+      } catch (e) {
+        if (active) {
+          // Log and continue; UI will simply show no data
+          console.error('Failed to load events', e)
+        }
       }
     }
     load()
@@ -180,7 +195,7 @@ export default function AdminEventsPage() {
   // Change status handler (admin endpoint)
   const changeStatus = async (row: EventLogRow, next: EventStatus) => {
     try {
-      await updateAdminBookingStatus(row.id, toBackendStatus(next) as any)
+      await updateAdminBookingStatus(row.id, toBackendStatus(next))
       setRows((prev) =>
         prev.map((r) => (r.id === row.id ? { ...r, status: next } : r))
       )

@@ -1,8 +1,8 @@
-"use client";
-import { useEffect, useMemo, useState, useRef } from "react";
-import type { ChangeEventHandler } from "react";
-import { useRouter } from "next/navigation";
-import Calendar from "../../../../Litratocomponents/LitratoCalendar";
+'use client'
+import { useEffect, useMemo, useState, useRef, useCallback } from 'react'
+import type { ChangeEventHandler } from 'react'
+import { useRouter } from 'next/navigation'
+import Calendar from '../../../../Litratocomponents/LitratoCalendar'
 import {
   Pagination,
   PaginationContent,
@@ -10,24 +10,24 @@ import {
   PaginationItem,
   PaginationPrevious,
   PaginationNext,
-} from "@/components/ui/pagination";
+} from '@/components/ui/pagination'
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from "@/components/ui/popover";
-import { ChevronDown, Check, Ellipsis } from "lucide-react";
+} from '@/components/ui/popover'
+import { ChevronDown, Check, Ellipsis } from 'lucide-react'
 import {
   readBookings,
   type BookingRequestRow,
-} from "../../../../schemas/functions/BookingRequest/readBookings";
+} from '../../../../schemas/functions/BookingRequest/readBookings'
 import {
   approveBookingRequest,
   rejectBookingRequest,
-} from "../../../../schemas/functions/BookingRequest/evaluateBookingRequest";
-import { cancelConfirmedBooking } from "../../../../schemas/functions/BookingRequest/cancelBooking";
-import { updateConfirmedBooking } from "../../../../schemas/functions/BookingRequest/updateBooking";
-import { toast } from "sonner";
+} from '../../../../schemas/functions/BookingRequest/evaluateBookingRequest'
+import { cancelConfirmedBooking } from '../../../../schemas/functions/BookingRequest/cancelBooking'
+import { updateConfirmedBooking } from '../../../../schemas/functions/BookingRequest/updateBooking'
+import { toast } from 'sonner'
 import {
   Dialog,
   DialogContent,
@@ -36,79 +36,79 @@ import {
   DialogDescription,
   DialogFooter,
   DialogClose,
-} from "@/components/ui/dialog";
+} from '@/components/ui/dialog'
 import {
   listEmployees,
   getConfirmedBookingIdByRequest,
   listAssignedStaff,
   replaceAssignedStaff,
   type StaffUser,
-} from "../../../../schemas/functions/staffFunctions/staffAssignment";
-import EventCard from "../../../../Litratocomponents/EventCard";
+} from '../../../../schemas/functions/staffFunctions/staffAssignment'
+import EventCard from '../../../../Litratocomponents/EventCard'
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
+} from '@/components/ui/select'
 
 // Add shared item type for items overview
-type Item = { name: string; qty?: number };
+type Item = { name: string; qty?: number }
 
-type TabKey = "bookings" | "masterlist" | "eventcards"; // + eventcards
-type BookingStatus = "pending" | "approved" | "declined" | "cancelled";
+type TabKey = 'bookings' | 'masterlist' | 'eventcards' // + eventcards
+type BookingStatus = 'pending' | 'approved' | 'declined' | 'cancelled'
 type BookingRow = {
-  id: string;
-  requestid?: number | null;
-  confirmedid?: number | null;
-  eventName: string;
-  date: string; // ISO or display string
-  startTime: string;
-  endTime: string;
-  package: string;
-  grid: string; // now showing actual value, comma-joined
-  place: string;
-  status: BookingStatus;
-  contact_info?: string | null;
-  contact_person?: string | null;
-  contact_person_number?: string | null;
-  strongest_signal?: string | null;
-  extension_duration?: number | null;
-  username?: string | null;
-  firstname?: string | null;
-  lastname?: string | null;
+  id: string
+  requestid?: number | null
+  confirmedid?: number | null
+  eventName: string
+  date: string // ISO or display string
+  startTime: string
+  endTime: string
+  package: string
+  grid: string // now showing actual value, comma-joined
+  place: string
+  status: BookingStatus
+  contact_info?: string | null
+  contact_person?: string | null
+  contact_person_number?: string | null
+  strongest_signal?: string | null
+  extension_duration?: number | null
+  username?: string | null
+  firstname?: string | null
+  lastname?: string | null
   // Pricing summary (base + extension) for quick reference
-  baseTotal?: number | null;
-  extHours?: number | null;
-  amountDue?: number | null;
+  baseTotal?: number | null
+  extHours?: number | null
+  amountDue?: number | null
 
   // NEW: integrated event logs data
-  clientName: string;
-  eventStatus: "ongoing" | "standby" | "finished";
-  payment: "paid" | "unpaid" | "partially-paid";
-  items: { damaged: Item[]; missing: Item[] };
-};
+  clientName: string
+  eventStatus: 'ongoing' | 'standby' | 'finished'
+  payment: 'paid' | 'unpaid' | 'partially-paid'
+  items: { damaged: Item[]; missing: Item[] }
+}
 export default function ManageBookingPage() {
-  const [active, setActive] = useState<TabKey>("masterlist");
+  const [active, setActive] = useState<TabKey>('masterlist')
   const [selectedForBooking, setSelectedForBooking] = useState<{
-    requestid?: number | null;
-    eventName?: string;
-    date?: string;
-    startTime?: string;
-    endTime?: string;
-    package?: string;
-    grid?: string | null;
-    place?: string;
-    contact_info?: string | null;
-    contact_person?: string | null;
-    contact_person_number?: string | null;
-    strongest_signal?: string | null;
-    extension_duration?: number | null;
-    username?: string | null;
-    firstname?: string | null;
-    lastname?: string | null;
-  } | null>(null);
+    requestid?: number | null
+    eventName?: string
+    date?: string
+    startTime?: string
+    endTime?: string
+    package?: string
+    grid?: string | null
+    place?: string
+    contact_info?: string | null
+    contact_person?: string | null
+    contact_person_number?: string | null
+    strongest_signal?: string | null
+    extension_duration?: number | null
+    username?: string | null
+    firstname?: string | null
+    lastname?: string | null
+  } | null>(null)
   return (
     <div className="p-4 flex flex-col">
       <header className="flex items-center justify-between mb-4">
@@ -116,29 +116,29 @@ export default function ManageBookingPage() {
       </header>
       <nav className="flex gap-2 mb-6">
         <TabButton
-          active={active === "masterlist"}
-          onClick={() => setActive("masterlist")}
+          active={active === 'masterlist'}
+          onClick={() => setActive('masterlist')}
         >
           Master List
         </TabButton>
         <TabButton
-          active={active === "bookings"}
-          onClick={() => setActive("bookings")}
+          active={active === 'bookings'}
+          onClick={() => setActive('bookings')}
         >
           Bookings
         </TabButton>
         <TabButton
-          active={active === "eventcards"}
-          onClick={() => setActive("eventcards")}
+          active={active === 'eventcards'}
+          onClick={() => setActive('eventcards')}
         >
           Event Cards
         </TabButton>
       </nav>
       <section className="bg-white rounded-xl shadow p-2">
-        {active === "bookings" && (
+        {active === 'bookings' && (
           <BookingsPanel selected={selectedForBooking} />
         )}
-        {active === "masterlist" && (
+        {active === 'masterlist' && (
           <MasterListPanel
             onSelectPending={(row) => {
               setSelectedForBooking({
@@ -158,98 +158,98 @@ export default function ManageBookingPage() {
                 username: row.username ?? null,
                 firstname: row.firstname ?? null,
                 lastname: row.lastname ?? null,
-              });
-              setActive("bookings");
+              })
+              setActive('bookings')
             }}
           />
         )}
-        {active === "eventcards" && <EventCardsPanel />} {/* new */}
+        {active === 'eventcards' && <EventCardsPanel />} {/* new */}
       </section>
     </div>
-  );
+  )
 }
 // Safely extract an ISO-like YYYY-MM-DD string from various date shapes
 function toISODateString(value: unknown): string {
-  if (!value) return "—";
-  if (typeof value === "string") {
+  if (!value) return '—'
+  if (typeof value === 'string') {
     // If already ISO-like, take first 10 chars or part before 'T'
-    const m = value.match(/^(\d{4}-\d{2}-\d{2})/);
-    if (m) return m[1];
-    const d = new Date(value);
-    if (!Number.isNaN(d.getTime())) return d.toISOString().slice(0, 10);
-    return value.slice(0, 10);
+    const m = value.match(/^(\d{4}-\d{2}-\d{2})/)
+    if (m) return m[1]
+    const d = new Date(value)
+    if (!Number.isNaN(d.getTime())) return d.toISOString().slice(0, 10)
+    return value.slice(0, 10)
   }
   if (value instanceof Date) {
     // Normalize to calendar date (no tz shift)
-    const y = value.getFullYear();
-    const m = value.getMonth();
-    const d = value.getDate();
-    const iso = new Date(Date.UTC(y, m, d)).toISOString();
-    return iso.slice(0, 10);
+    const y = value.getFullYear()
+    const m = value.getMonth()
+    const d = value.getDate()
+    const iso = new Date(Date.UTC(y, m, d)).toISOString()
+    return iso.slice(0, 10)
   }
-  const s = String(value);
-  const m = s.match(/^(\d{4}-\d{2}-\d{2})/);
-  return m ? m[1] : s.slice(0, 10);
+  const s = String(value)
+  const m = s.match(/^(\d{4}-\d{2}-\d{2})/)
+  return m ? m[1] : s.slice(0, 10)
 }
 function BookingsPanel({
   selected,
 }: {
   selected: {
-    requestid?: number | null;
-    eventName?: string;
-    date?: string;
-    startTime?: string;
-    endTime?: string;
-    package?: string;
-    grid?: string | null;
-    place?: string;
-    contact_info?: string | null;
-    contact_person?: string | null;
-    contact_person_number?: string | null;
-    strongest_signal?: string | null;
-    extension_duration?: number | null;
-    username?: string | null;
-    firstname?: string | null;
-    lastname?: string | null;
-  } | null;
+    requestid?: number | null
+    eventName?: string
+    date?: string
+    startTime?: string
+    endTime?: string
+    package?: string
+    grid?: string | null
+    place?: string
+    contact_info?: string | null
+    contact_person?: string | null
+    contact_person_number?: string | null
+    strongest_signal?: string | null
+    extension_duration?: number | null
+    username?: string | null
+    firstname?: string | null
+    lastname?: string | null
+  } | null
 }) {
   // All values as strings for text-only placeholders
   const defaultForm = {
-    email: "",
-    completeName: "",
-    contactNumber: "",
-    contactPersonAndNumber: "",
-    eventName: "",
-    eventLocation: "",
-    extensionHours: "", // text
-    boothPlacement: "", // text
-    signal: "",
-    package: "", // text
-    eventDate: "",
-    eventTime: "",
-  };
-  const [form, setForm] = useState(defaultForm);
+    email: '',
+    completeName: '',
+    contactNumber: '',
+    contactPersonAndNumber: '',
+    eventName: '',
+    eventLocation: '',
+    extensionHours: '', // text
+    boothPlacement: '', // text
+    signal: '',
+    package: '', // text
+    eventDate: '',
+    eventTime: '',
+  }
+  const [form, setForm] = useState(defaultForm)
   const [readonlyKeys, setReadonlyKeys] = useState<
     Set<keyof typeof defaultForm>
-  >(new Set());
-  const [submitting, setSubmitting] = useState<null | "approve" | "reject">(
+  >(new Set())
+  const [submitting, setSubmitting] = useState<null | 'approve' | 'reject'>(
     null
-  );
+  )
   // When a selection arrives, prefill the form
   useEffect(() => {
     if (!selected) {
-      setReadonlyKeys(new Set());
-      return;
+      setReadonlyKeys(new Set())
+      return
     }
     const contactPersonCombo = [
       selected.contact_person,
       selected.contact_person_number,
     ]
       .filter(Boolean)
-      .join(" | ");
+      .join(' | ')
     const fullName = [selected.firstname, selected.lastname]
       .filter(Boolean)
-      .join(" ");
+      .join(' ')
     setForm((p) => ({
       ...p,
       email: selected.username || p.email,
@@ -266,45 +266,45 @@ function BookingsPanel({
       package: selected.package || p.package,
       eventDate: selected.date || p.eventDate,
       eventTime: selected.startTime || p.eventTime,
-    }));
+    }))
     // Mark all prefilled user booking fields as read-only (copyable)
     const ro = new Set<keyof typeof defaultForm>([
-      "email",
-      "completeName",
-      "contactNumber",
-      "contactPersonAndNumber",
-      "eventName",
-      "eventLocation",
-      "extensionHours",
-      "signal",
-      "package",
-      "eventDate",
-      "eventTime",
-    ]);
-    setReadonlyKeys(ro);
-  }, [selected]);
+      'email',
+      'completeName',
+      'contactNumber',
+      'contactPersonAndNumber',
+      'eventName',
+      'eventLocation',
+      'extensionHours',
+      'signal',
+      'package',
+      'eventDate',
+      'eventTime',
+    ])
+    setReadonlyKeys(ro)
+  }, [selected])
 
   // Simple config: all fields render as text inputs
   const fields: Array<{ key: keyof typeof defaultForm; label: string }> = [
-    { key: "email", label: "Email:" },
-    { key: "completeName", label: "Complete name:" },
-    { key: "contactNumber", label: "Contact #:" },
-    { key: "contactPersonAndNumber", label: "Contact Person & Number:" },
-    { key: "eventName", label: "Name of event (Ex. Maria & Jose Wedding):" },
-    { key: "eventLocation", label: "Location of event:" },
+    { key: 'email', label: 'Email:' },
+    { key: 'completeName', label: 'Complete name:' },
+    { key: 'contactNumber', label: 'Contact #:' },
+    { key: 'contactPersonAndNumber', label: 'Contact Person & Number:' },
+    { key: 'eventName', label: 'Name of event (Ex. Maria & Jose Wedding):' },
+    { key: 'eventLocation', label: 'Location of event:' },
     {
-      key: "extensionHours",
-      label: "Extension? (Minimum 2hrs. Additional hour is Php2000):",
+      key: 'extensionHours',
+      label: 'Extension? (Minimum 2hrs. Additional hour is Php2000):',
     },
-    { key: "boothPlacement", label: "Placement of booth:" },
+    { key: 'boothPlacement', label: 'Placement of booth:' },
     {
-      key: "signal",
-      label: "What signal is currently strong in the event area?:",
+      key: 'signal',
+      label: 'What signal is currently strong in the event area?:',
     },
-    { key: "package", label: "Package:" },
-    { key: "eventDate", label: "Event date:" },
-    { key: "eventTime", label: "Event start time:" },
-  ];
+    { key: 'package', label: 'Package:' },
+    { key: 'eventDate', label: 'Event date:' },
+    { key: 'eventTime', label: 'Event start time:' },
+  ]
 
   const renderField = (f: { key: keyof typeof defaultForm; label: string }) => (
     <div key={String(f.key)}>
@@ -318,16 +318,16 @@ function BookingsPanel({
         placeholder="Enter here:"
       />
     </div>
-  );
+  )
 
   // Parse selected date for calendar marking
   const markedDate = useMemo(() => {
-    if (!selected?.date) return null;
-    const m = selected.date.match(/^(\d{4})-(\d{2})-(\d{2})/);
-    if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
-    const d = new Date(selected.date);
-    return Number.isNaN(d.getTime()) ? null : d;
-  }, [selected?.date]);
+    if (!selected?.date) return null
+    const m = selected.date.match(/^(\d{4})-(\d{2})-(\d{2})/)
+    if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
+    const d = new Date(selected.date)
+    return Number.isNaN(d.getTime()) ? null : d
+  }, [selected?.date])
 
   return (
     <div className=" flex gap-2 p-2 ">
@@ -338,7 +338,7 @@ function BookingsPanel({
       <div className=" flex flex-col p-2 bg-gray-300 w-full rounded ">
         <div className="flex justify-between">
           {/* (api name fetching here) */}
-          <p className="text-xl font-semibold">User's Booking</p>
+          <p className="text-xl font-semibold">User&apos;s Booking</p>
           {/* (date fetching here when booking was made) */}
           <p>02/10/2025</p>
         </div>
@@ -353,274 +353,308 @@ function BookingsPanel({
               className="bg-red-500 text-white px-4 py-2 rounded disabled:opacity-50"
               disabled={submitting !== null}
               onClick={async () => {
-                if (!selected?.date) return;
+                if (!selected?.date) return
                 try {
-                  setSubmitting("reject");
-                  const requestid = selected?.requestid ?? null;
-                  if (!requestid) throw new Error("Missing request id");
-                  await rejectBookingRequest(requestid);
+                  setSubmitting('reject')
+                  const requestid = selected?.requestid ?? null
+                  if (!requestid) throw new Error('Missing request id')
+                  await rejectBookingRequest(requestid)
                   // Reset selection and go back to master list
-                  toast.error("Booking rejected");
-                  window.location.reload();
-                } catch (e: any) {
-                  toast.error(e?.message || "Failed to reject");
+                  toast.error('Booking rejected')
+                  window.location.reload()
+                } catch (e: unknown) {
+                  const msg =
+                    e instanceof Error ? e.message : 'Failed to reject'
+                  toast.error(msg)
                 } finally {
-                  setSubmitting(null);
+                  setSubmitting(null)
                 }
               }}
             >
-              {submitting === "reject" ? "Rejecting…" : "Decline"}
+              {submitting === 'reject' ? 'Rejecting…' : 'Decline'}
             </button>
             <button
               className="bg-green-500 text-white px-4 py-2 rounded disabled:opacity-50"
               disabled={submitting !== null}
               onClick={async () => {
-                if (!selected?.date) return;
+                if (!selected?.date) return
                 try {
-                  setSubmitting("approve");
-                  const requestid = selected?.requestid ?? null;
-                  if (!requestid) throw new Error("Missing request id");
-                  await approveBookingRequest(requestid);
-                  toast.success("Booking approved and confirmed");
-                  window.location.reload();
-                } catch (e: any) {
-                  toast.error(e?.message || "Failed to approve");
+                  setSubmitting('approve')
+                  const requestid = selected?.requestid ?? null
+                  if (!requestid) throw new Error('Missing request id')
+                  await approveBookingRequest(requestid)
+                  toast.success('Booking approved and confirmed')
+                  window.location.reload()
+                } catch (e: unknown) {
+                  const msg =
+                    e instanceof Error ? e.message : 'Failed to approve'
+                  toast.error(msg)
                 } finally {
-                  setSubmitting(null);
+                  setSubmitting(null)
                 }
               }}
             >
-              {submitting === "approve" ? "Approving…" : "Approve"}
+              {submitting === 'approve' ? 'Approving…' : 'Approve'}
             </button>
           </span>
         </div>
       </div>
     </div>
-  );
+  )
 }
 
 function pageWindow(current: number, total: number, size = 3): number[] {
-  if (total <= 0) return [];
-  const start = Math.floor((Math.max(1, current) - 1) / size) * size + 1;
-  const end = Math.min(total, start + size - 1);
-  return Array.from({ length: end - start + 1 }, (_, i) => start + i);
+  if (total <= 0) return []
+  const start = Math.floor((Math.max(1, current) - 1) / size) * size + 1
+  const end = Math.min(total, start + size - 1)
+  return Array.from({ length: end - start + 1 }, (_, i) => start + i)
 }
 
 function MasterListPanel({
   onSelectPending,
 }: {
-  onSelectPending: (row: BookingRow) => void;
+  onSelectPending: (row: BookingRow) => void
 }) {
-  const router = useRouter();
-  const pageSize = 5;
-  const [statusFilter, setStatusFilter] = useState<BookingStatus | "all">(
-    "all"
-  );
-  const [page, setPage] = useState(1);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [rows, setRows] = useState<BookingRow[]>([]);
-  const [search, setSearch] = useState("");
+  const router = useRouter()
+  const pageSize = 5
+  const [statusFilter, setStatusFilter] = useState<BookingStatus | 'all'>('all')
+  const [page, setPage] = useState(1)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [rows, setRows] = useState<BookingRow[]>([])
+  const [search, setSearch] = useState('')
 
   // Assign staff dialog state
-  const [assignOpen, setAssignOpen] = useState(false);
-  const [assignTarget, setAssignTarget] = useState<BookingRow | null>(null);
-  const [staffList, setStaffList] = useState<StaffUser[]>([]);
-  const [selectedStaff, setSelectedStaff] = useState<Set<number>>(new Set());
-  const [assignBusy, setAssignBusy] = useState(false);
+  const [assignOpen, setAssignOpen] = useState(false)
+  const [assignTarget, setAssignTarget] = useState<BookingRow | null>(null)
+  const [staffList, setStaffList] = useState<StaffUser[]>([])
+  const [selectedStaff, setSelectedStaff] = useState<Set<number>>(new Set())
+  const [assignBusy, setAssignBusy] = useState(false)
 
   // ADD: dialog state for cancel/undo cancel confirmations
-  const [cancelOpen, setCancelOpen] = useState(false);
-  const [undoOpen, setUndoOpen] = useState(false);
-  const [targetRow, setTargetRow] = useState<BookingRow | null>(null);
-  const [busy, setBusy] = useState<null | "cancel" | "undo">(null);
+  const [cancelOpen, setCancelOpen] = useState(false)
+  const [undoOpen, setUndoOpen] = useState(false)
+  const [targetRow, setTargetRow] = useState<BookingRow | null>(null)
+  const [busy, setBusy] = useState<null | 'cancel' | 'undo'>(null)
 
   // ADD: items modal state for Items overview column
-  const [itemsOpen, setItemsOpen] = useState(false);
-  const [itemsTarget, setItemsTarget] = useState<BookingRow | null>(null);
+  const [itemsOpen, setItemsOpen] = useState(false)
+  const [itemsTarget, setItemsTarget] = useState<BookingRow | null>(null)
 
   // ADD: contract upload helpers
-  const uploadInputRef = useRef<HTMLInputElement | null>(null);
-  const [uploadTarget, setUploadTarget] = useState<BookingRow | null>(null);
+  const uploadInputRef = useRef<HTMLInputElement | null>(null)
+  const [uploadTarget, setUploadTarget] = useState<BookingRow | null>(null)
   const API_BASE =
-    process.env.NEXT_PUBLIC_API_BASE?.replace(/\/$/, "") ||
-    "http://localhost:5000";
-  const CONTRACTS_CUSTOMER = `${API_BASE}/api/customer/contracts`;
-  const CONTRACTS_ADMIN = `${API_BASE}/api/admin/contracts`;
-  const getAuthHeader = () => {
+    process.env.NEXT_PUBLIC_API_BASE?.replace(/\/$/, '') ||
+    'http://localhost:5000'
+  const CONTRACTS_CUSTOMER = `${API_BASE}/api/customer/contracts`
+  const CONTRACTS_ADMIN = `${API_BASE}/api/admin/contracts`
+  // Always return a HeadersInit-compatible object (avoid unions that confuse TS)
+  const getAuthHeader = (): HeadersInit => {
     const token =
-      (typeof window !== "undefined" && localStorage.getItem("access_token")) ||
-      null;
-    return token ? { Authorization: `Bearer ${token}` } : {};
-  };
+      (typeof window !== 'undefined' && localStorage.getItem('access_token')) ||
+      null
+    return token
+      ? ({ Authorization: `Bearer ${token}` } as Record<string, string>)
+      : ({} as Record<string, string>)
+  }
   const viewContract = async (row: BookingRow) => {
     if (!row.requestid) {
-      toast.error("Missing request id.");
-      return;
+      toast.error('Missing request id.')
+      return
     }
     try {
       const res = await fetch(
         `${CONTRACTS_CUSTOMER}/by-request/${encodeURIComponent(
           String(row.requestid)
         )}`,
-        { headers: { ...getAuthHeader() }, cache: "no-store" }
-      );
-      if (!res.ok) throw new Error(await res.text());
-      const data = await res.json().catch(() => ({} as any));
+        { headers: getAuthHeader(), cache: 'no-store' }
+      )
+      if (!res.ok) throw new Error(await res.text())
+      const data: { contract?: { url?: string } } & {
+        url?: string
+        contract_url?: string
+      } = await res
+        .json()
+        .catch(
+          () =>
+            ({} as {
+              contract?: { url?: string }
+              url?: string
+              contract_url?: string
+            })
+        )
       const url: string | undefined =
-        data?.contract?.url || data?.url || data?.contract_url;
+        data?.contract?.url || data?.url || data?.contract_url
       if (!url) {
-        toast.error("No contract available.");
-        return;
+        toast.error('No contract available.')
+        return
       }
-      window.open(url, "_blank");
+      window.open(url, '_blank')
     } catch {
-      toast.error("Failed to open contract.");
+      toast.error('Failed to open contract.')
     }
-  };
+  }
   const onPickUpload = (row: BookingRow) => {
     if (!row.requestid) {
-      toast.error("Missing request id.");
-      return;
+      toast.error('Missing request id.')
+      return
     }
-    setUploadTarget(row);
-    uploadInputRef.current?.click();
-  };
+    setUploadTarget(row)
+    uploadInputRef.current?.click()
+  }
   const onUploadFile: ChangeEventHandler<HTMLInputElement> = async (e) => {
-    const file = e.target.files?.[0];
-    e.currentTarget.value = "";
-    if (!file || !uploadTarget?.requestid) return;
+    const file = e.target.files?.[0]
+    e.currentTarget.value = ''
+    if (!file || !uploadTarget?.requestid) return
     try {
-      const fd = new FormData();
-      fd.append("file", file);
-      fd.append("requestid", String(uploadTarget.requestid));
+      const fd = new FormData()
+      fd.append('file', file)
+      fd.append('requestid', String(uploadTarget.requestid))
       const res = await fetch(`${CONTRACTS_ADMIN}/upload`, {
-        method: "POST",
-        headers: { ...getAuthHeader() },
+        method: 'POST',
+        headers: getAuthHeader(),
         body: fd,
-      });
-      if (!res.ok) throw new Error(await res.text());
-      toast.success("Contract uploaded.");
+      })
+      if (!res.ok) throw new Error(await res.text())
+      toast.success('Contract uploaded.')
     } catch {
-      toast.error("Upload failed.");
+      toast.error('Upload failed.')
     } finally {
-      setUploadTarget(null);
+      setUploadTarget(null)
     }
-  };
+  }
 
   // ADD: helpers for event status and payment badges/labels
-  const eventStatusLabel = (s: BookingRow["eventStatus"]) =>
-    s === "standby" ? "Standby" : s === "ongoing" ? "Ongoing" : "Finished";
-  const eventStatusBadgeClass = (s: BookingRow["eventStatus"]) => {
-    if (s === "ongoing") return "bg-yellow-700 text-white";
-    if (s === "finished") return "bg-green-700 text-white";
-    return "bg-gray-700 text-white"; // standby
-  };
-  const paymentLabel = (p: BookingRow["payment"]) =>
-    p === "paid" ? "Paid" : p === "unpaid" ? "Unpaid" : "Partially Paid";
-  const paymentBadgeClass = (p: BookingRow["payment"]) => {
-    if (p === "paid") return "bg-green-700 text-white";
-    if (p === "partially-paid") return "bg-yellow-700 text-white";
-    return "bg-red-700 text-white"; // unpaid
-  };
+  const eventStatusLabel = (s: BookingRow['eventStatus']) =>
+    s === 'standby' ? 'Standby' : s === 'ongoing' ? 'Ongoing' : 'Finished'
+  const eventStatusBadgeClass = (s: BookingRow['eventStatus']) => {
+    if (s === 'ongoing') return 'bg-yellow-700 text-white'
+    if (s === 'finished') return 'bg-green-700 text-white'
+    return 'bg-gray-700 text-white' // standby
+  }
+  const paymentLabel = (p: BookingRow['payment']) =>
+    p === 'paid' ? 'Paid' : p === 'unpaid' ? 'Unpaid' : 'Partially Paid'
+  const paymentBadgeClass = (p: BookingRow['payment']) => {
+    if (p === 'paid') return 'bg-green-700 text-white'
+    if (p === 'partially-paid') return 'bg-yellow-700 text-white'
+    return 'bg-red-700 text-white' // unpaid
+  }
 
   useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-    (async () => {
+    let cancelled = false
+    setLoading(true)
+    setError(null)
+    ;(async () => {
       try {
-        const list = await readBookings();
-        if (cancelled) return;
+        const list = await readBookings()
+        if (cancelled) return
 
         // Map master list + event logs fields
         const mapBookingStatusToEvent = (
           s?: string
-        ): BookingRow["eventStatus"] => {
-          switch ((s || "").toLowerCase()) {
-            case "in_progress":
-              return "ongoing";
-            case "completed":
-            case "cancelled":
-              return "finished";
-            case "scheduled":
+        ): BookingRow['eventStatus'] => {
+          switch ((s || '').toLowerCase()) {
+            case 'in_progress':
+              return 'ongoing'
+            case 'completed':
+            case 'cancelled':
+              return 'finished'
+            case 'scheduled':
             default:
-              return "standby";
+              return 'standby'
           }
-        };
-        const mapPaymentStatus = (s?: string): BookingRow["payment"] => {
-          switch ((s || "").toLowerCase()) {
-            case "paid":
-              return "paid";
-            case "partial":
-              return "partially-paid";
-            case "unpaid":
-            case "refunded":
-            case "failed":
+        }
+        const mapPaymentStatus = (s?: string): BookingRow['payment'] => {
+          switch ((s || '').toLowerCase()) {
+            case 'paid':
+              return 'paid'
+            case 'partial':
+              return 'partially-paid'
+            case 'unpaid':
+            case 'refunded':
+            case 'failed':
             default:
-              return "unpaid";
+              return 'unpaid'
           }
-        };
+        }
 
         const toRow = (r: BookingRequestRow): BookingRow => {
           // Derive UI status. For confirmed bookings, reflect booking_status
           // (cancelled -> 'cancelled', others -> 'approved'). For requests, map DB status.
-          let status: BookingStatus;
-          if (r.kind === "confirmed") {
-            status =
-              r.booking_status === "cancelled" ? "cancelled" : "approved";
+          let status: BookingStatus
+          if (r.kind === 'confirmed') {
+            status = r.booking_status === 'cancelled' ? 'cancelled' : 'approved'
           } else {
             const statusMap: Record<string, BookingStatus> = {
-              pending: "pending",
-              accepted: "approved",
-              rejected: "declined",
-              cancelled: "cancelled",
-            };
-            status = statusMap[(r.status as string) || "pending"] ?? "pending";
+              pending: 'pending',
+              accepted: 'approved',
+              rejected: 'declined',
+              cancelled: 'cancelled',
+            }
+            status = statusMap[(r.status as string) || 'pending'] ?? 'pending'
           }
 
-          const date = toISODateString(r.event_date);
-          const startTime = (r.event_time || "").toString().slice(0, 5);
-          const endTime = (r.event_end_time || "").toString().slice(0, 5);
+          const date = toISODateString(r.event_date)
+          const startTime = (r.event_time || '').toString().slice(0, 5)
+          const endTime = (r.event_end_time || '').toString().slice(0, 5)
+          const rx = r as Record<string, unknown>
           const baseCandidate =
-            (r as any).total_booking_price ??
-            (r as any).package_price ??
-            (r as any).price ??
-            0;
-          const baseTotal = Number(baseCandidate);
-          const extHoursNum = Number(r.extension_duration ?? 0);
+            (typeof rx['total_booking_price'] === 'number'
+              ? (rx['total_booking_price'] as number)
+              : undefined) ??
+            (typeof rx['package_price'] === 'number'
+              ? (rx['package_price'] as number)
+              : undefined) ??
+            (typeof rx['price'] === 'number'
+              ? (rx['price'] as number)
+              : undefined) ??
+            0
+          const baseTotal = Number(baseCandidate)
+          const extHoursNum = Number(r.extension_duration ?? 0)
           const extHours = Number.isFinite(extHoursNum)
             ? Math.max(0, extHoursNum)
-            : 0;
+            : 0
           const amountDue = Number.isFinite(baseTotal)
             ? Math.max(0, Number(baseTotal) + extHours * 2000)
-            : null;
+            : null
 
           // NEW: derive client name, event status, payment and items
           const clientName =
-            [r.firstname, r.lastname].filter(Boolean).join(" ").trim() ||
-            String(r.username || "");
+            [r.firstname, r.lastname].filter(Boolean).join(' ').trim() ||
+            String(r.username || '')
+          const bookingStatusRaw =
+            typeof rx['booking_status'] === 'string'
+              ? (rx['booking_status'] as string)
+              : undefined
+          const paymentStatusRaw =
+            typeof rx['payment_status'] === 'string'
+              ? (rx['payment_status'] as string)
+              : undefined
           const eventStatus =
-            r.kind === "confirmed"
-              ? mapBookingStatusToEvent((r as any).booking_status)
-              : "standby";
+            r.kind === 'confirmed'
+              ? mapBookingStatusToEvent(bookingStatusRaw)
+              : 'standby'
           const payment =
-            r.kind === "confirmed"
-              ? mapPaymentStatus((r as any).payment_status)
-              : "unpaid";
-          const items = { damaged: [] as Item[], missing: [] as Item[] };
+            r.kind === 'confirmed'
+              ? mapPaymentStatus(paymentStatusRaw)
+              : 'unpaid'
+          const items = { damaged: [] as Item[], missing: [] as Item[] }
 
           return {
             id: String(r.requestid || r.confirmed_id || Math.random()),
             requestid: r.requestid ?? null,
-            confirmedid: (r as any).confirmed_id ?? null,
-            eventName: r.event_name || "—",
+            confirmedid:
+              typeof rx['confirmed_id'] === 'number'
+                ? (rx['confirmed_id'] as number)
+                : null,
+            eventName: r.event_name || '—',
             date,
             startTime,
             endTime,
-            package: r.package_name || "—",
-            grid: r.grid || "—",
-            place: r.event_address || "—",
+            package: r.package_name || '—',
+            grid: r.grid || '—',
+            place: r.event_address || '—',
             status,
             contact_info: r.contact_info ?? null,
             contact_person: r.contact_person ?? null,
@@ -639,35 +673,36 @@ function MasterListPanel({
             eventStatus,
             payment,
             items,
-          };
-        };
+          }
+        }
 
-        const mapped = list.map(toRow);
-        setRows(mapped);
-        setPage(1);
-      } catch (e: any) {
-        if (cancelled) return;
-        setError(e?.message || "Failed to load bookings");
+        const mapped = list.map(toRow)
+        setRows(mapped)
+        setPage(1)
+      } catch (e: unknown) {
+        if (cancelled) return
+        const msg = e instanceof Error ? e.message : 'Failed to load bookings'
+        setError(msg)
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) setLoading(false)
       }
-    })();
+    })()
     return () => {
-      cancelled = true;
-    };
-  }, []);
+      cancelled = true
+    }
+  }, [])
 
   const filtered = useMemo(() => {
     // First, filter by status
     const byStatus =
-      statusFilter === "all"
+      statusFilter === 'all'
         ? rows
-        : rows.filter((d) => d.status === statusFilter);
+        : rows.filter((d) => d.status === statusFilter)
     // Then, apply search tokens (AND over tokens)
-    const q = search.trim().toLowerCase();
-    if (!q) return byStatus;
-    const tokens = q.split(/\s+/).filter(Boolean);
-    if (!tokens.length) return byStatus;
+    const q = search.trim().toLowerCase()
+    if (!q) return byStatus
+    const tokens = q.split(/\s+/).filter(Boolean)
+    if (!tokens.length) return byStatus
     return byStatus.filter((r) => {
       const hay = [
         r.eventName,
@@ -686,205 +721,208 @@ function MasterListPanel({
         r.contact_person_number,
       ]
         .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-      return tokens.every((t) => hay.includes(t));
-    });
-  }, [statusFilter, rows, search]);
-  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
-  const startIdx = (page - 1) * pageSize;
-  const pageRows = filtered.slice(startIdx, startIdx + pageSize);
+        .join(' ')
+        .toLowerCase()
+      return tokens.every((t) => hay.includes(t))
+    })
+  }, [statusFilter, rows, search])
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize))
+  const startIdx = (page - 1) * pageSize
+  const pageRows = filtered.slice(startIdx, startIdx + pageSize)
   const windowPages = useMemo(
     () => pageWindow(page, totalPages, 3),
     [page, totalPages]
-  );
+  )
 
   const statusBadgeClasses: Record<BookingStatus, string> = {
-    pending: "bg-gray-700 text-white",
-    approved: "bg-green-700 text-white ",
-    declined: "bg-red-700 text-white ",
-    cancelled: "bg-orange-700 text-white",
-  };
+    pending: 'bg-gray-700 text-white',
+    approved: 'bg-green-700 text-white ',
+    declined: 'bg-red-700 text-white ',
+    cancelled: 'bg-orange-700 text-white',
+  }
 
-  const statusOptions: Array<{ value: BookingStatus | "all"; label: string }> =
+  const statusOptions: Array<{ value: BookingStatus | 'all'; label: string }> =
     [
-      { value: "all", label: "All" },
-      { value: "pending", label: "Pending" },
-      { value: "approved", label: "Approved" },
-      { value: "declined", label: "Declined" },
-      { value: "cancelled", label: "Cancelled" },
-    ];
+      { value: 'all', label: 'All' },
+      { value: 'pending', label: 'Pending' },
+      { value: 'approved', label: 'Approved' },
+      { value: 'declined', label: 'Declined' },
+      { value: 'cancelled', label: 'Cancelled' },
+    ]
   const currentLabel =
-    statusOptions.find((o) => o.value === statusFilter)?.label ?? "All";
+    statusOptions.find((o) => o.value === statusFilter)?.label ?? 'All'
 
   // Handlers for actions menu
   const handleEdit = (row: BookingRow) => {
     try {
       // Derive contact person fields with robust fallbacks
-      const byFieldName = (row.contact_person || "").trim();
+      const byFieldName = (row.contact_person || '').trim()
       const byName = [row.firstname, row.lastname]
         .filter(Boolean)
-        .join(" ")
-        .trim();
-      const contactPersonName = byFieldName || byName || "";
+        .join(' ')
+        .trim()
+      const contactPersonName = byFieldName || byName || ''
 
-      const directNum = (row.contact_person_number || "").trim();
-      let contactPersonNumber = directNum;
+      const directNum = (row.contact_person_number || '').trim()
+      let contactPersonNumber = directNum
       if (!contactPersonNumber) {
-        const info = (row.contact_info || "").toString();
-        const m = info.match(/(\+?\d[\d\s-]{6,}\d)/);
-        contactPersonNumber = (m?.[1] || "").trim();
+        const info = (row.contact_info || '').toString()
+        const m = info.match(/(\+?\d[\d\s-]{6,}\d)/)
+        contactPersonNumber = (m?.[1] || '').trim()
       }
       // Always build a normalized combined string so the edit page can split reliably
-      const combinedContact = `${contactPersonName} | ${contactPersonNumber}`;
+      const combinedContact = `${contactPersonName} | ${contactPersonNumber}`
       // Build prefill payload for createBooking page
       const prefill = {
-        email: row.username || "",
-        completeName: [row.firstname, row.lastname].filter(Boolean).join(" "),
-        contactNumber: row.contact_info || "",
+        email: row.username || '',
+        completeName: [row.firstname, row.lastname].filter(Boolean).join(' '),
+        contactNumber: row.contact_info || '',
         contactPersonAndNumber: combinedContact,
-        eventName: row.eventName || "",
-        eventLocation: row.place || "",
+        eventName: row.eventName || '',
+        eventLocation: row.place || '',
         extensionHours:
-          typeof row.extension_duration === "number"
+          typeof row.extension_duration === 'number'
             ? row.extension_duration
             : 0,
-        boothPlacement: "Indoor",
-        signal: row.strongest_signal || "",
-        package: (row.package || "The Hanz") as any,
-        selectedGrids: (row.grid || "")
-          .split(",")
+        boothPlacement: 'Indoor',
+        signal: row.strongest_signal || '',
+        package: row.package || 'The Hanz',
+        selectedGrids: (row.grid || '')
+          .split(',')
           .map((s) => s.trim())
           .filter(Boolean),
         eventDate: row.date ? new Date(row.date) : new Date(),
-        eventTime: row.startTime || "12:00",
-        eventEndTime: row.endTime || "14:00",
+        eventTime: row.startTime || '12:00',
+        eventEndTime: row.endTime || '14:00',
         // Attach the requestid for reference if needed during save
         __requestid: row.requestid ?? null,
-      };
-      if (typeof window !== "undefined") {
-        sessionStorage.setItem("edit_booking_prefill", JSON.stringify(prefill));
       }
-      router.push("/admin/createBooking?prefill=1");
+      if (typeof window !== 'undefined') {
+        sessionStorage.setItem('edit_booking_prefill', JSON.stringify(prefill))
+      }
+      router.push('/admin/createBooking?prefill=1')
     } catch {
       // no-op; optionally toast an error
     }
-  };
+  }
 
   // Helpers for Assign Staff
   const ensureConfirmedId = async (row: BookingRow): Promise<number | null> => {
     if (row.confirmedid && Number.isFinite(row.confirmedid)) {
-      return Number(row.confirmedid);
+      return Number(row.confirmedid)
     }
-    if (!row.requestid) return null;
-    return getConfirmedBookingIdByRequest(row.requestid);
-  };
+    if (!row.requestid) return null
+    return getConfirmedBookingIdByRequest(row.requestid)
+  }
 
   const openAssign = async (row: BookingRow) => {
-    setAssignTarget(row);
-    setAssignOpen(true);
+    setAssignTarget(row)
+    setAssignOpen(true)
     try {
-      const employees = await listEmployees();
-      setStaffList(employees);
-      const cid = await ensureConfirmedId(row);
+      const employees = await listEmployees()
+      setStaffList(employees)
+      const cid = await ensureConfirmedId(row)
       if (cid) {
-        const assigned = await listAssignedStaff(cid);
-        const ids = assigned.map((s) => s.id).filter(Boolean);
-        setSelectedStaff(new Set(ids));
+        const assigned = await listAssignedStaff(cid)
+        const ids = assigned.map((s) => s.id).filter(Boolean)
+        setSelectedStaff(new Set(ids))
       } else {
-        setSelectedStaff(new Set());
+        setSelectedStaff(new Set())
       }
     } catch {
-      setStaffList([]);
-      setSelectedStaff(new Set());
+      setStaffList([])
+      setSelectedStaff(new Set())
     }
-  };
+  }
 
   const toggleStaff = (id: number) => {
     setSelectedStaff((prev) => {
-      const next = new Set(prev);
+      const next = new Set(prev)
       if (next.has(id)) {
-        next.delete(id);
+        next.delete(id)
       } else {
-        if (next.size >= 2) return next; // enforce max 2
-        next.add(id);
+        if (next.size >= 2) return next // enforce max 2
+        next.add(id)
       }
-      return next;
-    });
-  };
+      return next
+    })
+  }
 
   const confirmAssign = async () => {
-    if (!assignTarget) return;
-    const ids = Array.from(selectedStaff);
+    if (!assignTarget) return
+    const ids = Array.from(selectedStaff)
     if (!ids.length) {
-      toast.error("Please select at least one staff");
-      return;
+      toast.error('Please select at least one staff')
+      return
     }
-    const cid = await ensureConfirmedId(assignTarget);
+    const cid = await ensureConfirmedId(assignTarget)
     if (!cid) {
-      toast.error("Confirmed booking not found for this row");
-      return;
+      toast.error('Confirmed booking not found for this row')
+      return
     }
     try {
-      setAssignBusy(true);
+      setAssignBusy(true)
       // Replace the current assigned staff set with the newly selected ones
-      await replaceAssignedStaff(cid, ids);
-      toast.success("Staff assignment updated");
-      setAssignOpen(false);
-      setAssignTarget(null);
-    } catch (e: any) {
-      toast.error(e?.message || "Failed to assign staff");
+      await replaceAssignedStaff(cid, ids)
+      toast.success('Staff assignment updated')
+      setAssignOpen(false)
+      setAssignTarget(null)
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Failed to assign staff'
+      toast.error(msg)
     } finally {
-      setAssignBusy(false);
+      setAssignBusy(false)
     }
-  };
+  }
 
   // CHANGED: remove window.confirm, just perform the action
   const handleCancel = async (row: BookingRow) => {
-    if (!(row.requestid && row.status === "approved")) return;
+    if (!(row.requestid && row.status === 'approved')) return
     try {
-      setBusy("cancel");
+      setBusy('cancel')
       await cancelConfirmedBooking({
         requestid: row.requestid,
-        reason: "Admin cancel via ManageBooking",
-      });
+        reason: 'Admin cancel via ManageBooking',
+      })
       setRows((prev) =>
         prev.map((r) =>
-          r.requestid === row.requestid ? { ...r, status: "cancelled" } : r
+          r.requestid === row.requestid ? { ...r, status: 'cancelled' } : r
         )
-      );
-      toast.success("Booking cancelled");
-    } catch (e: any) {
-      toast.error(e?.message || "Failed to cancel booking");
+      )
+      toast.success('Booking cancelled')
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Failed to cancel booking'
+      toast.error(msg)
     } finally {
-      setBusy(null);
-      setCancelOpen(false);
-      setTargetRow(null);
+      setBusy(null)
+      setCancelOpen(false)
+      setTargetRow(null)
     }
-  };
+  }
 
   const handleUndoCancel = async (row: BookingRow) => {
-    if (!row.requestid || row.status !== "cancelled") return;
+    if (!row.requestid || row.status !== 'cancelled') return
     try {
-      setBusy("undo");
+      setBusy('undo')
       await updateConfirmedBooking({
         requestid: row.requestid,
-        updates: { bookingStatus: "scheduled" },
-      });
+        updates: { bookingStatus: 'scheduled' },
+      })
       setRows((prev) =>
         prev.map((r) =>
-          r.requestid === row.requestid ? { ...r, status: "approved" } : r
+          r.requestid === row.requestid ? { ...r, status: 'approved' } : r
         )
-      );
-      toast.success("Booking restored to scheduled");
-    } catch (e: any) {
-      toast.error(e?.message || "Failed to undo cancel");
+      )
+      toast.success('Booking restored to scheduled')
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Failed to undo cancel'
+      toast.error(msg)
     } finally {
-      setBusy(null);
-      setUndoOpen(false);
-      setTargetRow(null);
+      setBusy(null)
+      setUndoOpen(false)
+      setTargetRow(null)
     }
-  };
+  }
 
   return (
     <div className="p-2 flex flex-col h-[60vh] min-h-0">
@@ -905,17 +943,17 @@ function MasterListPanel({
           <PopoverContent className="w-32 p-1" align="end">
             <div className="flex flex-col">
               {statusOptions.map((opt) => {
-                const selected = opt.value === statusFilter;
+                const selected = opt.value === statusFilter
                 return (
                   <button
                     key={opt.value}
                     type="button"
                     className={`flex items-center justify-between w-full text-left px-2 py-1.5 rounded text-sm hover:bg-gray-100 ${
-                      selected ? "bg-gray-50" : ""
+                      selected ? 'bg-gray-50' : ''
                     }`}
                     onClick={() => {
-                      setStatusFilter(opt.value as BookingStatus | "all");
-                      setPage(1);
+                      setStatusFilter(opt.value as BookingStatus | 'all')
+                      setPage(1)
                     }}
                   >
                     <span>{opt.label}</span>
@@ -925,7 +963,7 @@ function MasterListPanel({
                       <span className="w-4 h-4" />
                     )}
                   </button>
-                );
+                )
               })}
             </div>
           </PopoverContent>
@@ -936,8 +974,8 @@ function MasterListPanel({
             type="text"
             value={search}
             onChange={(e) => {
-              setSearch(e.target.value);
-              setPage(1);
+              setSearch(e.target.value)
+              setPage(1)
             }}
             placeholder="Search by name, date, user, place…"
             className="h-9 w-64 max-w-[50vw] px-3 rounded-full outline-none bg-gray-400 text-sm "
@@ -947,8 +985,8 @@ function MasterListPanel({
             <button
               type="button"
               onClick={() => {
-                setSearch("");
-                setPage(1);
+                setSearch('')
+                setPage(1)
               }}
               className="h-9 px-3 rounded border border-gray-300 bg-white text-sm hover:bg-gray-100"
               aria-label="Clear search"
@@ -1017,7 +1055,7 @@ function MasterListPanel({
                             <div>
                               <div className="font-semibold">Contact info</div>
                               <div className="text-gray-700 whitespace-pre-wrap">
-                                {row.contact_info || "—"}
+                                {row.contact_info || '—'}
                               </div>
                             </div>
                             <div>
@@ -1026,34 +1064,33 @@ function MasterListPanel({
                               </div>
                               <div className="text-gray-700 whitespace-pre-wrap">
                                 <div>
-                                  <span className="font-medium">Name:</span>{" "}
+                                  <span className="font-medium">Name:</span>{' '}
                                   {(() => {
                                     const byField = (
-                                      row.contact_person || ""
-                                    ).trim();
+                                      row.contact_person || ''
+                                    ).trim()
                                     const byName = [row.firstname, row.lastname]
                                       .filter(Boolean)
-                                      .join(" ")
-                                      .trim();
-                                    const val = byField || byName;
-                                    return val || "—";
+                                      .join(' ')
+                                      .trim()
+                                    const val = byField || byName
+                                    return val || '—'
                                   })()}
                                 </div>
                                 <div>
-                                  <span className="font-medium">Number:</span>{" "}
+                                  <span className="font-medium">Number:</span>{' '}
                                   {(() => {
                                     const direct = (
-                                      row.contact_person_number || ""
-                                    ).trim();
-                                    if (direct) return direct;
+                                      row.contact_person_number || ''
+                                    ).trim()
+                                    if (direct) return direct
                                     const info = (
-                                      row.contact_info || ""
-                                    ).toString();
+                                      row.contact_info || ''
+                                    ).toString()
                                     // Try to extract a phone-like sequence from contact_info
-                                    const m =
-                                      info.match(/(\+?\d[\d\s-]{6,}\d)/);
-                                    const extracted = (m?.[1] || "").trim();
-                                    return extracted || "—";
+                                    const m = info.match(/(\+?\d[\d\s-]{6,}\d)/)
+                                    const extracted = (m?.[1] || '').trim()
+                                    return extracted || '—'
                                   })()}
                                 </div>
                               </div>
@@ -1061,7 +1098,7 @@ function MasterListPanel({
                             <div>
                               <div className="font-semibold">Address</div>
                               <div className="text-gray-700">
-                                {row.place || "—"}
+                                {row.place || '—'}
                               </div>
                             </div>
                             <div>
@@ -1069,7 +1106,7 @@ function MasterListPanel({
                                 Strongest signal
                               </div>
                               <div className="text-gray-700">
-                                {row.strongest_signal || "—"}
+                                {row.strongest_signal || '—'}
                               </div>
                             </div>
                             <div>
@@ -1077,8 +1114,8 @@ function MasterListPanel({
                                 Extension duration
                               </div>
                               <div className="text-gray-700">
-                                {row.extension_duration ?? "—"}
-                                {row.extension_duration != null ? " hr" : ""}
+                                {row.extension_duration ?? '—'}
+                                {row.extension_duration != null ? ' hr' : ''}
                               </div>
                             </div>
                             <div>
@@ -1086,21 +1123,21 @@ function MasterListPanel({
                                 Total price (incl. extension)
                               </div>
                               <div className="text-gray-700">
-                                {typeof row.amountDue === "number"
-                                  ? `₱${row.amountDue.toLocaleString("en-PH", {
+                                {typeof row.amountDue === 'number'
+                                  ? `₱${row.amountDue.toLocaleString('en-PH', {
                                       minimumFractionDigits: 2,
                                       maximumFractionDigits: 2,
                                     })}`
-                                  : "—"}
+                                  : '—'}
                               </div>
                             </div>
                             <div>
                               <div className="font-semibold">Grids</div>
                               {(() => {
-                                const names = (row.grid || "")
-                                  .split(",")
+                                const names = (row.grid || '')
+                                  .split(',')
                                   .map((s) => s.trim())
-                                  .filter((s) => s && s !== "—");
+                                  .filter((s) => s && s !== '—')
                                 return names.length ? (
                                   <ul className="list-disc list-inside text-gray-700">
                                     {names.map((n) => (
@@ -1109,7 +1146,7 @@ function MasterListPanel({
                                   </ul>
                                 ) : (
                                   <div className="text-gray-700">—</div>
-                                );
+                                )
                               })()}
                             </div>
                           </div>
@@ -1146,8 +1183,8 @@ function MasterListPanel({
                         type="button"
                         className="px-2 py-1.5 rounded border text-xs"
                         onClick={() => {
-                          setItemsTarget(row);
-                          setItemsOpen(true);
+                          setItemsTarget(row)
+                          setItemsOpen(true)
                         }}
                       >
                         View
@@ -1199,11 +1236,11 @@ function MasterListPanel({
                             <button
                               type="button"
                               className={`text-left px-2 py-1.5 rounded text-sm hover:bg-gray-100 ${
-                                row.status === "pending"
-                                  ? ""
-                                  : "opacity-50 cursor-not-allowed"
+                                row.status === 'pending'
+                                  ? ''
+                                  : 'opacity-50 cursor-not-allowed'
                               }`}
-                              disabled={row.status !== "pending"}
+                              disabled={row.status !== 'pending'}
                               onClick={() => onSelectPending(row)}
                             >
                               Review
@@ -1211,14 +1248,14 @@ function MasterListPanel({
                             <button
                               type="button"
                               className={`text-left px-2 py-1.5 rounded text-sm hover:bg-gray-100 ${
-                                row.status === "declined" ||
-                                row.status === "cancelled"
-                                  ? "opacity-50 cursor-not-allowed"
-                                  : ""
+                                row.status === 'declined' ||
+                                row.status === 'cancelled'
+                                  ? 'opacity-50 cursor-not-allowed'
+                                  : ''
                               }`}
                               disabled={
-                                row.status === "declined" ||
-                                row.status === "cancelled"
+                                row.status === 'declined' ||
+                                row.status === 'cancelled'
                               }
                               onClick={() => handleEdit(row)}
                             >
@@ -1228,16 +1265,16 @@ function MasterListPanel({
                             <button
                               type="button"
                               className={`text-left px-2 py-1.5 rounded text-sm hover:bg-gray-100 ${
-                                row.status === "approved"
-                                  ? ""
-                                  : "opacity-50 cursor-not-allowed"
+                                row.status === 'approved'
+                                  ? ''
+                                  : 'opacity-50 cursor-not-allowed'
                               }`}
-                              disabled={row.status !== "approved"}
+                              disabled={row.status !== 'approved'}
                               onClick={() => {
-                                if (row.status !== "approved" || !row.requestid)
-                                  return;
-                                setTargetRow(row);
-                                setCancelOpen(true);
+                                if (row.status !== 'approved' || !row.requestid)
+                                  return
+                                setTargetRow(row)
+                                setCancelOpen(true)
                               }}
                             >
                               Cancel
@@ -1246,19 +1283,19 @@ function MasterListPanel({
                             <button
                               type="button"
                               className={`text-left px-2 py-1.5 rounded text-sm hover:bg-gray-100 ${
-                                row.status === "cancelled"
-                                  ? ""
-                                  : "opacity-50 cursor-not-allowed"
+                                row.status === 'cancelled'
+                                  ? ''
+                                  : 'opacity-50 cursor-not-allowed'
                               }`}
-                              disabled={row.status !== "cancelled"}
+                              disabled={row.status !== 'cancelled'}
                               onClick={() => {
                                 if (
-                                  row.status !== "cancelled" ||
+                                  row.status !== 'cancelled' ||
                                   !row.requestid
                                 )
-                                  return;
-                                setTargetRow(row);
-                                setUndoOpen(true);
+                                  return
+                                setTargetRow(row)
+                                setUndoOpen(true)
                               }}
                             >
                               Undo Cancel
@@ -1266,11 +1303,11 @@ function MasterListPanel({
                             <button
                               type="button"
                               className={`text-left px-2 py-1.5 rounded text-sm hover:bg-gray-100 ${
-                                row.status === "approved"
-                                  ? ""
-                                  : "opacity-50 cursor-not-allowed"
+                                row.status === 'approved'
+                                  ? ''
+                                  : 'opacity-50 cursor-not-allowed'
                               }`}
-                              disabled={row.status !== "approved"}
+                              disabled={row.status !== 'approved'}
                               onClick={() => openAssign(row)}
                             >
                               Assign Staff
@@ -1294,10 +1331,10 @@ function MasterListPanel({
               <PaginationPrevious
                 href="#"
                 className="text-black no-underline hover:no-underline hover:text-black"
-                style={{ textDecoration: "none" }}
+                style={{ textDecoration: 'none' }}
                 onClick={(e) => {
-                  e.preventDefault();
-                  setPage((p) => Math.max(1, p - 1));
+                  e.preventDefault()
+                  setPage((p) => Math.max(1, p - 1))
                 }}
               />
             </PaginationItem>
@@ -1307,10 +1344,10 @@ function MasterListPanel({
                   href="#"
                   isActive={n === page}
                   className="text-black no-underline hover:no-underline hover:text-black"
-                  style={{ textDecoration: "none" }}
+                  style={{ textDecoration: 'none' }}
                   onClick={(e) => {
-                    e.preventDefault();
-                    setPage(n);
+                    e.preventDefault()
+                    setPage(n)
                   }}
                 >
                   {n}
@@ -1321,10 +1358,10 @@ function MasterListPanel({
               <PaginationNext
                 href="#"
                 className="text-black no-underline hover:no-underline hover:text-black"
-                style={{ textDecoration: "none" }}
+                style={{ textDecoration: 'none' }}
                 onClick={(e) => {
-                  e.preventDefault();
-                  setPage((p) => Math.min(totalPages, p + 1));
+                  e.preventDefault()
+                  setPage((p) => Math.min(totalPages, p + 1))
                 }}
               />
             </PaginationItem>
@@ -1337,8 +1374,8 @@ function MasterListPanel({
         open={cancelOpen}
         onOpenChange={(o) => {
           if (!o) {
-            setCancelOpen(false);
-            setTargetRow(null);
+            setCancelOpen(false)
+            setTargetRow(null)
           }
         }}
       >
@@ -1351,17 +1388,17 @@ function MasterListPanel({
           </DialogHeader>
           <div className="text-sm space-y-1">
             <div>
-              <span className="font-medium">Event:</span>{" "}
-              {targetRow?.eventName || "—"}
+              <span className="font-medium">Event:</span>{' '}
+              {targetRow?.eventName || '—'}
             </div>
             <div>
-              <span className="font-medium">Date:</span>{" "}
-              {targetRow?.date || "—"}
+              <span className="font-medium">Date:</span>{' '}
+              {targetRow?.date || '—'}
             </div>
             <div>
-              <span className="font-medium">Time:</span>{" "}
-              {targetRow?.startTime || "—"}
-              {targetRow?.endTime ? ` - ${targetRow.endTime}` : ""}
+              <span className="font-medium">Time:</span>{' '}
+              {targetRow?.startTime || '—'}
+              {targetRow?.endTime ? ` - ${targetRow.endTime}` : ''}
             </div>
           </div>
           <DialogFooter>
@@ -1376,12 +1413,12 @@ function MasterListPanel({
             <button
               type="button"
               className="px-4 py-2 rounded bg-litratored text-white text-sm disabled:opacity-50"
-              disabled={busy === "cancel"}
+              disabled={busy === 'cancel'}
               onClick={() => {
-                if (targetRow) handleCancel(targetRow);
+                if (targetRow) handleCancel(targetRow)
               }}
             >
-              {busy === "cancel" ? "Cancelling…" : "Yes, cancel"}
+              {busy === 'cancel' ? 'Cancelling…' : 'Yes, cancel'}
             </button>
           </DialogFooter>
         </DialogContent>
@@ -1392,8 +1429,8 @@ function MasterListPanel({
         open={undoOpen}
         onOpenChange={(o) => {
           if (!o) {
-            setUndoOpen(false);
-            setTargetRow(null);
+            setUndoOpen(false)
+            setTargetRow(null)
           }
         }}
       >
@@ -1406,17 +1443,17 @@ function MasterListPanel({
           </DialogHeader>
           <div className="text-sm space-y-1">
             <div>
-              <span className="font-medium">Event:</span>{" "}
-              {targetRow?.eventName || "—"}
+              <span className="font-medium">Event:</span>{' '}
+              {targetRow?.eventName || '—'}
             </div>
             <div>
-              <span className="font-medium">Date:</span>{" "}
-              {targetRow?.date || "—"}
+              <span className="font-medium">Date:</span>{' '}
+              {targetRow?.date || '—'}
             </div>
             <div>
-              <span className="font-medium">Time:</span>{" "}
-              {targetRow?.startTime || "—"}
-              {targetRow?.endTime ? ` - ${targetRow.endTime}` : ""}
+              <span className="font-medium">Time:</span>{' '}
+              {targetRow?.startTime || '—'}
+              {targetRow?.endTime ? ` - ${targetRow.endTime}` : ''}
             </div>
           </div>
           <DialogFooter>
@@ -1431,12 +1468,12 @@ function MasterListPanel({
             <button
               type="button"
               className="px-4 py-2 rounded bg-litratoblack text-white text-sm disabled:opacity-50"
-              disabled={busy === "undo"}
+              disabled={busy === 'undo'}
               onClick={() => {
-                if (targetRow) handleUndoCancel(targetRow);
+                if (targetRow) handleUndoCancel(targetRow)
               }}
             >
-              {busy === "undo" ? "Restoring…" : "Yes, restore"}
+              {busy === 'undo' ? 'Restoring…' : 'Yes, restore'}
             </button>
           </DialogFooter>
         </DialogContent>
@@ -1447,9 +1484,9 @@ function MasterListPanel({
         open={assignOpen}
         onOpenChange={(o) => {
           if (!o) {
-            setAssignOpen(false);
-            setAssignTarget(null);
-            setSelectedStaff(new Set());
+            setAssignOpen(false)
+            setAssignTarget(null)
+            setSelectedStaff(new Set())
           }
         }}
       >
@@ -1466,8 +1503,8 @@ function MasterListPanel({
             ) : (
               <ul>
                 {staffList.map((s) => {
-                  const checked = selectedStaff.has(s.id);
-                  const disabled = !checked && selectedStaff.size >= 2;
+                  const checked = selectedStaff.has(s.id)
+                  const disabled = !checked && selectedStaff.size >= 2
                   return (
                     <li
                       key={s.id}
@@ -1486,7 +1523,7 @@ function MasterListPanel({
                         <span className="text-xs text-gray-600">{s.email}</span>
                       </div>
                     </li>
-                  );
+                  )
                 })}
               </ul>
             )}
@@ -1506,7 +1543,7 @@ function MasterListPanel({
               disabled={assignBusy || selectedStaff.size === 0}
               onClick={confirmAssign}
             >
-              {assignBusy ? "Assigning…" : "Assign"}
+              {assignBusy ? 'Assigning…' : 'Assign'}
             </button>
           </DialogFooter>
         </DialogContent>
@@ -1517,8 +1554,8 @@ function MasterListPanel({
         open={itemsOpen}
         onOpenChange={(o) => {
           if (!o) {
-            setItemsOpen(false);
-            setItemsTarget(null);
+            setItemsOpen(false)
+            setItemsTarget(null)
           }
         }}
       >
@@ -1537,7 +1574,7 @@ function MasterListPanel({
                   {itemsTarget.items.damaged.map((it, idx) => (
                     <li key={`d-${idx}`}>
                       {it.name}
-                      {it.qty ? ` × ${it.qty}` : ""}
+                      {it.qty ? ` × ${it.qty}` : ''}
                     </li>
                   ))}
                 </ul>
@@ -1552,7 +1589,7 @@ function MasterListPanel({
                   {itemsTarget.items.missing.map((it, idx) => (
                     <li key={`m-${idx}`}>
                       {it.name}
-                      {it.qty ? ` × ${it.qty}` : ""}
+                      {it.qty ? ` × ${it.qty}` : ''}
                     </li>
                   ))}
                 </ul>
@@ -1566,8 +1603,8 @@ function MasterListPanel({
               type="button"
               className="px-4 py-2 rounded border text-sm"
               onClick={() => {
-                setItemsOpen(false);
-                setItemsTarget(null);
+                setItemsOpen(false)
+                setItemsTarget(null)
               }}
             >
               Close
@@ -1585,92 +1622,114 @@ function MasterListPanel({
         onChange={onUploadFile}
       />
     </div>
-  );
+  )
 }
 
 // NOTE: Removed the duplicate `use client` block and default export for AdminEventCardsPage at the end of the file.
 // Replaced it with the panelized version below.
 function EventCardsPanel() {
   // Local types to avoid conflicts
-  type Status = "ongoing" | "standby" | "finished";
-  type Payment = "unpaid" | "partially-paid" | "paid";
-  type Item = { name: string; qty?: number };
+  type Status = 'ongoing' | 'standby' | 'finished'
+  type Payment = 'unpaid' | 'partially-paid' | 'paid'
+  type Item = { name: string; qty?: number }
   type AdminEvent = {
-    id: string | number;
-    title: string;
-    dateTime: string;
-    location: string;
-    status: Status;
-    payment: Payment;
-    totalPrice?: number;
-    imageUrl?: string;
-    damagedItems?: Item[];
-    missingItems?: Item[];
-  };
+    id: string | number
+    title: string
+    dateTime: string
+    location: string
+    status: Status
+    payment: Payment
+    totalPrice?: number
+    imageUrl?: string
+    damagedItems?: Item[]
+    missingItems?: Item[]
+  }
 
-  const [events, setEvents] = useState<AdminEvent[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [events, setEvents] = useState<AdminEvent[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   const API_BASE =
-    (process.env.NEXT_PUBLIC_API_BASE?.replace(/\/$/, "") ||
-      "http://localhost:5000") + "/api/admin/confirmed-bookings";
+    (process.env.NEXT_PUBLIC_API_BASE?.replace(/\/$/, '') ||
+      'http://localhost:5000') + '/api/admin/confirmed-bookings'
 
-  const mapBookingStatus = (s?: string): Status => {
-    switch ((s || "").toLowerCase()) {
-      case "in_progress":
-        return "ongoing";
-      case "completed":
-      case "cancelled":
-        return "finished";
-      case "scheduled":
+  const mapBookingStatus = useCallback((s?: string): Status => {
+    switch ((s || '').toLowerCase()) {
+      case 'in_progress':
+        return 'ongoing'
+      case 'completed':
+      case 'cancelled':
+        return 'finished'
+      case 'scheduled':
       default:
-        return "standby";
+        return 'standby'
     }
-  };
-  const mapPaymentStatus = (s?: string): Payment => {
-    switch ((s || "").toLowerCase()) {
-      case "paid":
-        return "paid";
-      case "partial":
-        return "partially-paid";
-      case "unpaid":
-      case "refunded":
-      case "failed":
+  }, [])
+  const mapPaymentStatus = useCallback((s?: string): Payment => {
+    switch ((s || '').toLowerCase()) {
+      case 'paid':
+        return 'paid'
+      case 'partial':
+        return 'partially-paid'
+      case 'unpaid':
+      case 'refunded':
+      case 'failed':
       default:
-        return "unpaid";
+        return 'unpaid'
     }
-  };
+  }, [])
 
   useEffect(() => {
-    let mounted = true;
+    let mounted = true
     async function load() {
-      setLoading(true);
-      setError(null);
+      setLoading(true)
+      setError(null)
       try {
-        const token = localStorage.getItem("access_token");
+        const token = localStorage.getItem('access_token')
         const res = await fetch(API_BASE, {
           headers: token ? { Authorization: `Bearer ${token}` } : {},
-        });
-        if (!res.ok) throw new Error(`Failed: ${res.status}`);
-        const data = await res.json();
-        const bookings = Array.isArray(data?.bookings) ? data.bookings : [];
-        const allowed = new Set(["scheduled", "in_progress", "completed"]);
-        const mapped: AdminEvent[] = bookings
-          .filter((b: any) =>
-            allowed.has(String(b?.booking_status || "").toLowerCase())
+        })
+        if (!res.ok) throw new Error(`Failed: ${res.status}`)
+        const data = (await res.json()) as unknown
+        type AdminBookingAPI = {
+          id?: number
+          confirmed_id?: number
+          event_name?: string
+          package_name?: string
+          event_date?: string
+          event_time?: string
+          event_address?: string
+          extension_duration?: number | string | null
+          total_booking_price?: number | string | null
+          booking_status?: string
+          payment_status?: string
+        }
+        const raw: unknown[] =
+          typeof data === 'object' &&
+          data !== null &&
+          'bookings' in (data as Record<string, unknown>) &&
+          Array.isArray((data as Record<string, unknown>).bookings)
+            ? ((data as Record<string, unknown>).bookings as unknown[])
+            : []
+        const allowed = new Set(['scheduled', 'in_progress', 'completed'])
+        const mapped: AdminEvent[] = raw
+          .filter(
+            (b): b is AdminBookingAPI => typeof b === 'object' && b !== null
           )
-          .map((b: any) => {
-            const title = b.event_name || b.package_name || "Event";
-            const date = b.event_date || "";
-            const time = b.event_time || "";
-            const dateTime = [date, time].filter(Boolean).join(" - ");
-            const location = b.event_address || "";
-            const extHours = Number(b.extension_duration || 0);
-            const base = Number(b.total_booking_price || 0);
-            const totalPrice = base + extHours * 2000;
+          .filter((b) =>
+            allowed.has(String(b.booking_status ?? '').toLowerCase())
+          )
+          .map((b) => {
+            const title = b.event_name || b.package_name || 'Event'
+            const date = b.event_date || ''
+            const time = b.event_time || ''
+            const dateTime = [date, time].filter(Boolean).join(' - ')
+            const location = b.event_address || ''
+            const extHours = Number(b.extension_duration ?? 0)
+            const base = Number(b.total_booking_price ?? 0)
+            const totalPrice = base + extHours * 2000
             return {
-              id: b.id ?? b.confirmed_id ?? "",
+              id: b.id ?? b.confirmed_id ?? '',
               title,
               dateTime,
               location,
@@ -1680,68 +1739,68 @@ function EventCardsPanel() {
               imageUrl: undefined,
               damagedItems: [],
               missingItems: [],
-            };
-          });
-        if (mounted) setEvents(mapped);
-      } catch (e: any) {
-        if (mounted) setError(e?.message || "Failed to load events");
+            }
+          })
+        if (mounted) setEvents(mapped)
+      } catch (e: unknown) {
+        if (mounted)
+          setError(e instanceof Error ? e.message : 'Failed to load events')
       } finally {
-        if (mounted) setLoading(false);
+        if (mounted) setLoading(false)
       }
     }
-    load();
+    load()
     return () => {
-      mounted = false;
-    };
-  }, []);
+      mounted = false
+    }
+  }, [API_BASE, mapBookingStatus, mapPaymentStatus])
 
-  const [statusFilter, setStatusFilter] = useState<Status | "all">("all");
-  const [itemsFilter, setItemsFilter] = useState<"all" | "with" | "without">(
-    "all"
-  );
-  const [paymentFilter, setPaymentFilter] = useState<Payment | "all">("all");
-  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<Status | 'all'>('all')
+  const [itemsFilter, setItemsFilter] = useState<'all' | 'with' | 'without'>(
+    'all'
+  )
+  const [paymentFilter, setPaymentFilter] = useState<Payment | 'all'>('all')
+  const [search, setSearch] = useState('')
 
   useEffect(() => {
-    setPage(1);
-  }, [statusFilter, itemsFilter, paymentFilter, search]);
+    setPage(1)
+  }, [statusFilter, itemsFilter, paymentFilter, search])
 
   const filteredEvents = useMemo(() => {
-    const tokens = search.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    const tokens = search.trim().toLowerCase().split(/\s+/).filter(Boolean)
     return events.filter((e) => {
-      const statusOk =
-        statusFilter === "all" ? true : e.status === statusFilter;
+      const statusOk = statusFilter === 'all' ? true : e.status === statusFilter
       const issues =
-        (e.damagedItems?.length || 0) + (e.missingItems?.length || 0);
+        (e.damagedItems?.length || 0) + (e.missingItems?.length || 0)
       const itemsOk =
-        itemsFilter === "all"
+        itemsFilter === 'all'
           ? true
-          : itemsFilter === "with"
+          : itemsFilter === 'with'
           ? issues > 0
-          : issues === 0;
+          : issues === 0
       const paymentOk =
-        paymentFilter === "all" ? true : e.payment === paymentFilter;
-      const hay = `${e.title} ${e.location} ${e.dateTime}`.toLowerCase();
+        paymentFilter === 'all' ? true : e.payment === paymentFilter
+      const hay = `${e.title} ${e.location} ${e.dateTime}`.toLowerCase()
       const searchOk = tokens.length
         ? tokens.every((t) => hay.includes(t))
-        : true;
-      return statusOk && itemsOk && paymentOk && searchOk;
-    });
-  }, [events, statusFilter, itemsFilter, paymentFilter, search]);
+        : true
+      return statusOk && itemsOk && paymentOk && searchOk
+    })
+  }, [events, statusFilter, itemsFilter, paymentFilter, search])
 
-  const PER_PAGE = 5;
-  const [page, setPage] = useState(1);
-  const totalPages = Math.max(1, Math.ceil(filteredEvents.length / PER_PAGE));
-  const windowPages = pageWindow(page, totalPages, 3);
+  const PER_PAGE = 5
+  const [page, setPage] = useState(1)
+  const totalPages = Math.max(1, Math.ceil(filteredEvents.length / PER_PAGE))
+  const windowPages = pageWindow(page, totalPages, 3)
 
   useEffect(() => {
-    setPage((p) => Math.min(Math.max(1, p), totalPages));
-  }, [totalPages, filteredEvents.length]);
+    setPage((p) => Math.min(Math.max(1, p), totalPages))
+  }, [totalPages, filteredEvents.length])
 
   const paginated = useMemo(() => {
-    const start = (page - 1) * PER_PAGE;
-    return filteredEvents.slice(start, start + PER_PAGE);
-  }, [filteredEvents, page]);
+    const start = (page - 1) * PER_PAGE
+    return filteredEvents.slice(start, start + PER_PAGE)
+  }, [filteredEvents, page])
 
   return (
     <div className="min-h-[60vh] w-full overflow-x-hidden">
@@ -1750,7 +1809,7 @@ function EventCardsPanel() {
           <div className="flex flex-wrap items-center gap-2">
             <Select
               value={statusFilter}
-              onValueChange={(v) => setStatusFilter(v as Status | "all")}
+              onValueChange={(v) => setStatusFilter(v as Status | 'all')}
             >
               <SelectTrigger className="w-[180px] rounded h-9">
                 <SelectValue placeholder="Status: All" />
@@ -1766,7 +1825,7 @@ function EventCardsPanel() {
             <Select
               value={itemsFilter}
               onValueChange={(v) =>
-                setItemsFilter((v as "all" | "with" | "without") ?? "all")
+                setItemsFilter((v as 'all' | 'with' | 'without') ?? 'all')
               }
             >
               <SelectTrigger className="w-[180px] rounded h-9">
@@ -1781,7 +1840,7 @@ function EventCardsPanel() {
 
             <Select
               value={paymentFilter}
-              onValueChange={(v) => setPaymentFilter(v as Payment | "all")}
+              onValueChange={(v) => setPaymentFilter(v as Payment | 'all')}
             >
               <SelectTrigger className="w-[200px] rounded h-9">
                 <SelectValue placeholder="Payment: All" />
@@ -1839,10 +1898,10 @@ function EventCardsPanel() {
                   <PaginationPrevious
                     href="#"
                     className="text-black no-underline hover:no-underline hover:text-black"
-                    style={{ textDecoration: "none" }}
+                    style={{ textDecoration: 'none' }}
                     onClick={(e) => {
-                      e.preventDefault();
-                      setPage((p) => Math.max(1, p - 1));
+                      e.preventDefault()
+                      setPage((p) => Math.max(1, p - 1))
                     }}
                   />
                 </PaginationItem>
@@ -1852,10 +1911,10 @@ function EventCardsPanel() {
                       href="#"
                       isActive={n === page}
                       className="text-black no-underline hover:no-underline hover:text-black"
-                      style={{ textDecoration: "none" }}
+                      style={{ textDecoration: 'none' }}
                       onClick={(e) => {
-                        e.preventDefault();
-                        setPage(n);
+                        e.preventDefault()
+                        setPage(n)
                       }}
                     >
                       {n}
@@ -1866,10 +1925,10 @@ function EventCardsPanel() {
                   <PaginationNext
                     href="#"
                     className="text-black no-underline hover:no-underline hover:text-black"
-                    style={{ textDecoration: "none" }}
+                    style={{ textDecoration: 'none' }}
                     onClick={(e) => {
-                      e.preventDefault();
-                      setPage((p) => Math.min(totalPages, p + 1));
+                      e.preventDefault()
+                      setPage((p) => Math.min(totalPages, p + 1))
                     }}
                   />
                 </PaginationItem>
@@ -1879,16 +1938,16 @@ function EventCardsPanel() {
         </div>
       </div>
     </div>
-  );
+  )
 }
 function TabButton({
   active,
   onClick,
   children,
 }: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
+  active: boolean
+  onClick: () => void
+  children: React.ReactNode
 }) {
   return (
     <div
@@ -1896,11 +1955,11 @@ function TabButton({
       className={`px-4 py-2 rounded-full cursor-pointer border font-semibold transition
         ${
           active
-            ? "bg-litratoblack text-white border-litratoblack"
-            : "bg-white text-litratoblack border-gray-300 hover:bg-gray-100"
+            ? 'bg-litratoblack text-white border-litratoblack'
+            : 'bg-white text-litratoblack border-gray-300 hover:bg-gray-100'
         }`}
     >
       {children}
     </div>
-  );
+  )
 }
