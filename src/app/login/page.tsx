@@ -41,11 +41,11 @@ export default function LoginPage() {
         }
 
         // Either use data.role (if backend sends it) OR decode from token
-        let role = data.role
+        let role: string | undefined = data.role
         if (!role) {
           try {
-            const decoded: any = jwtDecode(token)
-            role = decoded.role
+            const decoded = jwtDecode<{ role?: string }>(token)
+            role = decoded?.role
           } catch {
             toast.error('Invalid token received.')
             return
@@ -74,7 +74,7 @@ export default function LoginPage() {
         } catch {}
         toast.error(message)
       }
-    } catch (e) {
+    } catch {
       toast.error('Unable to connect to server. Please try again later.')
     }
   }
@@ -203,7 +203,7 @@ export default function LoginPage() {
           LOGIN
         </div>
         <div>
-          Don't have an account?{' '}
+          Don&apos;t have an account?{' '}
           <a
             href="/registration"
             style={{ textDecoration: 'none' }}

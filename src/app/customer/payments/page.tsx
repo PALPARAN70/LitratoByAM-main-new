@@ -1,34 +1,45 @@
 'use client'
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 
 export default function CustomerPaymentsIndex() {
-  const [payments, setPayments] = useState<any[]>([])
+  interface PaymentRow {
+    payment_id: string
+    booking_id: string
+    amount_paid: number
+    payment_status: string
+  }
+
+  const [payments, setPayments] = useState<PaymentRow[]>([])
   const [loading, setLoading] = useState(false)
   const API_ORIGIN =
     process.env.NEXT_PUBLIC_API_ORIGIN ?? 'http://localhost:5000'
   const API_BASE = `${API_ORIGIN}/api`
 
-  const getCookie = (name: string) =>
-    typeof document === 'undefined'
-      ? ''
-      : document.cookie
-          .split('; ')
-          .find((r) => r.startsWith(name + '='))
-          ?.split('=')[1] || ''
-  const getAuthHeaderString = () => {
+  const getCookie = useCallback((name: string) => {
+    if (typeof document === 'undefined') return ''
+    return (
+      document.cookie
+        .split('; ')
+        .find((r) => r.startsWith(name + '='))
+        ?.split('=')[1] || ''
+    )
+  }, [])
+
+  const getAuthHeaderString = useCallback(() => {
     const raw =
       (typeof window !== 'undefined' && localStorage.getItem('access_token')) ||
       getCookie('access_token')
     if (!raw) return ''
     return raw.startsWith('Bearer ') ? raw : `Bearer ${raw}`
-  }
-  const getAuthHeadersInit = (): HeadersInit => {
+  }, [getCookie])
+
+  const getAuthHeadersInit = useCallback((): HeadersInit => {
     const auth = getAuthHeaderString()
     const h: Record<string, string> = {}
     if (auth) h['Authorization'] = auth
     return h
-  }
+  }, [getAuthHeaderString])
 
   useEffect(() => {
     ;(async () => {
@@ -41,8 +52,25 @@ export default function CustomerPaymentsIndex() {
           },
         })
         if (res.ok) {
-          const data = await res.json()
-          setPayments(data.payments || [])
+          const data: unknown = await res.json()
+          const list: unknown[] =
+            data &&
+            typeof data === 'object' &&
+            Array.isArray((data as Record<string, unknown>).payments)
+              ? ((data as Record<string, unknown>).payments as unknown[])
+              : []
+          const rows: PaymentRow[] = list.map((it: unknown) => {
+            const r =
+              it && typeof it === 'object'
+                ? (it as Record<string, unknown>)
+                : {}
+            const payment_id = String(r.payment_id ?? '')
+            const booking_id = String(r.booking_id ?? '')
+            const amount_paid = Number(r.amount_paid ?? 0)
+            const payment_status = String(r.payment_status ?? '')
+            return { payment_id, booking_id, amount_paid, payment_status }
+          })
+          setPayments(rows)
         }
       } catch (e) {
         console.error('Load my payments failed:', e)
@@ -50,7 +78,7 @@ export default function CustomerPaymentsIndex() {
         setLoading(false)
       }
     })()
-  }, [])
+  }, [API_BASE, getAuthHeadersInit])
 
   return (
     <div className="max-w-3xl mx-auto p-4 space-y-4">
@@ -82,7 +110,7 @@ export default function CustomerPaymentsIndex() {
                   <td className="px-3 py-2">{p.payment_id}</td>
                   <td className="px-3 py-2">{p.booking_id}</td>
                   <td className="px-3 py-2">
-                    {Number(p.amount_paid || 0).toFixed(2)}
+                    {Number(p.amount_paid ?? 0).toFixed(2)}
                   </td>
                   <td className="px-3 py-2 capitalize">{p.payment_status}</td>
                   <td className="px-3 py-2">

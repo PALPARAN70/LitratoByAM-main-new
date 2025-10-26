@@ -1,124 +1,105 @@
-"use client";
-import Image from "next/image";
-import PromoCard from "../../../../Litratocomponents/Service_Card";
-import Calendar from "../../../../Litratocomponents/LitratoCalendar";
-import Timepicker from "../../../../Litratocomponents/Timepicker";
-import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
-import { toast } from "sonner";
+'use client'
+import Image from 'next/image'
+import PromoCard from '../../../../Litratocomponents/Service_Card'
+import Calendar from '../../../../Litratocomponents/LitratoCalendar'
+import Timepicker from '../../../../Litratocomponents/Timepicker'
+import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
+import { toast } from 'sonner'
 import loadGridsPublic, {
   type PublicGrid,
-} from "../../../../schemas/functions/BookingRequest/loadGridsPublic";
-import MotionDiv from "../../../../Litratocomponents/MotionDiv";
+} from '../../../../schemas/functions/BookingRequest/loadGridsPublic'
+import MotionDiv from '../../../../Litratocomponents/MotionDiv'
 import {
   bookingFormSchema,
   type BookingForm,
-} from "../../../../schemas/schema/requestvalidation";
+} from '../../../../schemas/schema/requestvalidation'
 import {
   loadPackages,
   type PackageDto,
-} from "../../../../schemas/functions/BookingRequest/loadPackages";
+} from '../../../../schemas/functions/BookingRequest/loadPackages'
 import {
   adminCreateAndConfirm,
   type AdminCreateConfirmPayload,
-} from "../../../../schemas/functions/BookingRequest/adminCreateAndConfirm";
-import { submitAdminUpdate } from "../../../../schemas/functions/BookingRequest/adminupdateBooking";
+} from '../../../../schemas/functions/BookingRequest/adminCreateAndConfirm'
+import { submitAdminUpdate } from '../../../../schemas/functions/BookingRequest/adminupdateBooking'
 const API_BASE =
-  (process.env.NEXT_PUBLIC_API_BASE?.replace(/\/$/, "") ||
-    "http://localhost:5000") + "/api/auth/getProfile";
+  (process.env.NEXT_PUBLIC_API_BASE?.replace(/\/$/, '') ||
+    'http://localhost:5000') + '/api/auth/getProfile'
 
 export default function BookingPage() {
-  const router = useRouter();
-  const [isEditable, setIsEditable] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-  const [showConfirmUpdate, setShowConfirmUpdate] = useState(false);
+  const router = useRouter()
+  const [submitting, setSubmitting] = useState(false)
+  const [showConfirmUpdate, setShowConfirmUpdate] = useState(false)
   const [personalForm, setPersonalForm] = useState({
-    Firstname: "",
-    Lastname: "",
-  });
-
-  const [profile, setProfile] = useState<{
-    username: string;
-    email: string;
-    role: string;
-    url?: string;
-    firstname?: string;
-    lastname?: string;
-  } | null>(null);
+    Firstname: '',
+    Lastname: '',
+  })
 
   // Controlled booking form state + errors (aligned with customer page)
   const initialForm: BookingForm = {
-    email: "",
-    completeName: "",
-    contactNumber: "",
+    email: '',
+    completeName: '',
+    contactNumber: '',
     // Split contact person fields (UI uses these); keep legacy combined for fallback/compat
-    contactPersonName: "",
-    contactPersonNumber: "",
-    contactPersonAndNumber: "",
-    eventName: "",
-    eventLocation: "",
+    contactPersonName: '',
+    contactPersonNumber: '',
+    contactPersonAndNumber: '',
+    eventName: '',
+    eventLocation: '',
     extensionHours: 0,
-    boothPlacement: "Indoor",
-    signal: "",
+    boothPlacement: 'Indoor',
+    signal: '',
     // Will be overwritten by first visible package if available
-    package: "The Hanz" as BookingForm["package"],
+    package: 'The Hanz' as BookingForm['package'],
     selectedGrids: [],
     eventDate: new Date(),
-    eventTime: "12:00",
-    eventEndTime: "14:00",
-  };
-  const [form, setForm] = useState<BookingForm>(initialForm);
+    eventTime: '12:00',
+    eventEndTime: '14:00',
+  }
+  const [form, setForm] = useState<BookingForm>(initialForm)
   const [errors, setErrors] = useState<
     Partial<Record<keyof BookingForm, string>>
-  >({});
+  >({})
 
   // Packages (dynamic from DB)
-  const [packages, setPackages] = useState<PackageDto[]>([]);
-  const [grids, setGrids] = useState<PublicGrid[]>([]);
+  const [packages, setPackages] = useState<PackageDto[]>([])
+  const [grids, setGrids] = useState<PublicGrid[]>([])
   const [selectedPackageId, setSelectedPackageId] = useState<number | null>(
     null
-  );
-  const [prefillPkgName, setPrefillPkgName] = useState<string | null>(null);
-  const [timepickerReady, setTimepickerReady] = useState(false);
-  const [editingRequestId, setEditingRequestId] = useState<number | null>(null);
+  )
+  const [prefillPkgName, setPrefillPkgName] = useState<string | null>(null)
+  const [timepickerReady, setTimepickerReady] = useState(false)
+  const [editingRequestId, setEditingRequestId] = useState<number | null>(null)
   // Read-only locks for fields populated from a user record (name & contact only)
   const [locks, setLocks] = useState({
     name: false,
     contact: false,
-  });
+  })
 
-  // BookingForm['package'] is a union; guard before setting from DB names
-  type PkgName = BookingForm["package"];
-  const KNOWN_PKG_NAMES: readonly PkgName[] = [
-    "The Hanz",
-    "The Corrupt",
-    "The AI",
-    "The OG",
-  ] as const;
-  const isPkgName = (v: string): v is PkgName =>
-    (KNOWN_PKG_NAMES as readonly string[]).includes(v);
+  // BookingForm['package'] handled via API-provided names
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    if (typeof window === 'undefined') return
     // Apply prefilled values when redirected from ManageBooking (Edit action)
     try {
-      const raw = sessionStorage.getItem("edit_booking_prefill");
+      const raw = sessionStorage.getItem('edit_booking_prefill')
       if (raw) {
-        const data = JSON.parse(raw);
-        sessionStorage.removeItem("edit_booking_prefill");
-        setIsEditable(true);
+        const data = JSON.parse(raw)
+        sessionStorage.removeItem('edit_booking_prefill')
+        // editing mode
         // Capture request id to enable update flow instead of create
-        if (typeof data.__requestid === "number" && data.__requestid > 0) {
-          setEditingRequestId(data.__requestid);
+        if (typeof data.__requestid === 'number' && data.__requestid > 0) {
+          setEditingRequestId(data.__requestid)
         } else if (
-          typeof data.__requestid === "string" &&
+          typeof data.__requestid === 'string' &&
           !Number.isNaN(Number(data.__requestid))
         ) {
-          setEditingRequestId(Number(data.__requestid));
+          setEditingRequestId(Number(data.__requestid))
         }
         setPrefillPkgName(
-          typeof data.package === "string" ? data.package : null
-        );
+          typeof data.package === 'string' ? data.package : null
+        )
         setForm((prev) => ({
           ...prev,
           email: data.email ?? prev.email,
@@ -128,256 +109,254 @@ export default function BookingPage() {
             data.contactPersonAndNumber ?? prev.contactPersonAndNumber,
           // If combined field comes as "Name | Number", attempt to split to new fields
           contactPersonName:
-            typeof data.contactPersonAndNumber === "string" &&
-            data.contactPersonAndNumber.includes("|")
-              ? data.contactPersonAndNumber.split("|")[0].trim()
+            typeof data.contactPersonAndNumber === 'string' &&
+            data.contactPersonAndNumber.includes('|')
+              ? data.contactPersonAndNumber.split('|')[0].trim()
               : prev.contactPersonName,
           contactPersonNumber:
-            typeof data.contactPersonAndNumber === "string" &&
-            data.contactPersonAndNumber.includes("|")
-              ? data.contactPersonAndNumber.split("|")[1]?.trim() ||
+            typeof data.contactPersonAndNumber === 'string' &&
+            data.contactPersonAndNumber.includes('|')
+              ? data.contactPersonAndNumber.split('|')[1]?.trim() ||
                 prev.contactPersonNumber
               : prev.contactPersonNumber,
           eventName: data.eventName ?? prev.eventName,
           eventLocation: data.eventLocation ?? prev.eventLocation,
           extensionHours:
-            typeof data.extensionHours === "number"
+            typeof data.extensionHours === 'number'
               ? data.extensionHours
               : prev.extensionHours,
           boothPlacement: data.boothPlacement ?? prev.boothPlacement,
           signal: data.signal ?? prev.signal,
-          package: (data.package as BookingForm["package"]) ?? prev.package,
+          package: (data.package as BookingForm['package']) ?? prev.package,
           selectedGrids: Array.isArray(data.selectedGrids)
             ? data.selectedGrids
             : prev.selectedGrids,
           eventDate: data.eventDate ? new Date(data.eventDate) : prev.eventDate,
           eventTime: data.eventTime ?? prev.eventTime,
           eventEndTime: data.eventEndTime ?? prev.eventEndTime,
-        }));
+        }))
       }
     } catch {}
 
-    const token = localStorage.getItem("access_token");
+    const token = localStorage.getItem('access_token')
     if (!token) {
-      router.replace("/login");
-      return;
+      router.replace('/login')
+      return
     }
-    const ac = new AbortController();
+    const ac = new AbortController()
 
-    (async () => {
+    ;(async () => {
       try {
         const res = await fetch(`${API_BASE}`, {
-          method: "GET",
+          method: 'GET',
           headers: {
-            "Content-Type": "application/json",
+            'Content-Type': 'application/json',
             Authorization: `Bearer ${token}`,
           },
           signal: ac.signal,
-        });
+        })
 
         if (res.status === 401) {
           try {
-            localStorage.removeItem("access_token");
+            localStorage.removeItem('access_token')
           } catch {}
-          router.replace("/login");
-          return;
+          router.replace('/login')
+          return
         }
-        if (!res.ok) throw new Error("Failed to fetch profile");
+        if (!res.ok) throw new Error('Failed to fetch profile')
 
-        const data = await res.json();
-        setProfile(data);
+        const data = await res.json()
         setPersonalForm({
-          Firstname: data.firstname || "",
-          Lastname: data.lastname || "",
-        });
+          Firstname: data.firstname || '',
+          Lastname: data.lastname || '',
+        })
         // Do not prefill form fields from profile on admin create.
-      } catch (err: any) {
-        if (err?.name === "AbortError") return;
-        toast.error("Error fetching profile");
+      } catch (err) {
+        if (err instanceof Error && err.name === 'AbortError') return
+        toast.error('Error fetching profile')
       }
-    })();
+    })()
 
-    return () => ac.abort();
-  }, [router]);
+    return () => ac.abort()
+  }, [router])
 
   // Load packages visible to admin (display=true via API)
   useEffect(() => {
-    (async () => {
+    ;(async () => {
       try {
-        const list = await loadPackages();
-        const visible = Array.isArray(list)
-          ? list.filter((p) => p.display)
-          : [];
-        setPackages(visible);
+        const list = await loadPackages()
+        const visible = Array.isArray(list) ? list.filter((p) => p.display) : []
+        setPackages(visible)
         if (!selectedPackageId) {
           // If we came from Edit, try to resolve package by name
-          const chosen = visible.find((p) => p.package_name === prefillPkgName);
+          const chosen = visible.find((p) => p.package_name === prefillPkgName)
           if (chosen) {
-            setSelectedPackageId(chosen.id);
+            setSelectedPackageId(chosen.id)
             setForm((p) => ({
               ...p,
-              package: chosen.package_name as BookingForm["package"],
-            }));
+              package: chosen.package_name as BookingForm['package'],
+            }))
           } else if (visible.length) {
             // Default to first visible package
-            const first = visible[0];
-            setSelectedPackageId(first.id);
+            const first = visible[0]
+            setSelectedPackageId(first.id)
             setForm((p) => ({
               ...p,
-              package: first.package_name as BookingForm["package"],
-            }));
+              package: first.package_name as BookingForm['package'],
+            }))
           }
         }
-      } catch (e) {
+      } catch {
         // Optional: show a toast, but avoid spamming admin
         // toast.error('Failed to load packages');
       }
-    })();
+    })()
     // Load available grids
-    (async () => {
+    ;(async () => {
       try {
-        const g = await loadGridsPublic();
-        setGrids(g);
+        const g = await loadGridsPublic()
+        setGrids(g)
         try {
           localStorage.setItem(
-            "public_grids_cache",
+            'public_grids_cache',
             JSON.stringify(g.map(({ id, grid_name }) => ({ id, grid_name })))
-          );
+          )
         } catch {}
       } catch {}
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedPackageId, prefillPkgName]);
+    })()
+  }, [selectedPackageId, prefillPkgName])
 
   // Timepicker readiness after mount (to avoid setState in render warnings)
   useEffect(() => {
-    setTimepickerReady(true);
-  }, []);
+    setTimepickerReady(true)
+  }, [])
 
   // Helpers
   const setField = <K extends keyof BookingForm>(
     key: K,
     value: BookingForm[K]
   ) => {
-    setForm((prev) => ({ ...prev, [key]: value }));
+    setForm((prev) => ({ ...prev, [key]: value }))
     if (
       [
-        "email",
-        "contactNumber",
-        "contactPersonName",
-        "contactPersonNumber",
-        "eventTime",
-        "eventEndTime",
-        "extensionHours",
+        'email',
+        'contactNumber',
+        'contactPersonName',
+        'contactPersonNumber',
+        'eventTime',
+        'eventEndTime',
+        'extensionHours',
       ].includes(key as string)
     ) {
-      const parsed = bookingFormSchema.safeParse({ ...form, [key]: value });
+      const parsed = bookingFormSchema.safeParse({ ...form, [key]: value })
       const fieldIssues = parsed.success
         ? []
-        : parsed.error.issues.filter((i) => i.path[0] === key);
-      setErrors((e) => ({ ...e, [key]: fieldIssues[0]?.message }));
+        : parsed.error.issues.filter((i) => i.path[0] === key)
+      setErrors((e) => ({ ...e, [key]: fieldIssues[0]?.message }))
     }
-  };
+  }
 
   // Helper: derive a readable name from an email local-part (e.g., john.doe -> John Doe)
   const deriveNameFromEmail = (email: string) => {
     try {
-      const local = (email || "").split("@")[0] || "";
-      if (!local) return "";
+      const local = (email || '').split('@')[0] || ''
+      if (!local) return ''
       const parts = local
-        .replace(/[._-]+/g, " ")
-        .split(" ")
-        .filter(Boolean);
-      const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
-      return parts.map(cap).join(" ").trim();
+        .replace(/[._-]+/g, ' ')
+        .split(' ')
+        .filter(Boolean)
+      const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
+      return parts.map(cap).join(' ').trim()
     } catch {
-      return "";
+      return ''
     }
-  };
+  }
 
   // Auto-fill Complete name based on email (admin helper)
   const handleEmailBlur = async (email: string) => {
     try {
-      const trimmed = (email || "").trim();
-      if (!trimmed) return;
+      const trimmed = (email || '').trim()
+      if (!trimmed) return
       // Do not override if name already present
-      if (form.completeName) return;
+      if (form.completeName) return
       // If editing existing booking, avoid unexpected overrides
-      if (editingRequestId) return;
+      if (editingRequestId) return
       const token =
-        typeof window !== "undefined"
-          ? localStorage.getItem("access_token")
-          : null;
-      if (!token) return;
+        typeof window !== 'undefined'
+          ? localStorage.getItem('access_token')
+          : null
+      if (!token) return
       const base =
-        process.env.NEXT_PUBLIC_API_BASE?.replace(/\/$/, "") ||
-        "http://localhost:5000";
+        process.env.NEXT_PUBLIC_API_BASE?.replace(/\/$/, '') ||
+        'http://localhost:5000'
       const url = `${base}/api/admin/user/by-email?email=${encodeURIComponent(
         trimmed
-      )}`;
+      )}`
       const res = await fetch(url, {
         headers: {
-          "Content-Type": "application/json",
+          'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-      });
+      })
       if (res.ok) {
-        const data = await res.json().catch(() => ({} as any));
-        const u = (data as any)?.user;
+        const data = (await res.json().catch(() => ({}))) as {
+          user?: { firstname?: string; lastname?: string; contact?: string }
+        }
+        const u = data.user
         if (u) {
-          const full = `${u.firstname || ""} ${u.lastname || ""}`.trim();
-          const nameToUse = full || deriveNameFromEmail(trimmed);
+          const full = `${u.firstname || ''} ${u.lastname || ''}`.trim()
+          const nameToUse = full || deriveNameFromEmail(trimmed)
           if (nameToUse) {
-            setField("completeName", nameToUse as any);
+            setField('completeName', nameToUse)
           }
           if (!form.contactNumber && u.contact) {
-            setField("contactNumber", u.contact as any);
+            setField('contactNumber', u.contact)
           }
           // Lock only what we actually set
           setLocks({
             name: Boolean(nameToUse),
             contact: Boolean(u.contact),
-          });
-          return;
+          })
+          return
         }
       }
       // Fallback: even if no user, try to derive a name for convenience (no lock on contact)
-      const guess = deriveNameFromEmail(trimmed);
+      const guess = deriveNameFromEmail(trimmed)
       if (guess) {
-        setField("completeName", guess as any);
-        setLocks((prev) => ({ ...prev, name: true }));
+        setField('completeName', guess)
+        setLocks((prev) => ({ ...prev, name: true }))
       }
     } catch {}
-  };
+  }
 
   // Core submit routine used by both create and update
   const performSubmit = async () => {
-    setSubmitting(true);
+    setSubmitting(true)
     try {
       // Resolve package id from selection or by name
       const pkgId =
         selectedPackageId ??
         packages.find((p) => p.package_name === form.package)?.id ??
-        null;
-      if (!pkgId) throw new Error("Please select a package");
+        null
+      if (!pkgId) throw new Error('Please select a package')
 
       const fmtDate = (d: Date) => {
-        const dd = new Date(d);
-        const y = dd.getFullYear();
-        const m = String(dd.getMonth() + 1).padStart(2, "0");
-        const day = String(dd.getDate()).padStart(2, "0");
-        return `${y}-${m}-${day}`;
-      };
-      const toTimeWithSeconds = (t: string) => (t.length === 5 ? `${t}:00` : t);
+        const dd = new Date(d)
+        const y = dd.getFullYear()
+        const m = String(dd.getMonth() + 1).padStart(2, '0')
+        const day = String(dd.getDate()).padStart(2, '0')
+        return `${y}-${m}-${day}`
+      }
+      const toTimeWithSeconds = (t: string) => (t.length === 5 ? `${t}:00` : t)
 
       if (editingRequestId) {
         await submitAdminUpdate({
           requestid: editingRequestId,
           form,
           selectedPackageId: pkgId,
-        });
-        toast.success("Booking updated.");
-        router.push("/admin/ManageBooking");
+        })
+        toast.success('Booking updated.')
+        router.push('/admin/ManageBooking')
       } else {
         const payload: AdminCreateConfirmPayload = {
           email: form.email || undefined,
@@ -386,85 +365,76 @@ export default function BookingPage() {
           event_time: toTimeWithSeconds(form.eventTime),
           event_end_time: toTimeWithSeconds(form.eventEndTime),
           extension_duration:
-            typeof form.extensionHours === "number"
+            typeof form.extensionHours === 'number'
               ? form.extensionHours
               : Number(form.extensionHours) || 0,
           event_address: form.eventLocation,
           grid:
             Array.isArray(form.selectedGrids) && form.selectedGrids.length
-              ? form.selectedGrids.join(",")
+              ? form.selectedGrids.join(',')
               : null,
           contact_info: form.contactNumber || null,
           contact_person:
             form.contactPersonName?.trim() ||
-            (form.contactPersonAndNumber?.includes("|")
-              ? form.contactPersonAndNumber.split("|")[0].trim()
+            (form.contactPersonAndNumber?.includes('|')
+              ? form.contactPersonAndNumber.split('|')[0].trim()
               : null),
           contact_person_number:
             form.contactPersonNumber?.trim() ||
-            (form.contactPersonAndNumber?.includes("|")
-              ? form.contactPersonAndNumber.split("|")[1]?.trim() || null
+            (form.contactPersonAndNumber?.includes('|')
+              ? form.contactPersonAndNumber.split('|')[1]?.trim() || null
               : null),
           notes: null,
           event_name: form.eventName || null,
           strongest_signal: form.signal || null,
-        };
+        }
 
-        await adminCreateAndConfirm(payload);
-        toast.success("Booking created and confirmed.");
+        await adminCreateAndConfirm(payload)
+        toast.success('Booking created and confirmed.')
         // Redirect after creating
-        router.push("/admin/ManageBooking");
+        router.push('/admin/ManageBooking')
       }
-    } catch (e: any) {
-      toast.error(e?.message || "Failed to create booking");
+    } catch (e) {
+      const message =
+        e instanceof Error ? e.message : 'Failed to create booking'
+      toast.error(message)
     } finally {
-      setSubmitting(false);
-      setShowConfirmUpdate(false);
+      setSubmitting(false)
+      setShowConfirmUpdate(false)
     }
-  };
+  }
 
   const handleSubmit = () => {
-    if (submitting) return;
-    setErrors({});
-    const result = bookingFormSchema.safeParse(form);
+    if (submitting) return
+    setErrors({})
+    const result = bookingFormSchema.safeParse(form)
     if (!result.success) {
-      const fieldErrors: Partial<Record<keyof BookingForm, string>> = {};
+      const fieldErrors: Partial<Record<keyof BookingForm, string>> = {}
       for (const issue of result.error.issues) {
-        const key = issue.path[0] as keyof BookingForm;
-        if (!fieldErrors[key]) fieldErrors[key] = issue.message;
+        const key = issue.path[0] as keyof BookingForm
+        if (!fieldErrors[key]) fieldErrors[key] = issue.message
       }
-      setErrors(fieldErrors);
-      toast.error("Please fill in all required fields.");
-      return;
+      setErrors(fieldErrors)
+      toast.error('Please fill in all required fields.')
+      return
     }
     // If editing, confirm before proceeding
     if (editingRequestId) {
-      setShowConfirmUpdate(true);
-      return;
+      setShowConfirmUpdate(true)
+      return
     }
-    void performSubmit();
-  };
+    void performSubmit()
+  }
 
   const handleClear = () => {
-    setForm(initialForm);
-    setSelectedPackageId(null);
-    setPrefillPkgName(null);
-    setErrors({});
-    toast.message("Form cleared.");
-  };
+    setForm(initialForm)
+    setSelectedPackageId(null)
+    setPrefillPkgName(null)
+    setErrors({})
+    toast.message('Form cleared.')
+  }
 
-  const formFields = [
-    "Email:",
-    "Facebook:",
-    "Complete name:",
-    "Contact #:",
-    "Contact Person & Number:",
-    "Name of event (Ex. Maria & Jose Wedding):",
-    "Location of event:",
-    "Extension? (Our Minimum is 2hrs. Additional hour is Php2000):",
-    "Placement of booth (Indoor/Outdoor):",
-    "What signal is currently strong in the event area?:",
-  ];
+  // formFields were unused and removed to satisfy lint rules
 
   return (
     <MotionDiv>
@@ -472,7 +442,7 @@ export default function BookingPage() {
         <div className="w-full">
           <div className="relative h-[160px]">
             <Image
-              src={"/Images/litratobg.jpg"}
+              src={'/Images/litratobg.jpg'}
               alt="Booking Header"
               fill
               className="object-cover rounded-b-lg"
@@ -498,13 +468,13 @@ export default function BookingPage() {
               value={form.email}
               onChange={(e) => {
                 // If email changes, unlock any previously locked fields
-                setLocks({ name: false, contact: false });
-                setField("email", e.target.value);
+                setLocks({ name: false, contact: false })
+                setField('email', e.target.value)
               }}
               onBlur={(e) => {
-                const v = e.target.value;
-                setField("email", v);
-                void handleEmailBlur(v);
+                const v = e.target.value
+                setField('email', v)
+                void handleEmailBlur(v)
               }}
             />
             {errors.email && (
@@ -519,10 +489,10 @@ export default function BookingPage() {
               type="text"
               placeholder="Enter here:"
               className={`w-full rounded-md px-3 py-2 text-sm focus:outline-none ${
-                locks.name ? "bg-gray-100 cursor-not-allowed" : "bg-gray-200"
+                locks.name ? 'bg-gray-100 cursor-not-allowed' : 'bg-gray-200'
               }`}
               value={form.completeName}
-              onChange={(e) => setField("completeName", e.target.value)}
+              onChange={(e) => setField('completeName', e.target.value)}
               readOnly={locks.name}
               aria-readonly={locks.name}
               title={locks.name ? "Auto-filled from user's profile" : undefined}
@@ -539,11 +509,11 @@ export default function BookingPage() {
               type="tel"
               placeholder="e.g. +639171234567"
               className={`w-full rounded-md px-3 py-2 text-sm focus:outline-none ${
-                locks.contact ? "bg-gray-100 cursor-not-allowed" : "bg-gray-200"
+                locks.contact ? 'bg-gray-100 cursor-not-allowed' : 'bg-gray-200'
               }`}
               value={form.contactNumber}
-              onChange={(e) => setField("contactNumber", e.target.value)}
-              onBlur={(e) => setField("contactNumber", e.target.value)}
+              onChange={(e) => setField('contactNumber', e.target.value)}
+              onBlur={(e) => setField('contactNumber', e.target.value)}
               readOnly={locks.contact}
               aria-readonly={locks.contact}
               title={
@@ -565,10 +535,8 @@ export default function BookingPage() {
                 type="text"
                 placeholder="Enter here:"
                 className="w-full bg-gray-200 rounded-md px-3 py-2 text-sm focus:outline-none"
-                value={form.contactPersonName || ""}
-                onChange={(e) =>
-                  setField("contactPersonName", e.target.value as any)
-                }
+                value={form.contactPersonName || ''}
+                onChange={(e) => setField('contactPersonName', e.target.value)}
               />
               {errors.contactPersonName && (
                 <p className="text-red-600 text-sm mt-1">
@@ -584,13 +552,11 @@ export default function BookingPage() {
                 type="tel"
                 placeholder="e.g. +639171234567"
                 className="w-full bg-gray-200 rounded-md px-3 py-2 text-sm focus:outline-none"
-                value={form.contactPersonNumber || ""}
+                value={form.contactPersonNumber || ''}
                 onChange={(e) =>
-                  setField("contactPersonNumber", e.target.value as any)
+                  setField('contactPersonNumber', e.target.value)
                 }
-                onBlur={(e) =>
-                  setField("contactPersonNumber", e.target.value as any)
-                }
+                onBlur={(e) => setField('contactPersonNumber', e.target.value)}
               />
               {errors.contactPersonNumber && (
                 <p className="text-red-600 text-sm mt-1">
@@ -610,7 +576,7 @@ export default function BookingPage() {
               placeholder="Enter here:"
               className="w-full bg-gray-200 rounded-md px-3 py-2 text-sm focus:outline-none"
               value={form.eventName}
-              onChange={(e) => setField("eventName", e.target.value)}
+              onChange={(e) => setField('eventName', e.target.value)}
             />
             {errors.eventName && (
               <p className="text-red-600 text-sm mt-1">{errors.eventName}</p>
@@ -625,7 +591,7 @@ export default function BookingPage() {
               placeholder="Enter here:"
               className="w-full bg-gray-200 rounded-md px-3 py-2 text-sm focus:outline-none"
               value={form.eventLocation}
-              onChange={(e) => setField("eventLocation", e.target.value)}
+              onChange={(e) => setField('eventLocation', e.target.value)}
             />
             {errors.eventLocation && (
               <p className="text-red-600 text-sm mt-1">
@@ -643,7 +609,7 @@ export default function BookingPage() {
               className="w-full bg-gray-200 rounded-md px-3 py-2 text-sm focus:outline-none"
               value={String(form.extensionHours)}
               onChange={(e) =>
-                setField("extensionHours", Number(e.target.value))
+                setField('extensionHours', Number(e.target.value))
               }
             >
               <option value="0">0</option>
@@ -665,8 +631,8 @@ export default function BookingPage() {
                 <input
                   type="radio"
                   name="boothPlacement"
-                  checked={form.boothPlacement === "Indoor"}
-                  onChange={() => setField("boothPlacement", "Indoor")}
+                  checked={form.boothPlacement === 'Indoor'}
+                  onChange={() => setField('boothPlacement', 'Indoor')}
                 />
                 Indoor
               </label>
@@ -674,8 +640,8 @@ export default function BookingPage() {
                 <input
                   type="radio"
                   name="boothPlacement"
-                  checked={form.boothPlacement === "Outdoor"}
-                  onChange={() => setField("boothPlacement", "Outdoor")}
+                  checked={form.boothPlacement === 'Outdoor'}
+                  onChange={() => setField('boothPlacement', 'Outdoor')}
                 />
                 Outdoor
               </label>
@@ -697,7 +663,7 @@ export default function BookingPage() {
               placeholder="Enter here:"
               className="w-full bg-gray-200 rounded-md px-3 py-2 text-sm focus:outline-none"
               value={form.signal}
-              onChange={(e) => setField("signal", e.target.value)}
+              onChange={(e) => setField('signal', e.target.value)}
             />
             {errors.signal && (
               <p className="text-red-600 text-sm mt-1">{errors.signal}</p>
@@ -714,17 +680,17 @@ export default function BookingPage() {
               {packages.map((pkg) => (
                 <PromoCard
                   key={pkg.id}
-                  imageSrc={pkg.image_url || "/Images/litratobg.jpg"}
+                  imageSrc={pkg.image_url || '/Images/litratobg.jpg'}
                   title={pkg.package_name}
                   price={`₱${Number(pkg.price).toLocaleString()}`}
-                  descriptions={[pkg.description || "Package"]}
+                  descriptions={[pkg.description || 'Package']}
                   selected={selectedPackageId === pkg.id}
                   onSelect={() => {
-                    setSelectedPackageId(pkg.id);
+                    setSelectedPackageId(pkg.id)
                     setField(
-                      "package",
-                      pkg.package_name as BookingForm["package"]
-                    );
+                      'package',
+                      pkg.package_name as BookingForm['package']
+                    )
                   }}
                 />
               ))}
@@ -748,9 +714,9 @@ export default function BookingPage() {
                 </span>
               ) : (
                 grids.map((g) => {
-                  const picked = form.selectedGrids.includes(g.grid_name);
-                  const atLimit = form.selectedGrids.length >= 2 && !picked;
-                  const imgSrc = g.image_url || "/Images/litratobg.jpg";
+                  const picked = form.selectedGrids.includes(g.grid_name)
+                  const atLimit = form.selectedGrids.length >= 2 && !picked
+                  const imgSrc = g.image_url || '/Images/litratobg.jpg'
                   return (
                     <button
                       key={g.id}
@@ -759,18 +725,18 @@ export default function BookingPage() {
                       aria-pressed={picked}
                       className={`group w-[270px] overflow-hidden rounded-xl border shadow-sm transition focus:outline-none ${
                         picked
-                          ? "border-2 border-red-500 ring-2 ring-red-500 ring-offset-2 ring-offset-white"
-                          : "border-gray-200 focus-visible:ring-2 focus-visible:ring-litratored"
+                          ? 'border-2 border-red-500 ring-2 ring-red-500 ring-offset-2 ring-offset-white'
+                          : 'border-gray-200 focus-visible:ring-2 focus-visible:ring-litratored'
                       } ${
                         atLimit
-                          ? "opacity-60 cursor-not-allowed"
-                          : "hover:shadow-md"
+                          ? 'opacity-60 cursor-not-allowed'
+                          : 'hover:shadow-md'
                       }`}
                       onClick={() => {
                         const next = picked
                           ? form.selectedGrids.filter((n) => n !== g.grid_name)
-                          : [...form.selectedGrids, g.grid_name];
-                        setField("selectedGrids", next);
+                          : [...form.selectedGrids, g.grid_name]
+                        setField('selectedGrids', next)
                       }}
                     >
                       <div className="relative w-full h-[200px] bg-gray-100">
@@ -790,7 +756,7 @@ export default function BookingPage() {
                         </span>
                       </div>
                     </button>
-                  );
+                  )
                 })
               )}
             </div>
@@ -810,7 +776,7 @@ export default function BookingPage() {
               <div>
                 <Calendar
                   value={form.eventDate}
-                  onDateChangeAction={(d) => setField("eventDate", d as any)}
+                  onDateChangeAction={(d) => setField('eventDate', d as Date)}
                 />
                 {errors.eventDate && (
                   <p className="text-red-600 text-sm mt-1">
@@ -825,8 +791,8 @@ export default function BookingPage() {
                     start={form.eventTime}
                     end={form.eventEndTime}
                     onChange={({ start, end }) => {
-                      setField("eventTime", start);
-                      setField("eventEndTime", end);
+                      setField('eventTime', start)
+                      setField('eventEndTime', end)
                     }}
                   />
                 )}
@@ -862,11 +828,11 @@ export default function BookingPage() {
             >
               {submitting
                 ? editingRequestId
-                  ? "Updating…"
-                  : "Submitting…"
+                  ? 'Updating…'
+                  : 'Submitting…'
                 : editingRequestId
-                ? "Update"
-                : "Submit"}
+                ? 'Update'
+                : 'Submit'}
             </button>
           </div>
           {showConfirmUpdate && (
@@ -907,5 +873,5 @@ export default function BookingPage() {
         </div>
       </div>
     </MotionDiv>
-  );
+  )
 }

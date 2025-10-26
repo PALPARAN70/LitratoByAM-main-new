@@ -92,35 +92,53 @@ export default function DashboardPage() {
           headers: token ? { Authorization: `Bearer ${token}` } : {},
         })
         if (!res.ok) throw new Error(`Failed: ${res.status}`)
-        const data = await res.json()
-        const bookings = Array.isArray(data?.bookings) ? data.bookings : []
+        const data: unknown = await res.json()
+        const bookings: unknown[] =
+          data &&
+          typeof data === 'object' &&
+          Array.isArray((data as Record<string, unknown>).bookings)
+            ? ((data as Record<string, unknown>).bookings as unknown[])
+            : []
         // Only include scheduled, in_progress, completed
         const allowed = new Set(['scheduled', 'in_progress', 'completed'])
         const mapped: StaffEvent[] = bookings
-          .filter((b: any) =>
-            allowed.has(String(b?.booking_status || '').toLowerCase())
-          )
-          .map((b: any) => {
-            const title = b.event_name || b.package_name || 'Event'
-            const date = b.event_date || ''
-            const time = b.event_time || ''
+          .filter((b) => {
+            const r =
+              b && typeof b === 'object' ? (b as Record<string, unknown>) : {}
+            return allowed.has(String(r.booking_status || '').toLowerCase())
+          })
+          .map((b) => {
+            const r =
+              b && typeof b === 'object' ? (b as Record<string, unknown>) : {}
+            const title = (r.event_name || r.package_name || 'Event') as string
+            const date = String(r.event_date || '')
+            const time = String(r.event_time || '')
             const dateTime = [date, time].filter(Boolean).join(' - ')
-            const location = b.event_address || ''
+            const location = String(r.event_address || '')
+            const idRaw = (r.id as unknown) ?? (r.confirmed_id as unknown) ?? ''
+            const id: string | number =
+              typeof idRaw === 'number' || typeof idRaw === 'string'
+                ? idRaw
+                : String(idRaw ?? '')
             return {
-              id: b.id ?? b.confirmed_id ?? '',
+              id,
               title,
               dateTime,
               location,
-              status: mapBookingStatus(b.booking_status),
-              payment: mapPaymentStatus(b.payment_status),
+              status: mapBookingStatus(String(r.booking_status || '')),
+              payment: mapPaymentStatus(String(r.payment_status || '')),
               imageUrl: undefined,
               damagedItems: [],
               missingItems: [],
             }
           })
         if (mounted) setEvents(mapped)
-      } catch (e: any) {
-        if (mounted) setError(e?.message || 'Failed to load events')
+      } catch (e: unknown) {
+        const message =
+          typeof e === 'object' && e !== null && 'message' in e
+            ? String((e as { message?: unknown }).message || '')
+            : ''
+        if (mounted) setError(message || 'Failed to load events')
       } finally {
         if (mounted) setLoading(false)
       }
@@ -129,7 +147,7 @@ export default function DashboardPage() {
     return () => {
       mounted = false
     }
-  }, [])
+  }, [API_BASE])
 
   // REPLACED: standalone status-only filter with 3 filters + search
   const [statusFilter, setStatusFilter] = useState<Status | 'all'>('all')
@@ -188,6 +206,10 @@ export default function DashboardPage() {
           <h1 className="text-2xl sm:text-3xl md:text-4xl font-semibold">
             Hello Staff
           </h1>
+          {loading && (
+            <div className="text-sm text-gray-500">Loading events…</div>
+          )}
+          {error && <div className="text-sm text-red-600">{error}</div>}
           <div className="p-4 bg-white shadow rounded-xl gap-2 flex flex-col">
             {/* NEW: Filters toolbar (replaces status cards) */}
             <div className="flex flex-wrap items-center gap-2">

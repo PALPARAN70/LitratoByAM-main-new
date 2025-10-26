@@ -19,20 +19,12 @@ const API_BASE =
 
 export default function ReschedulingPage() {
   const router = useRouter()
-  const [isEditable, setIsEditable] = useState(false)
+  // Removed unused isEditable state
   const [personalForm, setPersonalForm] = useState({
     Firstname: '',
     Lastname: '',
   })
-
-  const [profile, setProfile] = useState<{
-    username: string
-    email: string
-    role: string
-    url?: string
-    firstname?: string
-    lastname?: string
-  } | null>(null)
+  // Removed unused profile state; we prefill from API response directly
 
   // Controlled booking form state + errors
   const initialForm: BookingForm = {
@@ -85,22 +77,32 @@ export default function ReschedulingPage() {
         }
         if (!res.ok) throw new Error('Failed to fetch profile')
 
-        const data = await res.json()
-        setProfile(data)
+        const data: unknown = await res.json()
+        const obj = (data && typeof data === 'object' ? data : {}) as Record<
+          string,
+          unknown
+        >
         setPersonalForm({
-          Firstname: data.firstname || '',
-          Lastname: data.lastname || '',
+          Firstname: String(obj.firstname ?? ''),
+          Lastname: String(obj.lastname ?? ''),
         })
         // Prefill booking form with user profile
         setForm((prev) => ({
           ...prev,
-          email: data.email || prev.email,
+          email: String(obj.email ?? prev.email ?? ''),
           completeName:
-            `${data.firstname ?? ''} ${data.lastname ?? ''}`.trim() ||
-            prev.completeName,
+            `${String(obj.firstname ?? '')} ${String(
+              obj.lastname ?? ''
+            )}`.trim() || prev.completeName,
         }))
-      } catch (err: any) {
-        if (err?.name === 'AbortError') return
+      } catch (err: unknown) {
+        if (
+          typeof err === 'object' &&
+          err !== null &&
+          'name' in err &&
+          (err as { name?: string }).name === 'AbortError'
+        )
+          return
         toast.error('Error fetching profile')
       }
     })()
@@ -145,6 +147,17 @@ export default function ReschedulingPage() {
       return
     }
     // Add: persist to dashboard table with default status
+    type DashboardRow = {
+      name: string
+      date: string
+      startTime: string
+      endTime: string
+      package: string
+      place: string
+      paymentStatus: string
+      status: 'Approved' | 'Declined' | 'Pending'
+      action: string[]
+    }
     try {
       const row = {
         name: form.eventName,
@@ -156,13 +169,20 @@ export default function ReschedulingPage() {
         paymentStatus: 'Pending',
         status: 'Pending' as 'Approved' | 'Declined' | 'Pending',
         action: ['Cancel', 'Reschedule'] as string[],
-      }
+      } satisfies DashboardRow
       const raw =
         (typeof window !== 'undefined' &&
           localStorage.getItem(DASHBOARD_KEY)) ||
         '[]'
-      const arr = Array.isArray(JSON.parse(raw))
-        ? (JSON.parse(raw) as any[])
+      const parsed = (() => {
+        try {
+          return JSON.parse(raw) as unknown
+        } catch {
+          return [] as unknown
+        }
+      })()
+      const arr: DashboardRow[] = Array.isArray(parsed)
+        ? (parsed as DashboardRow[])
         : []
       arr.unshift(row)
       localStorage.setItem(DASHBOARD_KEY, JSON.stringify(arr))
@@ -177,17 +197,7 @@ export default function ReschedulingPage() {
     toast.message('Form cleared.')
   }
 
-  const formFields = [
-    'Email:',
-    'Complete name:',
-    'Contact #:',
-    'Contact Person & Number:',
-    'Name of event (Ex. Maria & Jose Wedding):',
-    'Location of event:',
-    'Extension? (Our Minimum is 2hrs. Additional hour is Php2000):',
-    'Placement of booth (Indoor/Outdoor):',
-    'What signal is currently strong in the event area?:',
-  ]
+  // Removed unused formFields definition
 
   // Add: dashboard storage key and formatters
   const DASHBOARD_KEY = 'litrato_dashboard_table'
@@ -504,8 +514,10 @@ export default function ReschedulingPage() {
             </p>
             <div>
               <PhotoGrids
-                value={form.selectedGrids}
-                onChange={(arr) => setField('selectedGrids', arr)}
+                value={form.selectedGrids
+                  .map((s) => Number(s))
+                  .filter((n) => !Number.isNaN(n))}
+                onChange={(arr) => setField('selectedGrids', arr.map(String))}
               />
             </div>
             {errors.selectedGrids && (
@@ -524,7 +536,9 @@ export default function ReschedulingPage() {
               <div>
                 <Calendar
                   value={form.eventDate}
-                  onDateChangeAction={(d) => setField('eventDate', d as any)}
+                  onDateChangeAction={(d) =>
+                    setField('eventDate', d as unknown as Date)
+                  }
                 />
                 {errors.eventDate && (
                   <p className="text-red-600 text-sm mt-1">

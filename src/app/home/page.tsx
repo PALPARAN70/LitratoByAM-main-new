@@ -1,22 +1,22 @@
-"use client";
+'use client'
 
-import Image from "next/image";
-import LitratoNavbar from "../../../Litratocomponents/Navbar";
-import LitratoBranding from "../../../Litratocomponents/Branding";
-import Datepicker from "../../../Litratocomponents/availability_picker";
-import ImageSlider from "../../../Litratocomponents/Carousel";
-import PromoCard from "../../../Litratocomponents/Service_Card";
-import LitratoFooter from "../../../Litratocomponents/Footer";
-import { useRouter } from "next/navigation";
+import Image from 'next/image'
+import LitratoNavbar from '../../../Litratocomponents/Navbar'
+import LitratoBranding from '../../../Litratocomponents/Branding'
+import Datepicker from '../../../Litratocomponents/availability_picker'
+import ImageSlider from '../../../Litratocomponents/Carousel'
+import PromoCard from '../../../Litratocomponents/Service_Card'
+import LitratoFooter from '../../../Litratocomponents/Footer'
+import { useRouter } from 'next/navigation'
 export default function HomePage() {
-  const router = useRouter();
+  const router = useRouter()
   const handleAvailableDate = () => {
-    router.push("/availability");
-  };
+    router.push('/availability')
+  }
 
   const handleLogin = () => {
-    router.push("/login");
-  };
+    router.push('/login')
+  }
   return (
     <div>
       {/* Header Section */}
@@ -75,7 +75,7 @@ export default function HomePage() {
           <p className="pl-24 text-4xl">ABOUT US</p>
           <p className="text-xl">Hello! We are Ace & Mikee of LITRATO</p>
           <p className="text-xl">
-            Looking back, we've always had a knack for <br />
+            Looking back, we&apos;ve always had a knack for <br />
             vintage things, photography and collecting <br />
             memories as we travel, meet people and <br />
             experience life. With this, we want to share these <br />
@@ -118,16 +118,16 @@ export default function HomePage() {
             title="The OG"
             price="₱8,000"
             descriptions={[
-              "2 hours photo booth operation",
-              "Vintage TV with video camera",
-              "Unlimited shots",
-              "High quality photo strips",
-              "High quality of real time digital copy & GIFs",
-              "Compiled soft copies of picture & GIF (via Gdrive)",
-              "Customized welcome layout & photo strip",
-              "6 photo grids to choose from (two free grids)",
-              "Free transportation within DVO City",
-              "On-site staff",
+              '2 hours photo booth operation',
+              'Vintage TV with video camera',
+              'Unlimited shots',
+              'High quality photo strips',
+              'High quality of real time digital copy & GIFs',
+              'Compiled soft copies of picture & GIF (via Gdrive)',
+              'Customized welcome layout & photo strip',
+              '6 photo grids to choose from (two free grids)',
+              'Free transportation within DVO City',
+              'On-site staff',
             ]}
           />
           <PromoCard
@@ -135,16 +135,16 @@ export default function HomePage() {
             title="The OG"
             price="₱8,000"
             descriptions={[
-              "2 hours photo booth operation",
-              "Vintage TV with video camera",
-              "Unlimited shots",
-              "High quality photo strips",
-              "High quality of real time digital copy & GIFs",
-              "Compiled soft copies of picture & GIF (via Gdrive)",
-              "Customized welcome layout & photo strip",
-              "6 photo grids to choose from (two free grids)",
-              "Free transportation within DVO City",
-              "On-site staff",
+              '2 hours photo booth operation',
+              'Vintage TV with video camera',
+              'Unlimited shots',
+              'High quality photo strips',
+              'High quality of real time digital copy & GIFs',
+              'Compiled soft copies of picture & GIF (via Gdrive)',
+              'Customized welcome layout & photo strip',
+              '6 photo grids to choose from (two free grids)',
+              'Free transportation within DVO City',
+              'On-site staff',
             ]}
           />
         </div>
@@ -160,8 +160,8 @@ export default function HomePage() {
             onClick={handleLogin}
             className="bg-litratoblack hover:scale-110 select-none duration-500 text-white w-1/2 py-3 text-center rounded-xl hover:cursor-pointer self-center mt-20 font-bold"
           >
-            {" "}
-            BOOK NOW{" "}
+            {' '}
+            BOOK NOW{' '}
           </div>
         </div>
       </section>
@@ -170,5 +170,5 @@ export default function HomePage() {
         <LitratoFooter></LitratoFooter>
       </section>
     </div>
-  );
+  )
 }

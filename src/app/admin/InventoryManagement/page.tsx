@@ -1,21 +1,20 @@
 'use client'
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react'
+import Image from 'next/image'
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover'
 import {
-  FilterIcon,
   MoreHorizontal as Ellipsis,
   Trash2,
   Pencil,
-  Eye, // ADDED
-  EyeOff, // ADDED
+  Eye,
+  EyeOff,
 } from 'lucide-react'
 // Grid Admin helpers (extracted API logic)
 import createGridAdmin, {
-  uploadGridImage,
   type GridRow as AdminGridRow,
 } from '../../../../schemas/functions/InventoryAdmin/createGrid'
 import {
@@ -55,7 +54,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
-import PromoCard from '../../../../Litratocomponents/Service_Card'
+// Removed unused PromoCard-based rendering; using internal SimplePackageCard instead
 import {
   Pagination,
   PaginationContent,
@@ -63,7 +62,6 @@ import {
   PaginationItem,
   PaginationPrevious,
   PaginationNext,
-  PaginationEllipsis,
 } from '@/components/ui/pagination'
 // Shared types hoisted for stability
 type TabKey = 'equipment' | 'package' | 'grid' | 'logitems'
@@ -162,12 +160,7 @@ const AddTypeButton = ({ onAdd }: { onAdd: (type: string) => void }) => {
   )
 }
 
-// Hoisted static filter options (prevents re-creation on each render)
-const FILTER_OPTIONS = [
-  { label: 'Package', value: 'all' },
-  { label: 'Equipment', value: 'active' },
-  { label: 'Item Logs', value: 'inactive' },
-]
+// Removed unused FILTER_OPTIONS
 
 // NEW: helper to build a 3-page window like {1,2,3}, {4,5,6}, etc.
 function pageWindow(current: number, total: number, size = 3): number[] {
@@ -189,24 +182,24 @@ export default function InventoryManagementPage() {
     if (trimmed === searchTerm) return
     const id = setTimeout(() => setSearchTerm(trimmed), 500)
     return () => clearTimeout(id)
-  }, [searchInput])
+  }, [searchInput, searchTerm])
 
   // NEW: memoize heavy panels so typing in the search box doesn't re-render them
   const equipmentPanelEl = useMemo(
     () => <CreateEquipmentPanel searchTerm={searchTerm} />,
-    [searchTerm]
+    [searchTerm, CreateEquipmentPanel]
   )
   const packagePanelEl = useMemo(
     () => <CreatePackagePanel searchTerm={searchTerm} />,
-    [searchTerm]
+    [searchTerm, CreatePackagePanel]
   )
   const gridPanelEl = useMemo(
     () => <GridPanel searchTerm={searchTerm} />,
-    [searchTerm]
+    [searchTerm, GridPanel]
   )
   const itemLogsPanelEl = useMemo(
     () => <ItemLogsPanel searchTerm={searchTerm} />,
-    [searchTerm]
+    [searchTerm, ItemLogsPanel]
   )
 
   return (
@@ -293,30 +286,36 @@ export default function InventoryManagementPage() {
             ?.split('=')[1] || ''
 
     // CHANGED: align with AccountManager -> use "access_token" and ensure Bearer prefix
-    const getAuthHeaderString = () => {
+    const getAuthHeaderString = useCallback(() => {
       const raw =
         (typeof window !== 'undefined' &&
           localStorage.getItem('access_token')) ||
         getCookie('access_token')
       if (!raw) return ''
       return raw.startsWith('Bearer ') ? raw : `Bearer ${raw}`
-    }
+    }, [])
 
-    const getAuthHeaders = (): Record<string, string> => {
+    const getAuthHeaders = useCallback((): Record<string, string> => {
       const auth = getAuthHeaderString()
       return auth ? { Authorization: auth } : {}
-    }
-    const mapItem = (it: any): EquipmentRow => ({
-      id: String(it.id),
-      name: it.material_name,
-      type: it.material_type,
-      condition: it.condition ?? '',
-      status: it.status ? 'available' : 'unavailable',
+    }, [getAuthHeaderString])
+    const mapItem = (it: Record<string, unknown>): EquipmentRow => ({
+      id: String(it.id ?? ''),
+      name: String((it as { material_name?: unknown }).material_name ?? ''),
+      type: String((it as { material_type?: unknown }).material_type ?? ''),
+      condition: String((it as { condition?: unknown }).condition ?? ''),
+      status: ((it as { status?: unknown }).status
+        ? 'available'
+        : 'unavailable') as EquipmentTabKey,
       moreDetails: 'View',
-      last_date_checked: it.last_date_checked ?? '',
-      notes: it.notes ?? '',
-      created_at: it.created_at ?? '',
-      last_updated: it.last_updated ?? '',
+      last_date_checked: String(
+        (it as { last_date_checked?: unknown }).last_date_checked ?? ''
+      ),
+      notes: String((it as { notes?: unknown }).notes ?? ''),
+      created_at: String((it as { created_at?: unknown }).created_at ?? ''),
+      last_updated: String(
+        (it as { last_updated?: unknown }).last_updated ?? ''
+      ),
     })
 
     // load from backend
@@ -345,7 +344,7 @@ export default function InventoryManagementPage() {
       return () => {
         ignore = true
       }
-    }, [API_BASE])
+    }, [API_BASE, getAuthHeaders])
 
     // Form state for the Add Equipment modal
     const [form, setForm] = useState({
@@ -414,11 +413,7 @@ export default function InventoryManagementPage() {
           setForm((prev) => ({ ...prev, [key]: e.target.value })),
       [setForm]
     )
-    const handleNumber = useCallback(
-      (key: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) =>
-        setForm((prev) => ({ ...prev, [key]: Number(e.target.value) })),
-      [setForm]
-    )
+    // removed unused handleNumber
 
     // Stable status update
     const updateStatus = useCallback(
@@ -451,7 +446,7 @@ export default function InventoryManagementPage() {
           )
         }
       },
-      [API_BASE]
+      [API_BASE, getAuthHeaders]
     )
 
     const handleDelete = useCallback(
@@ -469,7 +464,7 @@ export default function InventoryManagementPage() {
           setItems(prev)
         }
       },
-      [items, API_BASE]
+      [items, API_BASE, getAuthHeaders]
     )
 
     // Columns defined once
@@ -497,7 +492,12 @@ export default function InventoryManagementPage() {
     // NEW: API update + local state sync for edited equipment
     const updateEquipment = async (id: string, form: Partial<EquipmentRow>) => {
       // Map partial form -> backend snake_case fields, include only provided keys
-      const updates: Record<string, any> = {}
+      const updates: Partial<{
+        material_name: string
+        material_type: string
+        condition: string
+        notes: string
+      }> = {}
       if (form.name !== undefined)
         updates.material_name = String(form.name).trim()
       if (form.type !== undefined)
@@ -837,7 +837,7 @@ export default function InventoryManagementPage() {
 
     function MoreDetailsCell({ row }: { row: EquipmentRow }) {
       // Readable format for Date and Time values - More details popover
-      const formatDateTime = (value: any): string => {
+      const formatDateTime = (value: unknown): string => {
         if (!value) return '—'
         // handle number timestamps and ISO strings
         let d =
@@ -982,7 +982,11 @@ export default function InventoryManagementPage() {
                               </button>
                             </div>
                           ) : (
-                            String((row as any)[col.key])
+                            String(
+                              row[
+                                col.key as keyof EquipmentRow
+                              ] as unknown as string
+                            )
                           )}
                         </TableCell>
                       ))}
@@ -1454,10 +1458,14 @@ export default function InventoryManagementPage() {
                   </div>
 
                   {g.image_url ? (
-                    <img
+                    <Image
                       src={g.image_url}
                       alt={g.grid_name}
+                      width={400}
+                      height={144}
                       className="w-full h-36 object-cover rounded"
+                      sizes="(max-width: 768px) 100vw, (max-width: 1024px) 50vw, 33vw"
+                      unoptimized
                     />
                   ) : null}
                   <div className="mt-2">
@@ -1617,10 +1625,10 @@ export default function InventoryManagementPage() {
       if (!raw) return ''
       return raw.startsWith('Bearer ') ? raw : `Bearer ${raw}`
     }
-    const getAuthHeaders = (): Record<string, string> => {
+    const getAuthHeaders = useCallback((): Record<string, string> => {
       const auth = getAuthHeaderString()
       return auth ? { Authorization: auth } : {}
-    }
+    }, [])
 
     // ADD: load inventory to pick items for the package
     type InvPick = {
@@ -1650,11 +1658,16 @@ export default function InventoryManagementPage() {
             : Array.isArray(data.items)
             ? data.items
             : []
-          const items = list.map((it: any) => ({
-            id: String(it.id),
-            name: it.material_name as string,
-            // quantities removed from schema
-          }))
+          const items = list.map((it: unknown) => {
+            const rec = it as Record<string, unknown>
+            return {
+              id: String(rec.id ?? ''),
+              name: String(
+                (rec as { material_name?: unknown }).material_name ?? ''
+              ),
+              // quantities removed from schema
+            }
+          })
           if (!ignore) setInventory(items)
         } catch (e) {
           console.error('Load inventory for packages failed:', e)
@@ -1663,7 +1676,7 @@ export default function InventoryManagementPage() {
       return () => {
         ignore = true
       }
-    }, [API_BASE])
+    }, [API_BASE, getAuthHeaders])
 
     const toggleItem = (id: string, on: boolean) =>
       setSelected((prev) => {
@@ -1761,38 +1774,58 @@ export default function InventoryManagementPage() {
       setOpen(false)
     }
 
-    // Map API -> UI model
-    const mapPackageFromApi = (it: any): PackageItem => {
-      const features =
-        typeof it.description === 'string'
-          ? it.description
-              .split(/\r?\n/)
-              .map((s: string) => s.trim())
-              .filter(Boolean)
-          : Array.isArray(it.features)
-          ? it.features
-          : []
-      return {
-        id: String(it.id ?? it.package_id ?? ''),
-        name: it.package_name ?? it.name ?? '',
-        price: Number(it.price ?? 0),
-        imageUrl: it.image_url ?? it.imageUrl ?? '',
-        features,
-        durationHours:
-          it.duration_hours == null ? null : Number(it.duration_hours) || 0,
-        // ADDED: try common keys, default to true
-        display:
-          typeof it.display === 'boolean'
-            ? it.display
-            : typeof it.visible === 'boolean'
-            ? it.visible
-            : typeof it.is_visible === 'boolean'
-            ? it.is_visible
-            : typeof it.is_displayed === 'boolean'
-            ? it.is_displayed
-            : true,
-      }
-    }
+    // Map API -> UI model (memoized)
+    const mapPackageFromApi = useCallback(
+      (it: Record<string, unknown>): PackageItem => {
+        const description = (it as { description?: unknown }).description
+        const features =
+          typeof description === 'string'
+            ? description
+                .split(/\r?\n/)
+                .map((s: string) => s.trim())
+                .filter(Boolean)
+            : Array.isArray((it as { features?: unknown }).features)
+            ? ((it as { features?: unknown }).features as string[])
+            : []
+        return {
+          id: String(
+            (it as { id?: unknown }).id ??
+              (it as { package_id?: unknown }).package_id ??
+              ''
+          ),
+          name: String(
+            (it as { package_name?: unknown }).package_name ??
+              (it as { name?: unknown }).name ??
+              ''
+          ),
+          price: Number((it as { price?: unknown }).price ?? 0),
+          imageUrl: String(
+            (it as { image_url?: unknown }).image_url ??
+              (it as { imageUrl?: unknown }).imageUrl ??
+              ''
+          ),
+          features,
+          durationHours:
+            (it as { duration_hours?: unknown }).duration_hours == null
+              ? null
+              : Number((it as { duration_hours?: unknown }).duration_hours) ||
+                0,
+          // ADDED: try common keys, default to true
+          display:
+            typeof (it as { display?: unknown }).display === 'boolean'
+              ? ((it as { display?: unknown }).display as boolean)
+              : typeof (it as { visible?: unknown }).visible === 'boolean'
+              ? ((it as { visible?: unknown }).visible as boolean)
+              : typeof (it as { is_visible?: unknown }).is_visible === 'boolean'
+              ? ((it as { is_visible?: unknown }).is_visible as boolean)
+              : typeof (it as { is_displayed?: unknown }).is_displayed ===
+                'boolean'
+              ? ((it as { is_displayed?: unknown }).is_displayed as boolean)
+              : true,
+        }
+      },
+      []
+    )
 
     // Fetch existing packages (active) on mount
     useEffect(() => {
@@ -1822,7 +1855,7 @@ export default function InventoryManagementPage() {
       return () => {
         ignore = true
       }
-    }, [API_BASE])
+    }, [API_BASE, getAuthHeaders, mapPackageFromApi])
 
     // Fetch archived packages when panel first opens OR when switching to archived view and we haven't loaded yet
     useEffect(() => {
@@ -1853,100 +1886,23 @@ export default function InventoryManagementPage() {
       return () => {
         ignore = true
       }
-    }, [pkgView, archivedPackages.length, API_BASE])
+    }, [
+      pkgView,
+      archivedPackages.length,
+      API_BASE,
+      getAuthHeaders,
+      mapPackageFromApi,
+    ])
 
-    // Cast to any to align with your PromoCard API without forcing prop types here.
-    const Promo = PromoCard as any
+    // Removed PromoCard-based rendering; using internal SimplePackageCard instead
 
     // Format PHP currency like the existing cards (e.g., ₱8,000)
-    const formatPrice = (amount: number) =>
-      new Intl.NumberFormat('en-PH', {
-        style: 'currency',
-        currency: 'PHP',
-        maximumFractionDigits: 0,
-      }).format(Number.isFinite(amount) ? amount : 0)
+    // Removed formatPrice (unused)
 
-    // Build props in the common shapes Service_Card implementations use
-    const buildPromoProps = (pkg: PackageItem) => {
-      const f = Array.isArray(pkg.features) ? pkg.features : []
-      const formattedPrice = formatPrice(pkg.price)
-      const img = pkg.imageUrl
-
-      return {
-        // names/titles
-        title: pkg.name,
-        name: pkg.name,
-        packageName: pkg.name,
-
-        // price variations
-        price: formattedPrice,
-        priceText: formattedPrice,
-        displayPrice: formattedPrice,
-        amount: pkg.price,
-        value: pkg.price,
-
-        // image aliases
-        image: img,
-        imageUrl: img,
-        img: img,
-        imgUrl: img,
-        cover: img,
-        coverImage: img,
-
-        // features/inclusions aliases
-        features: f,
-        inclusions: f,
-        includes: f,
-        list: f,
-        items: f,
-        bullets: f,
-        perks: f,
-        services: f,
-
-        // nested shapes some components expect
-        service: {
-          title: pkg.name,
-          name: pkg.name,
-          price: formattedPrice,
-          image: img,
-          imageUrl: img,
-          inclusions: f,
-          features: f,
-          list: f,
-        },
-        data: {
-          title: pkg.name,
-          name: pkg.name,
-          price: formattedPrice,
-          image: img,
-          imageUrl: img,
-          inclusions: f,
-          features: f,
-          list: f,
-        },
-      }
-    }
+    // Removed buildPromoProps (unused)
 
     // NEW: Error boundary + safe fallback card to avoid `.map` on undefined inside PromoCard
-    class CardErrorBoundary extends React.Component<
-      { fallback: React.ReactNode; children: React.ReactNode },
-      { hasError: boolean }
-    > {
-      constructor(props: any) {
-        super(props)
-        this.state = { hasError: false }
-      }
-      static getDerivedStateFromError() {
-        return { hasError: true }
-      }
-      componentDidCatch(error: any) {
-        console.error('PromoCard render failed:', error)
-      }
-      render() {
-        if (this.state.hasError) return this.props.fallback
-        return this.props.children
-      }
-    }
+    // Removed CardErrorBoundary used for PromoCard
 
     function SimplePackageCard({
       pkg,
@@ -1966,10 +1922,14 @@ export default function InventoryManagementPage() {
           }`}
         >
           {pkg.imageUrl ? (
-            <img
+            <Image
               src={pkg.imageUrl}
               alt={pkg.name}
+              width={600}
+              height={160}
               className="w-full h-40 object-cover rounded"
+              sizes="(max-width: 768px) 100vw, (max-width: 1024px) 50vw, 33vw"
+              unoptimized
             />
           ) : null}
           <div className="mt-3">
@@ -2024,14 +1984,7 @@ export default function InventoryManagementPage() {
       )
     }
 
-    function SafePromoCard({ pkg }: { pkg: PackageItem }) {
-      const props = buildPromoProps(pkg)
-      return (
-        <CardErrorBoundary fallback={<SimplePackageCard pkg={pkg} />}>
-          <Promo {...props} />
-        </CardErrorBoundary>
-      )
-    }
+    // Removed SafePromoCard wrapper
 
     // Upload file then set pkgForm.imageUrl to the returned URL
     const uploadPackageImage = async (file: File): Promise<string> => {
@@ -2380,10 +2333,14 @@ export default function InventoryManagementPage() {
                     <label className="text-sm font-medium">Package Image</label>
                     {pkgForm.imageUrl ? (
                       <div className="space-y-2">
-                        <img
+                        <Image
                           src={pkgForm.imageUrl}
                           alt="preview"
+                          width={600}
+                          height={160}
                           className="w-full h-40 object-cover rounded border"
+                          sizes="(max-width: 768px) 100vw, (max-width: 1024px) 50vw, 33vw"
+                          unoptimized
                         />
                         <div className="flex items-center gap-2">
                           <Input
@@ -2580,10 +2537,14 @@ export default function InventoryManagementPage() {
                     Image
                   </label>
                   {editPkgForm.imageUrl ? (
-                    <img
+                    <Image
                       src={editPkgForm.imageUrl}
                       alt="preview"
+                      width={600}
+                      height={160}
                       className="w-full h-40 object-cover rounded mb-2"
+                      sizes="(max-width: 768px) 100vw, (max-width: 1024px) 50vw, 33vw"
+                      unoptimized
                     />
                   ) : null}
                   <Input
@@ -2851,19 +2812,15 @@ export default function InventoryManagementPage() {
       if (!raw) return ''
       return raw.startsWith('Bearer ') ? raw : `Bearer ${raw}`
     }
-    const getAuthHeaders = (): Record<string, string> => {
+    const getAuthHeaders = useCallback((): Record<string, string> => {
       const auth = getAuthHeaderString()
       return auth ? { Authorization: auth } : {}
-    }
+    }, [])
 
     // Map of inventory id -> equipment name for displaying names in logs
     const [inventoryNames, setInventoryNames] = useState<
       Record<string, string>
     >({})
-    // List for dropdown selection
-    const [inventoryList, setInventoryList] = useState<
-      { id: string; name: string }[]
-    >([])
     useEffect(() => {
       let ignore = false
       ;(async () => {
@@ -2876,25 +2833,26 @@ export default function InventoryManagementPage() {
           })
           if (!res.ok) return // non-blocking
           const data = await res.json()
+          const itemsCandidate = (data as { items?: unknown }).items
           const list = Array.isArray(data)
             ? data
-            : Array.isArray((data as any)?.items)
-            ? (data as any).items
+            : Array.isArray(itemsCandidate)
+            ? itemsCandidate
             : []
           const map: Record<string, string> = {}
-          const arr: { id: string; name: string }[] = []
           for (const it of list) {
-            const id = String((it as any).id ?? '')
+            const rec = it as Record<string, unknown>
+            const id = String(rec.id ?? '')
             if (!id) continue
             const name = String(
-              (it as any).material_name ?? (it as any).name ?? `#${id}`
+              (rec as { material_name?: unknown }).material_name ??
+                (rec as { name?: unknown }).name ??
+                `#${id}`
             )
             map[id] = name
-            arr.push({ id, name })
           }
           if (!ignore) {
             setInventoryNames(map)
-            setInventoryList(arr)
           }
         } catch (e) {
           // best-effort only
@@ -2904,14 +2862,10 @@ export default function InventoryManagementPage() {
       return () => {
         ignore = true
       }
-    }, [API_BASE])
+    }, [API_BASE, getAuthHeaders])
 
     // Map of package id -> package name
     const [packageNames, setPackageNames] = useState<Record<string, string>>({})
-    // List for dropdown selection
-    const [packageList, setPackageList] = useState<
-      { id: string; name: string }[]
-    >([])
     useEffect(() => {
       let ignore = false
       ;(async () => {
@@ -2924,27 +2878,33 @@ export default function InventoryManagementPage() {
           })
           if (!res.ok) return // non-blocking
           const data = await res.json()
+          const packagesCandidate = (data as { packages?: unknown }).packages
+          const itemsCandidate = (data as { items?: unknown }).items
           const list = Array.isArray(data)
             ? data
-            : Array.isArray(data.packages)
-            ? data.packages
-            : Array.isArray(data.items)
-            ? data.items
+            : Array.isArray(packagesCandidate)
+            ? packagesCandidate
+            : Array.isArray(itemsCandidate)
+            ? itemsCandidate
             : []
           const map: Record<string, string> = {}
-          const arr: { id: string; name: string }[] = []
           for (const it of list) {
-            const id = String((it as any).id ?? (it as any).package_id ?? '')
+            const rec = it as Record<string, unknown>
+            const id = String(
+              (rec.id as unknown) ??
+                (rec as { package_id?: unknown }).package_id ??
+                ''
+            )
             if (!id) continue
             const name = String(
-              (it as any).package_name ?? (it as any).name ?? `#${id}`
+              (rec as { package_name?: unknown }).package_name ??
+                (rec as { name?: unknown }).name ??
+                `#${id}`
             )
             map[id] = name
-            arr.push({ id, name })
           }
           if (!ignore) {
             setPackageNames(map)
-            setPackageList(arr)
           }
         } catch (e) {
           console.error('Load package names failed:', e)
@@ -2953,7 +2913,7 @@ export default function InventoryManagementPage() {
       return () => {
         ignore = true
       }
-    }, [API_BASE])
+    }, [API_BASE, getAuthHeaders])
 
     // Fetch archived packages too so names are available even when hidden
     useEffect(() => {
@@ -2968,18 +2928,26 @@ export default function InventoryManagementPage() {
           })
           if (!res.ok) return
           const data = await res.json()
+          const packagesCandidate = (data as { packages?: unknown }).packages
           const list = Array.isArray(data)
             ? data
-            : Array.isArray((data as any)?.packages)
-            ? (data as any).packages
+            : Array.isArray(packagesCandidate)
+            ? packagesCandidate
             : []
           if (!list.length) return
           const add: Record<string, string> = {}
           for (const it of list) {
-            const id = String((it as any).id ?? (it as any).package_id ?? '')
+            const rec = it as Record<string, unknown>
+            const id = String(
+              (rec.id as unknown) ??
+                (rec as { package_id?: unknown }).package_id ??
+                ''
+            )
             if (!id) continue
             const name = String(
-              (it as any).package_name ?? (it as any).name ?? `#${id}`
+              (rec as { package_name?: unknown }).package_name ??
+                (rec as { name?: unknown }).name ??
+                `#${id}`
             )
             add[id] = name
           }
@@ -2993,7 +2961,7 @@ export default function InventoryManagementPage() {
       return () => {
         ignore = true
       }
-    }, [API_BASE])
+    }, [API_BASE, getAuthHeaders])
 
     const load = useCallback(async () => {
       setLoading(true)
@@ -3014,38 +2982,13 @@ export default function InventoryManagementPage() {
       } finally {
         setLoading(false)
       }
-    }, [API_BASE])
+    }, [API_BASE, getAuthHeaders])
 
     useEffect(() => {
       load()
     }, [load])
 
-    const createLog = async () => {
-      if (!form.entity_id || !form.status) return
-      try {
-        const res = await fetch(`${API_BASE}/inventory-status-log`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-          body: JSON.stringify({
-            entity_type: form.entity_type,
-            entity_id: Number(form.entity_id),
-            status: form.status,
-            notes: form.notes || null,
-            // updated_by removed; server uses req.user.id
-          }),
-        })
-        if (!res.ok) throw new Error(await res.text())
-        await load()
-        setForm((p) => ({
-          ...p,
-          entity_id: '',
-          status: 'available',
-          notes: '',
-        }))
-      } catch (e) {
-        console.error('Create log failed:', e)
-      }
-    }
+    // removed unused createLog (logs are read-only in this panel)
 
     // NEW: filters (entity, status) — search is unified via top search bar
     const [filterEntity, setFilterEntity] = useState<
@@ -3060,40 +3003,73 @@ export default function InventoryManagementPage() {
       | 'hidden'
       | 'unhidden'
     >('all')
-    const [filterSearch, setFilterSearch] = useState('')
+    // removed local filterSearch; using unified top search
 
-    const STATUS_OPTIONS_ALL = [
-      { label: 'All statuses', value: 'all' as const },
-      { label: 'Available', value: 'available' as const },
-      { label: 'Unavailable', value: 'unavailable' as const },
-      { label: 'Maintenance', value: 'maintenance' as const },
-      { label: 'Damaged', value: 'damaged' as const },
-      { label: 'Unhidden', value: 'unhidden' as const },
-      { label: 'Hidden', value: 'hidden' as const },
-    ]
-    const STATUS_OPTIONS_INV = STATUS_OPTIONS_ALL.filter((o) =>
-      ['all', 'available', 'unavailable', 'maintenance', 'damaged'].includes(
-        o.value
-      )
+    const STATUS_OPTIONS_ALL = useMemo(
+      () => [
+        { label: 'All statuses', value: 'all' as const },
+        { label: 'Available', value: 'available' as const },
+        { label: 'Unavailable', value: 'unavailable' as const },
+        { label: 'Maintenance', value: 'maintenance' as const },
+        { label: 'Damaged', value: 'damaged' as const },
+        { label: 'Unhidden', value: 'unhidden' as const },
+        { label: 'Hidden', value: 'hidden' as const },
+      ],
+      []
     )
-    const STATUS_OPTIONS_PKG = STATUS_OPTIONS_ALL.filter((o) =>
-      ['all', 'hidden', 'unhidden'].includes(o.value)
+    const STATUS_OPTIONS_INV = useMemo(
+      () =>
+        STATUS_OPTIONS_ALL.filter((o) =>
+          [
+            'all',
+            'available',
+            'unavailable',
+            'maintenance',
+            'damaged',
+          ].includes(o.value)
+        ),
+      [STATUS_OPTIONS_ALL]
+    )
+    const STATUS_OPTIONS_PKG = useMemo(
+      () =>
+        STATUS_OPTIONS_ALL.filter((o) =>
+          ['all', 'hidden', 'unhidden'].includes(o.value)
+        ),
+      [STATUS_OPTIONS_ALL]
     )
     const currentStatusOptions = useMemo(() => {
       if (filterEntity === 'Inventory') return STATUS_OPTIONS_INV
       if (filterEntity === 'Package') return STATUS_OPTIONS_PKG
       return STATUS_OPTIONS_ALL
-    }, [filterEntity])
+    }, [
+      filterEntity,
+      STATUS_OPTIONS_INV,
+      STATUS_OPTIONS_PKG,
+      STATUS_OPTIONS_ALL,
+    ])
 
-    const enrichedLogs = useMemo(() => {
+    type EnrichedLog = LogRow & {
+      _changes: Record<string, [unknown, unknown]> | null
+      _logType: string
+      _statusDisplay: string
+      _conditionDisplay: string | null
+    }
+    const enrichedLogs = useMemo<EnrichedLog[]>(() => {
       return logs
-        .map((l: any) => {
-          let changes: Record<string, [any, any]> | null = null
+        .map((l) => {
+          let changes: Record<string, [unknown, unknown]> | null = null
           if (l.notes) {
             try {
-              const parsed = JSON.parse(l.notes)
-              if (parsed && typeof parsed === 'object' && parsed.changes) {
-                changes = parsed.changes
+              const parsed: unknown = JSON.parse(l.notes)
+              if (
+                parsed &&
+                typeof parsed === 'object' &&
+                (parsed as { changes?: unknown }).changes
+              ) {
+                const ch = (parsed as { changes?: unknown }).changes
+                if (ch && typeof ch === 'object') {
+                  changes = ch as Record<string, [unknown, unknown]>
+                }
               }
             } catch {}
           }
@@ -3131,7 +3107,7 @@ export default function InventoryManagementPage() {
             _logType: logType,
             _statusDisplay: statusDisplay,
             _conditionDisplay: conditionDisplay,
-          }
+          } as EnrichedLog
         })
         .sort((a, b) => {
           // Sort by updated_at in descending order (latest first)
@@ -3144,7 +3120,7 @@ export default function InventoryManagementPage() {
     // NEW: apply filters and unified search (by resolved entity name)
     const filteredLogs = useMemo(() => {
       const q = (searchTerm || '').trim().toLowerCase()
-      return enrichedLogs.filter((l: any) => {
+      return enrichedLogs.filter((l) => {
         if (filterEntity !== 'all' && l.entity_type !== filterEntity)
           return false
         if (
@@ -3322,39 +3298,42 @@ export default function InventoryManagementPage() {
                                     Changes:
                                   </div>
                                   <ul className="list-disc list-inside space-y-0.5">
-                                    {Object.entries(l._changes).map(
-                                      ([field, pair]) => {
-                                        if (field === 'image_url') {
-                                          return (
-                                            <li key={field}>
-                                              <span className="font-medium">
-                                                Image:
-                                              </span>{' '}
-                                              changed
-                                            </li>
-                                          )
-                                        }
-                                        const [oldV, newV] = pair as [any, any]
+                                    {Object.entries(
+                                      l._changes as Record<
+                                        string,
+                                        [unknown, unknown]
+                                      >
+                                    ).map(([field, pair]) => {
+                                      if (field === 'image_url') {
                                         return (
                                           <li key={field}>
-                                            <span className="font-medium capitalize">
-                                              {field.replace(/_/g, ' ')}:
+                                            <span className="font-medium">
+                                              Image:
                                             </span>{' '}
-                                            {oldV === null ||
-                                            oldV === undefined ||
-                                            oldV === ''
-                                              ? '—'
-                                              : String(oldV)}{' '}
-                                            {'->'}{' '}
-                                            {newV === null ||
-                                            newV === undefined ||
-                                            newV === ''
-                                              ? '—'
-                                              : String(newV)}
+                                            changed
                                           </li>
                                         )
                                       }
-                                    )}
+                                      const [oldV, newV] = pair
+                                      return (
+                                        <li key={field}>
+                                          <span className="font-medium capitalize">
+                                            {field.replace(/_/g, ' ')}:
+                                          </span>{' '}
+                                          {oldV === null ||
+                                          oldV === undefined ||
+                                          oldV === ''
+                                            ? '—'
+                                            : String(oldV)}{' '}
+                                          {'->'}{' '}
+                                          {newV === null ||
+                                          newV === undefined ||
+                                          newV === ''
+                                            ? '—'
+                                            : String(newV)}
+                                        </li>
+                                      )
+                                    })}
                                   </ul>
                                   {/* Additional Notes display */}
                                   <div className="mt-2">

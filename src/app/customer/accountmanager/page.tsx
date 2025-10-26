@@ -1,152 +1,173 @@
-"use client";
+'use client'
 
-import { useEffect, useState, useCallback, useMemo } from "react";
-import Image from "next/image";
-import { useRouter } from "next/navigation";
-import { toast } from "sonner";
-import MotionDiv from "../../../../Litratocomponents/MotionDiv";
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:5000";
+import { useEffect, useState, useCallback, useMemo } from 'react'
+import Image from 'next/image'
+import { useRouter } from 'next/navigation'
+import { toast } from 'sonner'
+import MotionDiv from '../../../../Litratocomponents/MotionDiv'
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:5000'
+
+type ProfileForm = {
+  Firstname: string
+  Lastname: string
+  Birthdate: string
+  Sex: string
+  ContactNumber: string
+  Region: string
+  Province: string
+  City: string
+  Barangay: string
+  PostalCode: string
+}
 
 // Hoisted static schemas (prevents re-allocations each render)
-const PERSONAL_INFO = [
-  { label: "First Name", type: "text", key: "Firstname" },
-  { label: "Last Name", type: "text", key: "Lastname" },
-  { label: "Birthdate", type: "text", key: "Birthdate" },
-  { label: "Sex", type: "text", key: "Sex" },
-  { label: "Contact Number", type: "text", key: "ContactNumber" },
-] as const;
+const PERSONAL_INFO: ReadonlyArray<{
+  label: string
+  type: string
+  key: keyof ProfileForm
+}> = [
+  { label: 'First Name', type: 'text', key: 'Firstname' },
+  { label: 'Last Name', type: 'text', key: 'Lastname' },
+  { label: 'Birthdate', type: 'text', key: 'Birthdate' },
+  { label: 'Sex', type: 'text', key: 'Sex' },
+  { label: 'Contact Number', type: 'text', key: 'ContactNumber' },
+] as const
 
-const ADDRESS_INFO = [
-  { label: "Region", type: "text", key: "Region" },
-  { label: "Province", type: "text", key: "Province" },
-  { label: "City/Town", type: "text", key: "City" },
-  { label: "Barangay", type: "text", key: "Barangay" },
-  { label: "Postal Code", type: "text", key: "PostalCode" },
-] as const;
+const ADDRESS_INFO: ReadonlyArray<{
+  label: string
+  type: string
+  key: keyof ProfileForm
+}> = [
+  { label: 'Region', type: 'text', key: 'Region' },
+  { label: 'Province', type: 'text', key: 'Province' },
+  { label: 'City/Town', type: 'text', key: 'City' },
+  { label: 'Barangay', type: 'text', key: 'Barangay' },
+  { label: 'Postal Code', type: 'text', key: 'PostalCode' },
+] as const
 
 const ACCOUNT_SETTINGS = [
-  { label: "Old Password", type: "password" },
-  { label: "New Password", type: "password" },
-  { label: "Confirm Password", type: "password" },
-];
+  { label: 'Old Password', type: 'password' },
+  { label: 'New Password', type: 'password' },
+  { label: 'Confirm Password', type: 'password' },
+]
 
 export default function AccountManagementPage() {
-  const router = useRouter();
+  const router = useRouter()
 
   // ✅ Toggle between read-only and editable profile
-  const [isEditable, setIsEditable] = useState(false);
+  const [isEditable, setIsEditable] = useState(false)
 
-  // ✅ User profile data (basic info)
-  const [profile, setProfile] = useState<{
-    username: string;
-    email: string;
-    role: string;
-    url?: string;
-  } | null>(null);
+  // (Removed unused 'profile' state)
 
   // ✅ Default structure for user profile data
-  const [originalForm, setOriginalForm] = useState({
-    Firstname: "",
-    Lastname: "",
-    Birthdate: "",
-    Sex: "",
-    ContactNumber: "",
-    Region: "",
-    Province: "",
-    City: "",
-    Barangay: "",
-    PostalCode: "",
-  });
+  const [originalForm, setOriginalForm] = useState<ProfileForm>({
+    Firstname: '',
+    Lastname: '',
+    Birthdate: '',
+    Sex: '',
+    ContactNumber: '',
+    Region: '',
+    Province: '',
+    City: '',
+    Barangay: '',
+    PostalCode: '',
+  })
 
   // ✅ Form for handling password changes
   const [passwordForm, setPasswordForm] = useState({
-    oldPassword: "",
-    newPassword: "",
-    confirmPassword: "",
-  });
-  const [changingPassword, setChangingPassword] = useState(false);
-  const [passwordEditMode, setPasswordEditMode] = useState(false);
+    oldPassword: '',
+    newPassword: '',
+    confirmPassword: '',
+  })
+  const [changingPassword, setChangingPassword] = useState(false)
+  const [passwordEditMode, setPasswordEditMode] = useState(false)
 
   // ✅ Editable version of personal data
-  const [personalForm, setPersonalForm] = useState(originalForm);
+  const [personalForm, setPersonalForm] = useState<ProfileForm>(originalForm)
 
   // ✅ Track when saving profile
-  const [saving, setSaving] = useState(false);
+  const [saving, setSaving] = useState(false)
 
   /**
    * ✅ Load profile data when component mounts
    */
   useEffect(() => {
-    const controller = new AbortController();
+    const controller = new AbortController()
     const token =
-      typeof window !== "undefined"
-        ? localStorage.getItem("access_token")
-        : null;
+      typeof window !== 'undefined'
+        ? localStorage.getItem('access_token')
+        : null
 
-    if (!token) return;
+    if (!token) return
 
-    (async () => {
+    ;(async () => {
       try {
         const res = await fetch(`${API_BASE}/api/auth/getProfile`, {
           signal: controller.signal,
           headers: { Authorization: `Bearer ${token}` },
-        });
+        })
 
         if (res.status === 401) {
           // If unauthorized, clear token and redirect to login
-          localStorage.removeItem("access_token");
-          router.replace("/login");
-          return;
+          localStorage.removeItem('access_token')
+          router.replace('/login')
+          return
         }
 
-        const data = await res.json();
-        setProfile(data);
+        const data = await res.json()
 
         const formData = {
-          Firstname: data.firstname ?? "",
-          Lastname: data.lastname ?? "",
-          Birthdate: data.birthdate ?? "",
-          Sex: data.sex ?? "",
-          ContactNumber: data.contact ?? "",
-          Region: data.region ?? "",
-          Province: data.province ?? "",
-          City: data.city ?? "",
-          Barangay: data.barangay ?? "",
-          PostalCode: data.postal_code ?? "",
-        };
-
-        setOriginalForm(formData);
-        setPersonalForm(formData);
-      } catch (err: any) {
-        if (err.name !== "AbortError") {
-          console.error("Profile fetch failed:", err);
+          Firstname: data.firstname ?? '',
+          Lastname: data.lastname ?? '',
+          Birthdate: data.birthdate ?? '',
+          Sex: data.sex ?? '',
+          ContactNumber: data.contact ?? '',
+          Region: data.region ?? '',
+          Province: data.province ?? '',
+          City: data.city ?? '',
+          Barangay: data.barangay ?? '',
+          PostalCode: data.postal_code ?? '',
         }
-      }
-    })();
 
-    return () => controller.abort();
-  }, [router]);
+        setOriginalForm(formData)
+        setPersonalForm(formData)
+      } catch (err: unknown) {
+        if (err instanceof DOMException && err.name === 'AbortError') return
+        console.error('Profile fetch failed:', err)
+      }
+    })()
+
+    return () => controller.abort()
+  }, [router])
 
   /**
    * ✅ Helper function to display dates nicely
    */
   function formatReadableDate(isoString: string): string {
-    const date = new Date(isoString);
-    return date.toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    });
+    const date = new Date(isoString)
+    return date.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    })
   }
 
   // Memoized dirty detectors (avoid stringify)
-  const isPersonalDirty = useMemo(
-    () =>
-      Object.keys(originalForm).some(
-        (k) => (personalForm as any)[k] !== (originalForm as any)[k]
-      ),
-    [personalForm, originalForm]
-  );
+  const isPersonalDirty = useMemo(() => {
+    const KEYS: Array<keyof ProfileForm> = [
+      'Firstname',
+      'Lastname',
+      'Birthdate',
+      'Sex',
+      'ContactNumber',
+      'Region',
+      'Province',
+      'City',
+      'Barangay',
+      'PostalCode',
+    ]
+    return KEYS.some((k) => personalForm[k] !== originalForm[k])
+  }, [personalForm, originalForm])
 
   const passwordDirty = useMemo(
     () =>
@@ -156,13 +177,13 @@ export default function AccountManagementPage() {
           passwordForm.confirmPassword
       ),
     [passwordForm]
-  );
+  )
 
   // Save profile wrapped in useCallback
   const saveProfile = useCallback(async () => {
-    setSaving(true);
+    setSaving(true)
     try {
-      const token = localStorage.getItem("access_token");
+      const token = localStorage.getItem('access_token')
       const payload = {
         firstname: personalForm.Firstname,
         lastname: personalForm.Lastname,
@@ -174,19 +195,19 @@ export default function AccountManagementPage() {
         city: personalForm.City,
         barangay: personalForm.Barangay,
         postal_code: personalForm.PostalCode,
-      };
+      }
 
       const res = await fetch(`${API_BASE}/api/auth/updateProfile`, {
-        method: "PUT",
+        method: 'PUT',
         headers: {
-          "Content-Type": "application/json",
+          'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify(payload),
-      });
+      })
 
-      if (!res.ok) throw new Error("Failed to save");
-      const data = await res.json();
+      if (!res.ok) throw new Error('Failed to save')
+      const data = await res.json()
 
       const updated = {
         Firstname: data.user?.firstname ?? personalForm.Firstname,
@@ -199,93 +220,95 @@ export default function AccountManagementPage() {
         City: data.user?.city ?? personalForm.City,
         Barangay: data.user?.barangay ?? personalForm.Barangay,
         PostalCode: data.user?.postal_code ?? personalForm.PostalCode,
-      };
+      }
 
-      setOriginalForm(updated);
-      setPersonalForm(updated);
-      setIsEditable(false);
-      toast.success("Changes have been saved");
-    } catch (e: any) {
-      console.error(e);
-      toast.error(e.message || "Failed to save changes");
+      setOriginalForm(updated)
+      setPersonalForm(updated)
+      setIsEditable(false)
+      toast.success('Changes have been saved')
+    } catch (e: unknown) {
+      console.error(e)
+      toast.error(e instanceof Error ? e.message : 'Failed to save changes')
     } finally {
-      setSaving(false);
+      setSaving(false)
     }
-  }, [personalForm]);
+  }, [personalForm])
 
   // Unified profile button handler
   const handleProfileAction = useCallback(async () => {
     if (!isEditable) {
-      setIsEditable(true);
-      return;
+      setIsEditable(true)
+      return
     }
     if (!isPersonalDirty) {
-      setPersonalForm(originalForm);
-      setIsEditable(false);
-      return;
+      setPersonalForm(originalForm)
+      setIsEditable(false)
+      return
     }
     if (isPersonalDirty && !saving) {
-      await saveProfile();
+      await saveProfile()
     }
-  }, [isEditable, isPersonalDirty, originalForm, saving, saveProfile]);
+  }, [isEditable, isPersonalDirty, originalForm, saving, saveProfile])
 
   // Password button handler
   const handlePasswordAction = useCallback(async () => {
-    if (changingPassword) return;
+    if (changingPassword) return
 
     if (!passwordEditMode) {
-      setPasswordEditMode(true);
-      return;
+      setPasswordEditMode(true)
+      return
     }
 
     if (passwordEditMode && !passwordDirty) {
-      setPasswordEditMode(false);
+      setPasswordEditMode(false)
       setPasswordForm({
-        oldPassword: "",
-        newPassword: "",
-        confirmPassword: "",
-      });
-      return;
+        oldPassword: '',
+        newPassword: '',
+        confirmPassword: '',
+      })
+      return
     }
 
     if (passwordDirty) {
       if (passwordForm.newPassword !== passwordForm.confirmPassword) {
-        toast.error("New password and confirmation do not match");
-        return;
+        toast.error('New password and confirmation do not match')
+        return
       }
-      setChangingPassword(true);
+      setChangingPassword(true)
       try {
-        const token = localStorage.getItem("access_token");
+        const token = localStorage.getItem('access_token')
         const res = await fetch(`${API_BASE}/api/auth/changePassword`, {
-          method: "PUT",
+          method: 'PUT',
           headers: {
-            "Content-Type": "application/json",
+            'Content-Type': 'application/json',
             Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify({
             oldPassword: passwordForm.oldPassword,
             newPassword: passwordForm.newPassword,
           }),
-        });
+        })
 
-        const data = await res.json();
+        const data = await res.json()
         if (!res.ok)
-          throw new Error(data.message || "Failed to change password");
+          throw new Error(data.message || 'Failed to change password')
 
-        toast.success("Password changed successfully!");
+        toast.success('Password changed successfully!')
         setPasswordForm({
-          oldPassword: "",
-          newPassword: "",
-          confirmPassword: "",
-        });
-        setPasswordEditMode(false);
-      } catch (err: any) {
-        toast.error(err.message || "Error changing password");
+          oldPassword: '',
+          newPassword: '',
+          confirmPassword: '',
+        })
+        setPasswordEditMode(false)
+      } catch (err: unknown) {
+        toast.error(
+          err instanceof Error ? err.message : 'Error changing password'
+        )
       } finally {
-        setChangingPassword(false);
+        setChangingPassword(false)
       }
     }
-  }, [changingPassword, passwordEditMode, passwordDirty, passwordForm]);
+  }, [changingPassword, passwordEditMode, passwordDirty, passwordForm])
 
   return (
     <MotionDiv>
@@ -296,7 +319,7 @@ export default function AccountManagementPage() {
             {/* Profile picture */}
             <div className="flex bg-black h-30 w-30 rounded-full relative">
               <Image
-                src={"/Images/me.jpg"}
+                src={'/Images/me.jpg'}
                 alt="profile pic"
                 fill
                 className="rounded-full object-cover "
@@ -305,8 +328,8 @@ export default function AccountManagementPage() {
 
             {/* Welcome text */}
             <p className="text-black text-center text-3xl font-semibold">
-              Welcome, {personalForm.Firstname}{" "}
-              {personalForm.Lastname ?? "User"}!
+              Welcome, {personalForm.Firstname}{' '}
+              {personalForm.Lastname ?? 'User'}!
             </p>
 
             {/* Profile action buttons */}
@@ -315,16 +338,16 @@ export default function AccountManagementPage() {
               <div
                 onClick={handleProfileAction}
                 className={`bg-litratoblack rounded-full cursor-pointer py-2 px-4 text-white ${
-                  saving ? "opacity-70 pointer-events-none" : ""
+                  saving ? 'opacity-70 pointer-events-none' : ''
                 }`}
               >
                 {!isEditable
-                  ? "Edit Profile"
+                  ? 'Edit Profile'
                   : saving
-                  ? "Saving..."
+                  ? 'Saving...'
                   : isPersonalDirty
-                  ? "Save Changes"
-                  : "Cancel Edit"}
+                  ? 'Save Changes'
+                  : 'Cancel Edit'}
               </div>
 
               {/* Black Change Password button with improved detector */}
@@ -332,17 +355,17 @@ export default function AccountManagementPage() {
                 onClick={handlePasswordAction}
                 className={`bg-litratoblack rounded-full py-2 px-4 text-white ${
                   changingPassword
-                    ? "bg-gray-500 cursor-not-allowed"
-                    : "cursor-pointer"
+                    ? 'bg-gray-500 cursor-not-allowed'
+                    : 'cursor-pointer'
                 }`}
               >
                 {changingPassword
-                  ? "Saving..."
+                  ? 'Saving...'
                   : passwordEditMode
                   ? passwordDirty
-                    ? "Save Password "
-                    : "Cancel Edit"
-                  : "Change Password"}
+                    ? 'Save Password '
+                    : 'Cancel Edit'
+                  : 'Change Password'}
               </div>
             </div>
           </div>
@@ -356,11 +379,11 @@ export default function AccountManagementPage() {
                 <input
                   type={field.type}
                   value={
-                    field.key === "Birthdate" && personalForm.Birthdate
+                    field.key === 'Birthdate' && personalForm.Birthdate
                       ? isEditable
                         ? personalForm.Birthdate
                         : formatReadableDate(personalForm.Birthdate)
-                      : (personalForm as any)[field.key] ?? ""
+                      : personalForm[field.key] ?? ''
                   }
                   onChange={(e) =>
                     setPersonalForm((prev) => ({
@@ -371,8 +394,8 @@ export default function AccountManagementPage() {
                   disabled={!isEditable}
                   className={`w-full rounded-md px-3 py-2 text-sm focus:outline-none ${
                     isEditable
-                      ? "bg-gray-200"
-                      : "bg-gray-100 text-gray-400 cursor-not-allowed"
+                      ? 'bg-gray-200'
+                      : 'bg-gray-100 text-gray-400 cursor-not-allowed'
                   }`}
                 />
               </div>
@@ -386,7 +409,7 @@ export default function AccountManagementPage() {
                 <label>{field.label}:</label>
                 <input
                   type={field.type}
-                  value={personalForm[field.key] ?? ""}
+                  value={personalForm[field.key] ?? ''}
                   onChange={(e) =>
                     setPersonalForm((prev) => ({
                       ...prev,
@@ -396,8 +419,8 @@ export default function AccountManagementPage() {
                   readOnly={!isEditable}
                   className={`w-full rounded-md px-3 py-2 text-sm focus:outline-none ${
                     isEditable
-                      ? "bg-gray-200"
-                      : "bg-gray-100 text-gray-400 cursor-not-allowed"
+                      ? 'bg-gray-200'
+                      : 'bg-gray-100 text-gray-400 cursor-not-allowed'
                   }`}
                 />
               </div>
@@ -413,27 +436,27 @@ export default function AccountManagementPage() {
                   type={field.type}
                   placeholder="Enter here:"
                   value={
-                    field.label === "Old Password"
+                    field.label === 'Old Password'
                       ? passwordForm.oldPassword
-                      : field.label === "New Password"
+                      : field.label === 'New Password'
                       ? passwordForm.newPassword
                       : passwordForm.confirmPassword
                   }
                   onChange={(e) =>
                     setPasswordForm((prev) => ({
                       ...prev,
-                      [field.label === "Old Password"
-                        ? "oldPassword"
-                        : field.label === "New Password"
-                        ? "newPassword"
-                        : "confirmPassword"]: e.target.value,
+                      [field.label === 'Old Password'
+                        ? 'oldPassword'
+                        : field.label === 'New Password'
+                        ? 'newPassword'
+                        : 'confirmPassword']: e.target.value,
                     }))
                   }
                   disabled={!passwordEditMode || changingPassword}
                   className={`w-full rounded-md px-3 py-2 text-sm focus:outline-none ${
                     !passwordEditMode || changingPassword
-                      ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-                      : "bg-gray-200"
+                      ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                      : 'bg-gray-200'
                   }`}
                 />
               </div>
@@ -442,5 +465,5 @@ export default function AccountManagementPage() {
         </div>
       </div>
     </MotionDiv>
-  );
+  )
 }
