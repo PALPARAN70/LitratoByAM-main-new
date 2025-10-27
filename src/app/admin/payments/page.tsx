@@ -6,13 +6,18 @@ import {
   getAuthHeadersInit,
 } from '../../../../schemas/functions/Payment/createPayment'
 import {
-  listAdminPayments,
-  updateAdminPayment,
+  fetchAdminSalesReport,
+  openBlobInNewTabAndPrint,
+} from '../../../../schemas/functions/Payment/printSalesReport'
+import {
   uploadAdminPaymentQR,
   listAdminPaymentLogs,
   updateAdminPaymentLog,
   createAdminPayment,
   type PaymentLog,
+  getAdminBookingBalance,
+  type BookingBalance,
+  createAdminRefund,
 } from '../../../../schemas/functions/Payment/adminPayments'
 import {
   Pagination,
@@ -36,15 +41,7 @@ import {
   DialogTitle,
   DialogClose,
 } from '@/components/ui/dialog'
-import { Ellipsis, Pencil } from 'lucide-react'
-// ADD: match ManageBooking Select components
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
+import { Pencil } from 'lucide-react'
 
 type Payment = {
   payment_id: number
@@ -75,10 +72,14 @@ function pageWindow(current: number, total: number, size = 3): number[] {
 }
 
 export default function AdminPaymentsPage() {
-  const [payments, setPayments] = useState<Payment[]>([])
-  const [loading, setLoading] = useState(false)
-  const [filter, setFilter] = useState('')
-  const [edit, setEdit] = useState<{ [id: number]: Partial<Payment> }>({})
+  // Logs state (this page now shows Payment Logs by default)
+  const [logs, setLogs] = useState<PaymentLog[]>([])
+  const [logsLoading, setLogsLoading] = useState(false)
+  const [search, setSearch] = useState('')
+  const [page, setPage] = useState(1)
+  const PER_PAGE = 5
+
+  // QR state
   const [qrUrl, setQrUrl] = useState<string | null>(null)
   const [qrFile, setQrFile] = useState<File | null>(null)
   const [qrUploading, setQrUploading] = useState(false)
@@ -91,15 +92,18 @@ export default function AdminPaymentsPage() {
     reference_no: '' as string,
     notes: '' as string,
     verified: true,
-    payment_status: 'completed' as
-      | 'pending'
-      | 'completed'
-      | 'failed'
-      | 'refunded',
+    payment_status: 'Pending' as
+      | 'Pending'
+      | 'Partially Paid'
+      | 'Failed'
+      | 'Refunded'
+      | 'Fully Paid',
   })
   const [eventOptions, setEventOptions] = useState<
     Array<{ id: number; label: string; userLabel: string }>
   >([])
+  const [balance, setBalance] = useState<BookingBalance | null>(null)
+  const [balanceLoading, setBalanceLoading] = useState(false)
 
   // Notes edit dialog state (like Inventory Logs)
   // Removed previously unused notes edit states (notes are view-only here)
@@ -110,46 +114,157 @@ export default function AdminPaymentsPage() {
 
   const printSalesReport = async () => {
     try {
-      const res = await fetch(`${API_BASE}/admin/payments/report`, {
-        headers: { ...getAuthHeadersInit() },
-      })
-      if (res.status === 501) {
-        const msg = await res.text().catch(() => '')
-        alert(
-          msg ||
-            'PDF generator not installed on server. Please install pdfkit in backend.'
-        )
+      const blob = await fetchAdminSalesReport()
+      openBlobInNewTabAndPrint(blob)
+    } catch (e) {
+      const err = e as Error & { status?: number }
+      if (err?.status === 501) {
+        alert(err.message)
         return
       }
-      if (!res.ok) throw new Error(await res.text())
-      const blob = await res.blob()
-      const url = URL.createObjectURL(blob)
-      const w = window.open(url, '_blank')
-      setTimeout(() => {
-        try {
-          w?.print?.()
-        } catch {}
-      }, 500)
-    } catch (e) {
       console.error('Generate sales report failed:', e)
       alert('Failed to generate sales report. See console for details.')
     }
   }
 
-  const load = async () => {
-    setLoading(true)
+  const loadLogs = async () => {
+    setLogsLoading(true)
     try {
-      const rows = await listAdminPayments()
-      setPayments(rows)
+      const rows = await listAdminPaymentLogs()
+      setLogs(rows)
     } catch (e) {
-      console.error('Load payments failed:', e)
+      console.error('Load payment logs failed:', e)
     } finally {
-      setLoading(false)
+      setLogsLoading(false)
     }
   }
 
+  // Edit notes dialog state & handlers
+  const [editOpen, setEditOpen] = useState(false)
+  const [editingLog, setEditingLog] = useState<PaymentLog | null>(null)
+  const [editAdditional, setEditAdditional] = useState('')
+
+  // Refund dialog state
+  const [refundOpen, setRefundOpen] = useState(false)
+  const [refundPaymentId, setRefundPaymentId] = useState<number | null>(null)
+  const [refundAmount, setRefundAmount] = useState<string>('')
+  const [refundReason, setRefundReason] = useState<string>('')
+  const [refundSubmitting, setRefundSubmitting] = useState(false)
+
+  const openEdit = (lg: PaymentLog) => {
+    setEditingLog(lg)
+    setEditAdditional(
+      ((lg as { additional_notes?: string }).additional_notes as string) || ''
+    )
+    setEditOpen(true)
+  }
+  const saveEdit = async () => {
+    if (!editingLog) return
+    try {
+      const updated = await updateAdminPaymentLog(editingLog.log_id, {
+        additional_notes: editAdditional,
+      })
+      setLogs((arr) =>
+        arr.map((l) => (l.log_id === updated.log_id ? updated : l))
+      )
+      setEditOpen(false)
+      setEditingLog(null)
+      setEditAdditional('')
+    } catch (e) {
+      console.error('Update payment log failed:', e)
+      alert('Failed to update log notes')
+    }
+  }
+
+  // --- Enrichment caches for Event/Customer/Proof ---
+  type PaymentLite = {
+    booking_id: number
+    user_id: number
+    proof_image_url?: string | null
+  }
+  type BookingLite = {
+    event_name?: string | null
+    firstname?: string | null
+    lastname?: string | null
+    username?: string | null
+  }
+  const [paymentCache, setPaymentCache] = useState<Record<number, PaymentLite>>(
+    {}
+  )
+  const [bookingCache, setBookingCache] = useState<Record<number, BookingLite>>(
+    {}
+  )
+
+  const ensurePayment = React.useCallback(
+    async (paymentId: number) => {
+      if (!paymentId) return null
+      if (paymentCache[paymentId]) return paymentCache[paymentId]
+      try {
+        const res = await fetch(`${API_BASE}/admin/payments/${paymentId}`, {
+          headers: {
+            'Content-Type': 'application/json',
+            ...getAuthHeadersInit(),
+          },
+          cache: 'no-store',
+        })
+        if (!res.ok) throw new Error(await res.text())
+        const data = await res.json().catch(() => ({}))
+        const p = (data as any)?.payment as
+          | {
+              booking_id: number
+              user_id: number
+              proof_image_url?: string | null
+            }
+          | undefined
+        if (p && p.booking_id) {
+          const lite: PaymentLite = {
+            booking_id: Number(p.booking_id),
+            user_id: Number(p.user_id),
+            proof_image_url: p.proof_image_url ?? null,
+          }
+          setPaymentCache((m) => ({ ...m, [paymentId]: lite }))
+          return lite
+        }
+      } catch (e) {
+        console.warn('ensurePayment failed:', e)
+      }
+      return null
+    },
+    [API_BASE, paymentCache]
+  )
+
+  const ensureBooking = React.useCallback(
+    async (bookingId: number) => {
+      if (!bookingId) return null
+      if (bookingCache[bookingId]) return bookingCache[bookingId]
+      try {
+        const res = await fetch(
+          `${API_BASE}/admin/confirmed-bookings/${bookingId}`,
+          {
+            headers: {
+              'Content-Type': 'application/json',
+              ...getAuthHeadersInit(),
+            },
+            cache: 'no-store',
+          }
+        )
+        if (!res.ok) throw new Error(await res.text())
+        const data = await res.json().catch(() => ({}))
+        const b = (data as any)?.booking as BookingLite | undefined
+        if (b) {
+          setBookingCache((m) => ({ ...m, [bookingId]: b }))
+          return b
+        }
+      } catch (e) {
+        console.warn('ensureBooking failed:', e)
+      }
+      return null
+    },
+    [API_BASE, bookingCache]
+  )
+
   useEffect(() => {
-    load()
+    loadLogs()
     const loadQR = async () => {
       try {
         const url = await getLatestPaymentQR()
@@ -220,54 +335,110 @@ export default function AdminPaymentsPage() {
     }
   }, [createOpen, API_BASE])
 
-  const filtered = useMemo(() => {
-    const q = filter.trim().toLowerCase()
-    if (!q) return payments
-    return payments.filter((p) =>
-      [
-        p.payment_id,
-        p.booking_id,
-        p.user_id,
-        p.payment_status,
-        p.booking_payment_status || '',
-        p.reference_no || '',
-      ].some((v) => String(v).toLowerCase().includes(q))
-    )
-  }, [payments, filter])
-
-  const save = async (id: number) => {
-    const body = edit[id]
-    if (!body) return
-    try {
-      await updateAdminPayment(id, body)
-      setEdit((e) => ({ ...e, [id]: {} }))
-      await load()
-    } catch (e) {
-      console.error('Update payment failed:', e)
+  // Load booking balance when booking changes in create form
+  useEffect(() => {
+    const id = Number(createForm.booking_id)
+    if (!createOpen || !id) {
+      setBalance(null)
+      return
     }
-  }
+    let ignore = false
+    setBalanceLoading(true)
+    getAdminBookingBalance(id)
+      .then((b) => {
+        if (!ignore) setBalance(b)
+      })
+      .catch((e) => {
+        console.warn('Load admin booking balance failed:', e)
+        if (!ignore) setBalance(null)
+      })
+      .finally(() => {
+        if (!ignore) setBalanceLoading(false)
+      })
+    return () => {
+      ignore = true
+    }
+  }, [createOpen, createForm.booking_id])
+
+  const normalized = (search || '').trim().toLowerCase()
+  const filtered = useMemo(() => {
+    if (!normalized) return logs
+    return logs.filter((lg) => {
+      const p = paymentCache[lg.payment_id]
+      const b = p ? bookingCache[p.booking_id] : undefined
+      const customerName =
+        [b?.firstname, b?.lastname].filter(Boolean).join(' ').trim() ||
+        b?.username ||
+        ''
+      const hay = [
+        lg.payment_id,
+        lg.action,
+        lg.previous_status,
+        lg.new_status,
+        String(lg.performed_by || ''),
+        new Date(lg.created_at).toLocaleString(),
+        b?.event_name || '',
+        customerName,
+      ]
+        .join('\n')
+        .toLowerCase()
+      return hay.includes(normalized)
+    })
+  }, [logs, normalized, paymentCache, bookingCache])
 
   // Tabs
-  type TabKey = 'payments' | 'payment-logs' | 'qr'
+  type TabKey = 'payments' | 'qr'
   const [active, setActive] = useState<TabKey>('payments')
-  const [selectedPaymentForLogs, setSelectedPaymentForLogs] = useState<
-    number | null
-  >(null)
 
   // Pagination
-  const pageSize = 5
-  const [page, setPage] = useState(1)
-  useEffect(() => setPage(1), [filter])
-  const totalPages = Math.max(
-    1,
-    Math.ceil((payments.length ? filtered.length : 0) / pageSize)
-  )
-  const startIdx = (page - 1) * pageSize
-  const paginated = filtered.slice(startIdx, startIdx + pageSize)
+  useEffect(() => setPage(1), [search])
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PER_PAGE))
+  const startIdx = (page - 1) * PER_PAGE
+  const paginated = filtered.slice(startIdx, startIdx + PER_PAGE)
   const windowPages = useMemo(
     () => pageWindow(page, totalPages, 3),
     [page, totalPages]
   )
+
+  // Ensure enrichment for currently visible logs
+  useEffect(() => {
+    const run = async () => {
+      const ids = Array.from(new Set(paginated.map((lg) => lg.payment_id)))
+      for (const pid of ids) {
+        const p = await ensurePayment(pid)
+        if (p?.booking_id) await ensureBooking(p.booking_id)
+      }
+    }
+    if (paginated.length) run()
+  }, [paginated, ensurePayment, ensureBooking])
+
+  // Ensure we have payment/booking data for the selected refund when dialog opens
+  useEffect(() => {
+    if (!refundOpen || !refundPaymentId) return
+    ;(async () => {
+      const p = await ensurePayment(refundPaymentId)
+      if (p?.booking_id) await ensureBooking(p.booking_id)
+    })()
+  }, [refundOpen, refundPaymentId, ensurePayment, ensureBooking])
+
+  // Derived event name for refund dialog
+  const refundEventName = useMemo(() => {
+    if (!refundPaymentId) return ''
+    const p = paymentCache[refundPaymentId]
+    if (!p) return ''
+    const b = bookingCache[p.booking_id]
+    return b?.event_name || ''
+  }, [refundPaymentId, paymentCache, bookingCache])
+
+  // Derived customer name for refund dialog
+  const refundCustomerName = useMemo(() => {
+    if (!refundPaymentId) return ''
+    const p = paymentCache[refundPaymentId]
+    if (!p) return ''
+    const b = bookingCache[p.booking_id]
+    const full = [b?.firstname, b?.lastname].filter(Boolean).join(' ').trim()
+    return full || b?.username || ''
+  }, [refundPaymentId, paymentCache, bookingCache])
 
   // Payment status select helpers
   type BookingPayUi = 'unpaid' | 'partially-paid' | 'paid'
@@ -289,7 +460,7 @@ export default function AdminPaymentsPage() {
   return (
     <div className="h-screen flex flex-col p-4 min-h-0">
       <header className="flex items-center justify-between mb-4">
-        <h1 className="text-2xl font-bold">Payments</h1>
+        <h1 className="text-2xl font-bold">Payment Logs</h1>
         {active === 'payments' && (
           <div className="flex items-center gap-2">
             <button
@@ -315,23 +486,10 @@ export default function AdminPaymentsPage() {
         >
           Payments
         </TabButton>
-        <TabButton
-          active={active === 'payment-logs'}
-          onClick={() => setActive('payment-logs')}
-        >
-          Payment Logs
-        </TabButton>
         <TabButton active={active === 'qr'} onClick={() => setActive('qr')}>
           QR Control
         </TabButton>
       </nav>
-
-      {active === 'payment-logs' && (
-        <PaymentLogsPanel
-          selectedPaymentId={selectedPaymentForLogs}
-          onChangeSelected={setSelectedPaymentForLogs}
-        />
-      )}
 
       {active === 'qr' && (
         <section className="bg-white h-125 rounded-xl shadow p-4 flex flex-col min-h-0 gap-4">
@@ -385,30 +543,38 @@ export default function AdminPaymentsPage() {
 
       {active === 'payments' && (
         <section className="bg-white h-125 rounded-xl shadow p-4 flex flex-col min-h-0 gap-4">
-          <nav className="flex gap-2 mb-4">
+          <nav className="flex gap-2 items-center mb-2">
             <div className="flex-grow flex">
               <form
-                className="w-1/4 bg-gray-400 rounded-full items-center flex px-1 py-1"
+                className="w-1/3 bg-gray-400 rounded-full items-center flex px-1 py-1"
                 onSubmit={(e) => {
                   e.preventDefault()
-                  setFilter(filter.trim())
+                  setSearch(search.trim())
                 }}
               >
                 <input
                   type="text"
-                  placeholder="Search by id, status, ref no, user, booking..."
-                  value={filter}
-                  onChange={(e) => setFilter(e.target.value)}
+                  placeholder="Search logs (status, action, event, customer, user)"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
                   className="bg-transparent outline-none w-full px-2 h-8"
                 />
               </form>
             </div>
+            <button
+              className="px-3 py-2 rounded border text-sm"
+              onClick={loadLogs}
+              disabled={logsLoading}
+              title="Refresh logs"
+            >
+              {logsLoading ? 'Loading…' : 'Refresh'}
+            </button>
           </nav>
 
-          {loading ? (
-            <div className="text-sm text-gray-600">Loading...</div>
+          {logsLoading && !logs.length ? (
+            <div className="text-sm text-gray-600">Loading logs…</div>
           ) : !filtered.length ? (
-            <div className="text-sm text-gray-600">No payments found.</div>
+            <div className="text-sm text-gray-600">No logs found.</div>
           ) : (
             <>
               <div className="overflow-x-auto rounded-t-xl border border-gray-200">
@@ -416,178 +582,124 @@ export default function AdminPaymentsPage() {
                   <table className="w-full table-auto text-sm">
                     <thead>
                       <tr className="bg-gray-300 text-left">
-                        {Object.entries({
-                          id: 'ID',
-                          booking: 'Booking',
-                          user: 'User',
-                          amount: 'Amount',
-                          paid: 'Paid',
-                          ref: 'Ref',
-                          status: 'Status',
-                          notes: 'Notes',
-                          actions: 'Actions',
-                        }).map(([key, title], i, arr) => (
+                        {[
+                          'Date/Time',
+                          'Payment',
+                          'Event',
+                          'Customer',
+                          'Proof',
+                          'Action',
+                          'Status',
+                          'Additional Notes',
+                          'By',
+                          'Actions',
+                        ].map((h, i, arr) => (
                           <th
-                            key={key}
+                            key={h}
                             className={`px-3 py-2 ${
                               i === 0 ? 'rounded-tl-xl' : ''
                             } ${i === arr.length - 1 ? 'rounded-tr-xl' : ''}`}
                           >
-                            {title}
+                            {h}
                           </th>
                         ))}
                       </tr>
                     </thead>
                     <tbody>
-                      {paginated.map((p) => (
-                        <React.Fragment key={p.payment_id}>
-                          <tr className="text-left bg-gray-100 even:bg-gray-50 align-top">
+                      {paginated.map((lg) => {
+                        const p = paymentCache[lg.payment_id]
+                        const b = p ? bookingCache[p.booking_id] : undefined
+                        const eventName = b?.event_name || ''
+                        const customerName =
+                          [b?.firstname, b?.lastname]
+                            .filter(Boolean)
+                            .join(' ')
+                            .trim() ||
+                          b?.username ||
+                          ''
+                        const proofUrl = p?.proof_image_url || ''
+                        return (
+                          <tr
+                            key={lg.log_id}
+                            className="text-left bg-gray-100 even:bg-gray-50 align-top"
+                          >
                             <td className="px-3 py-2 whitespace-nowrap">
-                              {p.payment_id}
+                              {new Date(lg.created_at).toLocaleString()}
                             </td>
                             <td className="px-3 py-2 whitespace-nowrap">
-                              {p.booking_id}
+                              #{lg.payment_id}
+                            </td>
+                            <td
+                              className="px-3 py-2 whitespace-nowrap max-w-[14rem] truncate"
+                              title={eventName}
+                            >
+                              {eventName || '—'}
+                            </td>
+                            <td
+                              className="px-3 py-2 whitespace-nowrap max-w-[12rem] truncate"
+                              title={customerName}
+                            >
+                              {customerName || '—'}
                             </td>
                             <td className="px-3 py-2 whitespace-nowrap">
-                              {p.user_id}
+                              <button
+                                type="button"
+                                className="px-2 py-1 rounded border text-xs disabled:opacity-50"
+                                disabled={!proofUrl}
+                                onClick={() => {
+                                  if (proofUrl) window.open(proofUrl, '_blank')
+                                }}
+                              >
+                                View
+                              </button>
                             </td>
                             <td className="px-3 py-2 whitespace-nowrap">
-                              {Number(p.booking_amount_due ?? p.amount).toFixed(
-                                2
-                              )}
+                              {lg.action}
                             </td>
-                            <td className="px-3 py-2 whitespace-nowrap">
-                              <input
-                                className="border rounded px-2 py-1 w-24"
-                                type="number"
-                                defaultValue={p.amount_paid}
-                                onChange={(e) =>
-                                  setEdit((s) => ({
-                                    ...s,
-                                    [p.payment_id]: {
-                                      ...s[p.payment_id],
-                                      amount_paid: Number(e.target.value),
-                                    },
-                                  }))
-                                }
-                              />
-                            </td>
-                            <td className="px-3 py-2 whitespace-nowrap">
-                              {p.reference_no || ''}
-                            </td>
-                            <td className="px-3 py-2 whitespace-nowrap">
-                              <div className="flex flex-col gap-1">
-                                <div className="flex items-center gap-2">
-                                  {(() => {
-                                    const uiVal = toUiPayment(
-                                      p.booking_payment_status
-                                    )
-                                    return (
-                                      <Select
-                                        value={uiVal}
-                                        onValueChange={async (val) => {
-                                          const apiVal =
-                                            (val as
-                                              | 'unpaid'
-                                              | 'paid'
-                                              | 'partially-paid') ===
-                                            'partially-paid'
-                                              ? 'partial'
-                                              : (val as 'unpaid' | 'paid')
-                                          try {
-                                            const res = await fetch(
-                                              `${API_BASE}/admin/confirmed-bookings/${p.booking_id}/payment-status`,
-                                              {
-                                                method: 'PATCH',
-                                                headers: {
-                                                  'Content-Type':
-                                                    'application/json',
-                                                  ...getAuthHeadersInit(),
-                                                },
-                                                body: JSON.stringify({
-                                                  status: apiVal,
-                                                }),
-                                              }
-                                            )
-                                            if (!res.ok)
-                                              throw new Error(await res.text())
-                                            await load()
-                                          } catch (err) {
-                                            console.error(
-                                              'Update booking payment_status failed:',
-                                              err
-                                            )
-                                            alert(
-                                              'Failed to update booking payment status'
-                                            )
-                                          }
-                                        }}
-                                      >
-                                        <SelectTrigger
-                                          className={`h-7 text-[11px] w-24 px-2 border-0 rounded text-center ${paymentBadgeClass(
-                                            uiVal
-                                          )}`}
-                                        >
-                                          <SelectValue placeholder="Payment" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                          <SelectItem value="unpaid">
-                                            {paymentLabel('unpaid')}
-                                          </SelectItem>
-                                          <SelectItem value="partially-paid">
-                                            {paymentLabel('partially-paid')}
-                                          </SelectItem>
-                                          <SelectItem value="paid">
-                                            {paymentLabel('paid')}
-                                          </SelectItem>
-                                        </SelectContent>
-                                      </Select>
-                                    )
-                                  })()}
-                                </div>
+                            <td className="px-3 py-2">
+                              <div className="whitespace-nowrap">
+                                <span className="font-medium">
+                                  {lg.previous_status}
+                                </span>{' '}
+                                →{' '}
+                                <span className="font-medium">
+                                  {lg.new_status}
+                                </span>
                               </div>
                             </td>
-                            <td className="px-3 py-2">{p.notes || '—'}</td>
+                            <td className="px-3 py-2">
+                              {(lg as { additional_notes?: string })
+                                .additional_notes || '—'}
+                            </td>
                             <td className="px-3 py-2 whitespace-nowrap">
-                              <Popover>
-                                <PopoverTrigger asChild>
-                                  <button
-                                    type="button"
-                                    className="p-2 rounded hover:bg-gray-200 transition"
-                                    aria-label="Actions"
-                                    title="Actions"
-                                  >
-                                    <Ellipsis className="text-lg" />
-                                  </button>
-                                </PopoverTrigger>
-                                <PopoverContent
-                                  align="end"
-                                  className="w-40 p-2"
-                                >
-                                  <div className="flex flex-col gap-2">
-                                    <button
-                                      className="w-full bg-litratoblack text-white rounded px-2 py-1 text-xs"
-                                      onClick={() => save(p.payment_id)}
-                                    >
-                                      Save
-                                    </button>
-                                    <button
-                                      className="w-full rounded px-2 py-1 text-xs border"
-                                      onClick={() => {
-                                        setSelectedPaymentForLogs(p.payment_id)
-                                        setActive('payment-logs')
-                                      }}
-                                    >
-                                      View Logs
-                                    </button>
-                                  </div>
-                                </PopoverContent>
-                              </Popover>
+                              {String(lg.performed_by || '')}
+                            </td>
+                            <td className="px-3 py-2 whitespace-nowrap">
+                              <button
+                                type="button"
+                                title="Edit additional notes"
+                                className="inline-flex items-center justify-center rounded-full hover:text-black text-litratoblack"
+                                onClick={() => openEdit(lg)}
+                              >
+                                <Pencil className="w-4 h-4" />
+                              </button>
+                              <button
+                                type="button"
+                                title="Create refund"
+                                className="ml-2 inline-flex items-center justify-center rounded-full hover:text-black text-litratoblack"
+                                onClick={() => {
+                                  setRefundPaymentId(lg.payment_id)
+                                  setRefundAmount('')
+                                  setRefundReason('')
+                                  setRefundOpen(true)
+                                }}
+                              >
+                                Refund
+                              </button>
                             </td>
                           </tr>
-                          {/* Inline logs removed; see Payment Logs tab */}
-                        </React.Fragment>
-                      ))}
+                        )
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -641,6 +753,56 @@ export default function AdminPaymentsPage() {
           )}
         </section>
       )}
+
+      {/* Edit Log Notes Dialog */}
+      <Dialog
+        open={editOpen}
+        onOpenChange={(o) => {
+          if (!o) {
+            setEditOpen(false)
+            setEditingLog(null)
+            setEditAdditional('')
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit Log Notes</DialogTitle>
+            <DialogDescription>
+              Update additional notes for this payment log.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div className="text-xs text-gray-500">
+              Log ID: {editingLog?.log_id ?? '—'}
+            </div>
+            <textarea
+              rows={5}
+              className="w-full border rounded px-2 py-1 text-sm"
+              value={editAdditional}
+              onChange={(e) => setEditAdditional(e.target.value)}
+              placeholder="Enter additional notes..."
+            />
+          </div>
+          <DialogFooter>
+            <DialogClose asChild>
+              <button
+                type="button"
+                className="px-4 py-2 rounded border text-sm"
+              >
+                Cancel
+              </button>
+            </DialogClose>
+            <button
+              type="button"
+              className="px-4 py-2 rounded bg-litratoblack text-white text-sm"
+              onClick={saveEdit}
+            >
+              Save
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         open={createOpen}
@@ -706,7 +868,21 @@ export default function AdminPaymentsPage() {
                     }))
                   }
                   placeholder="e.g., 5000"
+                  min={0}
+                  max={balance ? balance.balance : undefined}
                 />
+                {balance && (
+                  <div className="text-xs text-gray-600 mt-1">
+                    Amount due: {balance.amount_due.toFixed(2)} • Paid:{' '}
+                    {balance.total_paid.toFixed(2)} • Remaining:{' '}
+                    {balance.balance.toFixed(2)}
+                  </div>
+                )}
+                {balanceLoading && (
+                  <div className="text-xs text-gray-500 mt-1">
+                    Loading balance…
+                  </div>
+                )}
               </div>
 
               <div>
@@ -771,17 +947,19 @@ export default function AdminPaymentsPage() {
                     setCreateForm((p) => ({
                       ...p,
                       payment_status: e.target.value as
-                        | 'pending'
-                        | 'completed'
-                        | 'failed'
-                        | 'refunded',
+                        | 'Pending'
+                        | 'Partially Paid'
+                        | 'Failed'
+                        | 'Refunded'
+                        | 'Fully Paid',
                     }))
                   }
                 >
-                  <option value="completed">completed</option>
-                  <option value="pending">pending</option>
-                  <option value="failed">failed</option>
-                  <option value="refunded">refunded</option>
+                  <option value="Pending">Pending</option>
+                  <option value="Partially Paid">Partially Paid</option>
+                  <option value="Failed">Failed</option>
+                  <option value="Refunded">Refunded</option>
+                  <option value="Fully Paid">Fully Paid</option>
                 </select>
               </div>
             </div>
@@ -806,6 +984,14 @@ export default function AdminPaymentsPage() {
                   alert('Booking ID and Amount Paid are required')
                   return
                 }
+                if (balance && amount_paid > balance.balance) {
+                  alert(
+                    `Amount exceeds remaining balance (${balance.balance.toFixed(
+                      2
+                    )}).`
+                  )
+                  return
+                }
                 try {
                   await createAdminPayment({
                     booking_id,
@@ -824,10 +1010,11 @@ export default function AdminPaymentsPage() {
                     reference_no: '',
                     notes: '',
                     verified: true,
-                    payment_status: 'completed',
+                    payment_status: 'Pending',
                   })
+                  setBalance(null)
                   setCreateOpen(false)
-                  await load()
+                  await loadLogs()
                 } catch (e) {
                   console.error('Create admin payment failed:', e)
                   alert('Failed to create payment')
@@ -839,349 +1026,53 @@ export default function AdminPaymentsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
-  )
-}
 
-function PaymentLogsPanel({
-  selectedPaymentId,
-  onChangeSelected,
-}: {
-  selectedPaymentId: number | null
-  onChangeSelected: (id: number | null) => void
-}) {
-  const [paymentsList, setPaymentsList] = React.useState<Payment[]>([])
-  const [logsCache, setLogsCache] = React.useState<
-    Record<number, PaymentLog[]>
-  >({})
-  const [logsLoading, setLogsLoading] = React.useState(false)
-  const [search, setSearch] = React.useState('')
-  const [page, setPage] = React.useState(1)
-  const PER_PAGE = 5
-
-  const [editOpen, setEditOpen] = React.useState(false)
-  const [editingLog, setEditingLog] = React.useState<PaymentLog | null>(null)
-  const [editAdditional, setEditAdditional] = React.useState('')
-
-  useEffect(() => {
-    let ignore = false
-    ;(async () => {
-      try {
-        const rows = await listAdminPayments()
-        if (!ignore) setPaymentsList(rows)
-      } catch (e) {
-        console.error('Load payments for logs failed:', e)
-      }
-    })()
-    return () => {
-      ignore = true
-    }
-  }, [])
-
-  const ensureLogs = React.useCallback(
-    async (pid: number | null, force = false) => {
-      if (!pid) return
-      if (!force && logsCache[pid]) return
-      setLogsLoading(true)
-      try {
-        const rows = await listAdminPaymentLogs(pid)
-        setLogsCache((m) => ({ ...m, [pid]: rows }))
-      } catch (e) {
-        console.error('Load payment logs failed:', e)
-      } finally {
-        setLogsLoading(false)
-      }
-    },
-    [logsCache]
-  )
-
-  useEffect(() => {
-    if (selectedPaymentId) ensureLogs(selectedPaymentId)
-  }, [selectedPaymentId, ensureLogs])
-
-  const logs = React.useMemo(
-    () => (selectedPaymentId ? logsCache[selectedPaymentId] || [] : []),
-    [logsCache, selectedPaymentId]
-  )
-
-  const normalized = (search || '').trim().toLowerCase()
-  const filtered = React.useMemo(() => {
-    if (!normalized) return logs
-    return logs.filter((lg) => {
-      const hay = [
-        lg.action,
-        lg.previous_status,
-        lg.new_status,
-        lg.notes || '',
-        (lg as { additional_notes?: string }).additional_notes || '',
-        String(lg.performed_by || ''),
-        new Date(lg.created_at).toLocaleString(),
-      ]
-        .join('\n')
-        .toLowerCase()
-      return hay.includes(normalized)
-    })
-  }, [logs, normalized])
-
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PER_PAGE))
-  useEffect(
-    () => setPage((p) => Math.min(Math.max(1, p), totalPages)),
-    [totalPages]
-  )
-  const start = (page - 1) * PER_PAGE
-  const paginated = React.useMemo(
-    () => filtered.slice(start, start + PER_PAGE),
-    [filtered, start]
-  )
-  const windowPages = React.useMemo(
-    () => pageWindow(page, totalPages, 3),
-    [page, totalPages]
-  )
-
-  const openEdit = (lg: PaymentLog) => {
-    setEditingLog(lg)
-    setEditAdditional(
-      ((lg as { additional_notes?: string }).additional_notes as string) || ''
-    )
-    setEditOpen(true)
-  }
-  const saveEdit = async () => {
-    if (!editingLog) return
-    try {
-      const updated = await updateAdminPaymentLog(editingLog.log_id, {
-        additional_notes: editAdditional,
-      })
-      const pid = selectedPaymentId!
-      setLogsCache((m) => ({
-        ...m,
-        [pid]: (m[pid] || []).map((l) =>
-          l.log_id === updated.log_id ? updated : l
-        ),
-      }))
-      setEditOpen(false)
-      setEditingLog(null)
-      setEditAdditional('')
-    } catch (e) {
-      console.error('Update payment log failed:', e)
-      alert('Failed to update log notes')
-    }
-  }
-
-  return (
-    <section className="bg-white h-125 rounded-xl shadow p-4 flex flex-col min-h-0 gap-4">
-      <nav className="flex gap-2 items-center">
-        <div className="flex-grow flex">
-          <form
-            className="w-1/3 bg-gray-400 rounded-full items-center flex px-1 py-1"
-            onSubmit={(e) => {
-              e.preventDefault()
-              setSearch(search.trim())
-            }}
-          >
-            <input
-              type="text"
-              placeholder="Search logs (status, action, notes, user)"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="bg-transparent outline-none w-full px-2 h-8"
-            />
-          </form>
-        </div>
-        <div className="flex items-center gap-2">
-          <select
-            className="border rounded px-2 py-1 h-9"
-            value={selectedPaymentId ?? ''}
-            onChange={async (e) => {
-              const v = e.target.value
-              const id = v ? Number(v) : null
-              onChangeSelected(id)
-              setPage(1)
-              if (id) await ensureLogs(id)
-            }}
-          >
-            <option value="">Select a payment…</option>
-            {paymentsList.map((p) => (
-              <option key={p.payment_id} value={p.payment_id}>
-                #{p.payment_id} • Booking {p.booking_id} • User {p.user_id}
-              </option>
-            ))}
-          </select>
-          <button
-            className="px-3 py-2 rounded border text-sm"
-            disabled={!selectedPaymentId || logsLoading}
-            onClick={() => ensureLogs(selectedPaymentId!, true)}
-            title="Refresh logs"
-          >
-            Refresh
-          </button>
-        </div>
-      </nav>
-
-      <div className="flex-1 min-h-0 overflow-y-auto border rounded-xl">
-        <div className="p-3">
-          {!selectedPaymentId ? (
-            <div className="text-sm text-gray-600">
-              Select a payment to view its logs.
-            </div>
-          ) : logsLoading && !(logsCache[selectedPaymentId] || []).length ? (
-            <div className="text-sm text-gray-600">Loading logs…</div>
-          ) : !logs.length ? (
-            <div className="text-sm text-gray-600">No logs found.</div>
-          ) : (
-            <div className="space-y-2">
-              <div className="overflow-x-auto">
-                <table className="w-full table-auto text-sm">
-                  <thead>
-                    <tr className="bg-gray-300 text-left">
-                      {[
-                        'Date/Time',
-                        'Payment',
-                        'Action',
-                        'Status',
-                        'Notes',
-                        'Additional Notes',
-                        'By',
-                        'Actions',
-                      ].map((h, i, arr) => (
-                        <th
-                          key={h}
-                          className={`px-3 py-2 ${
-                            i === 0 ? 'rounded-tl-xl' : ''
-                          } ${i === arr.length - 1 ? 'rounded-tr-xl' : ''}`}
-                        >
-                          {h}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {paginated.map((lg) => (
-                      <tr
-                        key={lg.log_id}
-                        className="text-left bg-gray-100 even:bg-gray-50 align-top"
-                      >
-                        <td className="px-3 py-2 whitespace-nowrap">
-                          {new Date(lg.created_at).toLocaleString()}
-                        </td>
-                        <td className="px-3 py-2 whitespace-nowrap">
-                          #{selectedPaymentId}
-                        </td>
-                        <td className="px-3 py-2 whitespace-nowrap">
-                          {lg.action}
-                        </td>
-                        <td className="px-3 py-2">
-                          <div className="whitespace-nowrap">
-                            <span className="font-medium">
-                              {lg.previous_status}
-                            </span>{' '}
-                            →{' '}
-                            <span className="font-medium">{lg.new_status}</span>
-                          </div>
-                        </td>
-                        <td className="px-3 py-2">{lg.notes || '—'}</td>
-                        <td className="px-3 py-2">
-                          {(
-                            lg as {
-                              additional_notes?: string
-                            }
-                          ).additional_notes || '—'}
-                        </td>
-                        <td className="px-3 py-2 whitespace-nowrap">
-                          {String(lg.performed_by || '')}
-                        </td>
-                        <td className="px-3 py-2 whitespace-nowrap">
-                          <button
-                            type="button"
-                            title="Edit additional notes"
-                            className="inline-flex items-center justify-center rounded-full hover:text-black text-litratoblack"
-                            onClick={() => openEdit(lg)}
-                          >
-                            <Pencil className="w-4 h-4" />
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              <div className="px-3 py-2">
-                <Pagination>
-                  <PaginationContent>
-                    <PaginationItem>
-                      <PaginationPrevious
-                        href="#"
-                        className="text-black no-underline hover:no-underline hover:text-black"
-                        style={{ textDecoration: 'none' }}
-                        onClick={(e) => {
-                          e.preventDefault()
-                          setPage((p) => Math.max(1, p - 1))
-                        }}
-                      />
-                    </PaginationItem>
-                    {windowPages.map((n) => (
-                      <PaginationItem key={n}>
-                        <PaginationLink
-                          href="#"
-                          isActive={n === page}
-                          className="text-black no-underline hover:no-underline hover:text-black"
-                          style={{ textDecoration: 'none' }}
-                          onClick={(e) => {
-                            e.preventDefault()
-                            setPage(n)
-                          }}
-                        >
-                          {n}
-                        </PaginationLink>
-                      </PaginationItem>
-                    ))}
-                    <PaginationItem>
-                      <PaginationNext
-                        href="#"
-                        className="text-black no-underline hover:no-underline hover:text-black"
-                        style={{ textDecoration: 'none' }}
-                        onClick={(e) => {
-                          e.preventDefault()
-                          setPage((p) => Math.min(totalPages, p + 1))
-                        }}
-                      />
-                    </PaginationItem>
-                  </PaginationContent>
-                </Pagination>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-
+      {/* Refund Dialog */}
       <Dialog
-        open={editOpen}
+        open={refundOpen}
         onOpenChange={(o) => {
           if (!o) {
-            setEditOpen(false)
-            setEditingLog(null)
-            setEditAdditional('')
+            setRefundOpen(false)
+            setRefundPaymentId(null)
+            setRefundAmount('')
+            setRefundReason('')
           }
         }}
       >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Edit Log Notes</DialogTitle>
+            <DialogTitle>Create Refund</DialogTitle>
             <DialogDescription>
-              Update additional notes for this payment log.
+              Issue a partial or full refund for the selected payment. Only
+              verified successful payments are refundable; the server will
+              validate the amount.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3 py-2">
-            <div className="text-xs text-gray-500">
-              Log ID: {editingLog?.log_id ?? '—'}
+            <div className="text-sm">Payment ID: {refundPaymentId ?? '—'}</div>
+            <div className="text-sm">Event: {refundEventName || '—'}</div>
+            <div className="text-sm">Customer: {refundCustomerName || '—'}</div>
+            <div>
+              <label className="text-sm">Amount</label>
+              <input
+                type="number"
+                min={0}
+                className="w-full border rounded px-2 py-1"
+                value={refundAmount}
+                onChange={(e) => setRefundAmount(e.target.value)}
+                placeholder="e.g., 1000"
+              />
             </div>
-            <textarea
-              rows={5}
-              className="w-full border rounded px-2 py-1 text-sm"
-              value={editAdditional}
-              onChange={(e) => setEditAdditional(e.target.value)}
-              placeholder="Enter additional notes..."
-            />
+            <div>
+              <label className="text-sm">Reason (optional)</label>
+              <textarea
+                rows={3}
+                className="w-full border rounded px-2 py-1"
+                value={refundReason}
+                onChange={(e) => setRefundReason(e.target.value)}
+                placeholder="Enter reason for refund"
+              />
+            </div>
           </div>
           <DialogFooter>
             <DialogClose asChild>
@@ -1194,17 +1085,46 @@ function PaymentLogsPanel({
             </DialogClose>
             <button
               type="button"
-              className="px-4 py-2 rounded bg-litratoblack text-white text-sm"
-              onClick={saveEdit}
+              className="px-4 py-2 rounded bg-litratoblack text-white text-sm disabled:opacity-60"
+              disabled={
+                !refundPaymentId || !Number(refundAmount) || refundSubmitting
+              }
+              onClick={async () => {
+                if (!refundPaymentId) return
+                const amt = Number(refundAmount)
+                if (!Number.isFinite(amt) || amt <= 0) {
+                  alert('Enter a valid refund amount')
+                  return
+                }
+                setRefundSubmitting(true)
+                try {
+                  await createAdminRefund(refundPaymentId, {
+                    amount: amt,
+                    reason: refundReason.trim() || undefined,
+                  })
+                  setRefundOpen(false)
+                  setRefundPaymentId(null)
+                  setRefundAmount('')
+                  setRefundReason('')
+                  await loadLogs()
+                } catch (e) {
+                  console.error('Create refund failed:', e)
+                  alert('Failed to create refund')
+                } finally {
+                  setRefundSubmitting(false)
+                }
+              }}
             >
-              Save
+              {refundSubmitting ? 'Submitting…' : 'Create Refund'}
             </button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </section>
+    </div>
   )
 }
+
+// (Old PaymentLogsPanel removed)
 
 function TabButton({
   active,

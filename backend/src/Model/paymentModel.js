@@ -13,7 +13,7 @@ async function initPaymentsTable() {
       payment_method VARCHAR(50) NOT NULL,
       proof_image_url TEXT,
       reference_no VARCHAR(100),
-      payment_status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (payment_status IN ('pending','completed','failed','refunded')),
+  payment_status VARCHAR(20) NOT NULL DEFAULT 'Pending' CHECK (payment_status IN ('Pending','Partially Paid','Failed','Refunded','Fully Paid')),
       notes TEXT,
       verified_at TIMESTAMP,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -34,6 +34,41 @@ async function initPaymentsTable() {
       `ALTER TABLE payments ADD COLUMN IF NOT EXISTS last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP`
     )
     .catch(() => {})
+
+  // Ensure CHECK constraint and default include the latest allowed statuses
+  try {
+    // Drop any existing check constraints that reference payment_status
+    const res = await pool.query(
+      `SELECT c.conname
+       FROM pg_constraint c
+       JOIN pg_class t ON c.conrelid = t.oid
+       JOIN pg_namespace n ON n.oid = t.relnamespace
+       WHERE t.relname = 'payments'
+         AND c.contype = 'c'
+         AND pg_get_constraintdef(c.oid) ILIKE '%payment_status%'`
+    )
+    for (const row of res.rows) {
+      const name = row.conname
+      if (name) {
+        await pool
+          .query(`ALTER TABLE payments DROP CONSTRAINT IF EXISTS "${name}"`)
+          .catch(() => {})
+      }
+    }
+    // Set default explicitly and add our normalized named constraint
+    await pool
+      .query(
+        `ALTER TABLE payments ALTER COLUMN payment_status SET DEFAULT 'Pending'`
+      )
+      .catch(() => {})
+    await pool
+      .query(
+        `ALTER TABLE payments ADD CONSTRAINT payments_payment_status_check CHECK (payment_status IN ('Pending','Partially Paid','Failed','Refunded','Fully Paid'))`
+      )
+      .catch(() => {})
+  } catch (e) {
+    // ignore
+  }
 }
 
 //create payment function
@@ -47,7 +82,7 @@ async function createPayment({
   qr_image_url = null,
   proof_image_url = null,
   reference_no = null,
-  payment_status = 'pending',
+  payment_status = 'Pending',
   notes = null,
   verified_at = null,
 }) {

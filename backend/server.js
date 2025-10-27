@@ -20,6 +20,7 @@ const {
 } = require('./src/Model/confirmedBookingRequestModel')
 const { initPaymentsTable } = require('./src/Model/paymentModel')
 const { initPaymentLogsTable } = require('./src/Model/paymentLogsModel')
+const { initPaymentRefundsTable } = require('./src/Model/paymentRefundModel')
 // ADD: ensure inventory/packages/status log tables are initialized on startup
 const { initInventoryTable } = require('./src/Model/inventoryModel')
 const { initPackagesTable } = require('./src/Model/packageModel')
@@ -88,6 +89,7 @@ initUserTable()
   .then(() => initInventoryStatusLogTable())
   .then(() => initPaymentsTable())
   .then(() => initPaymentLogsTable())
+  .then(() => initPaymentRefundsTable())
   .then(() => {
     app.listen(PORT, () => console.log(`Server running on port ${PORT}`))
   })

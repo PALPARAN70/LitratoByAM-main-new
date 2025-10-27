@@ -117,6 +117,40 @@ export async function createCustomerPayment(
   return data.payment as Payment
 }
 
+export type CustomerBookingBalance = {
+  booking_id: number
+  amount_due: number
+  total_paid: number
+  balance: number
+  computed_booking_payment_status?: string
+}
+
+export async function getMyBookingBalance(
+  bookingId: number
+): Promise<CustomerBookingBalance> {
+  const res = await fetch(
+    `${API_BASE}/customer/bookings/${bookingId}/balance`,
+    {
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeadersInit(),
+      },
+      cache: 'no-store',
+    }
+  )
+  if (!res.ok) throw new Error(await safeText(res, 'Failed to load balance'))
+  const data = await res.json().catch(() => ({}))
+  return {
+    booking_id: Number(data.booking_id || bookingId),
+    amount_due: Number(data.amount_due || 0),
+    total_paid: Number(data.total_paid || 0),
+    balance: Number(data.balance || 0),
+    computed_booking_payment_status: String(
+      data.computed_booking_payment_status || ''
+    ),
+  }
+}
+
 // --- small utility: safe text extraction ---
 async function safeText(res: Response, fallback: string) {
   try {

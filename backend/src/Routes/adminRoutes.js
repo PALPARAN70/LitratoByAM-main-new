@@ -98,6 +98,14 @@ router.get(
   adminPaymentsController.generateSalesReport
 )
 
+// Booking balance (admin)
+router.get(
+  '/bookings/:id/balance',
+  authMiddleware,
+  roleMiddleware('admin'),
+  adminPaymentsController.getBookingBalance
+)
+
 // Payment logs
 router.get(
   '/payment-logs',
@@ -120,6 +128,14 @@ router.get(
   authMiddleware,
   roleMiddleware('admin'),
   adminPaymentsController.getPayment
+)
+
+// Create a refund for a payment
+router.post(
+  '/payments/:id/refunds',
+  authMiddleware,
+  roleMiddleware('admin'),
+  adminPaymentsController.createRefund
 )
 
 // Update payment (status, notes, verified_at, qr_image_url, proof_image_url, reference_no)

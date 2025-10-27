@@ -16,6 +16,10 @@ const {
   recalcAndPersistPaymentStatus,
   getPaymentSummary,
 } = require('../../Model/confirmedBookingRequestModel')
+const {
+  createRefund,
+  getTotalRefundedForPayment,
+} = require('../../Model/paymentRefundModel')
 
 // List payments with optional filters: status, user_id, booking_id
 async function listPaymentsHandler(req, res) {
@@ -267,6 +271,21 @@ async function createPaymentHandler(req, res) {
       amount = Number(sum.amountDue || amount)
     } catch {}
 
+    // Prevent overpayment: compute remaining balance before creating
+    let remaining = null
+    try {
+      const sum = await getPaymentSummary(bId)
+      remaining = Math.max(
+        0,
+        Number(sum.amountDue || 0) - Number(sum.paidTotal || 0)
+      )
+    } catch {}
+    if (remaining != null && paid > remaining) {
+      return res.status(400).json({
+        error: `Payment exceeds remaining balance (${remaining.toFixed(2)})`,
+      })
+    }
+
     const row = await createPayment({
       booking_id: bId,
       user_id: userId,
@@ -275,7 +294,7 @@ async function createPaymentHandler(req, res) {
       payment_method: String(payment_method || 'cash'),
       proof_image_url: null,
       reference_no: reference_no ? String(reference_no) : null,
-      payment_status: String(payment_status || 'completed'),
+      payment_status: String(payment_status || 'Pending'),
       notes: notes == null ? null : String(notes),
       verified_at: verified ? new Date() : null,
     })
@@ -324,4 +343,125 @@ module.exports = {
   updatePaymentLog: updatePaymentLogHandler,
   generateSalesReport: generateSalesReportHandler,
   createPayment: createPaymentHandler,
+  // Added dynamically below
 }
+
+// --- New: Admin booking balance endpoint ---
+async function getBookingBalanceHandler(req, res) {
+  try {
+    const id = Number(req.params.id)
+    if (!Number.isFinite(id) || id <= 0) {
+      return res.status(400).json({ error: 'Invalid booking id' })
+    }
+    const sum = await getPaymentSummary(id)
+    const balance = Math.max(
+      0,
+      Number(sum.amountDue || 0) - Number(sum.paidTotal || 0)
+    )
+    return res.json({
+      booking_id: id,
+      amount_due: Number(sum.amountDue || 0),
+      total_paid: Number(sum.paidTotal || 0),
+      balance,
+      computed_booking_payment_status: sum.computedStatus,
+    })
+  } catch (e) {
+    console.error('admin getBookingBalance error:', e)
+    res.status(500).json({ error: 'Failed to compute balance' })
+  }
+}
+
+module.exports.getBookingBalance = getBookingBalanceHandler
+
+// --- New: Admin create refund for a payment ---
+async function createRefundHandler(req, res) {
+  try {
+    const paymentId = Number(req.params.id)
+    const { amount, reason = null } = req.body || {}
+    if (!Number.isFinite(paymentId) || paymentId <= 0)
+      return res.status(400).json({ error: 'Invalid payment id' })
+    const amt = Number(amount)
+    if (!Number.isFinite(amt) || amt <= 0)
+      return res.status(400).json({ error: 'amount must be > 0' })
+
+    const p = await findPaymentById(paymentId)
+    if (!p) return res.status(404).json({ error: 'Payment not found' })
+    if (!p.verified_at) {
+      return res
+        .status(400)
+        .json({ error: 'Only verified payments can be refunded' })
+    }
+    // Only refund payments considered successful
+    const okStatus =
+      String(p.payment_status).toLowerCase() === 'completed' ||
+      ['Partially Paid', 'Fully Paid'].includes(String(p.payment_status))
+    if (!okStatus) {
+      return res
+        .status(400)
+        .json({ error: 'Only successful payments can be refunded' })
+    }
+
+    const alreadyRefunded = await getTotalRefundedForPayment(paymentId)
+    const refundable = Math.max(0, Number(p.amount_paid || 0) - alreadyRefunded)
+    if (amt > refundable) {
+      return res
+        .status(400)
+        .json({
+          error: `Refund exceeds refundable amount (${refundable.toFixed(2)})`,
+        })
+    }
+
+    const refund = await createRefund({
+      payment_id: paymentId,
+      amount: amt,
+      reason: reason ? String(reason) : null,
+      created_by: Number(req.user?.id),
+    })
+
+    // If fully refunded, optionally mark payment as Refunded
+    const newRefundedTotal = alreadyRefunded + amt
+    if (newRefundedTotal >= Number(p.amount_paid || 0)) {
+      try {
+        const updated = await updatePayment(paymentId, {
+          payment_status: 'Refunded',
+        })
+        await createPaymentLog({
+          payment_id: paymentId,
+          previous_status: String(p.payment_status || ''),
+          new_status: 'Refunded',
+          performed_by: 'admin',
+          user_id: req.user.id,
+          notes: reason || null,
+          action: 'refund-full',
+        })
+        // Recalc booking status after refund
+        await recalcBookingPaymentStatus(updated.booking_id)
+      } catch (e) {
+        console.warn('update payment after full refund failed:', e?.message)
+      }
+    } else {
+      // Log partial refund
+      try {
+        await createPaymentLog({
+          payment_id: paymentId,
+          previous_status: String(p.payment_status || ''),
+          new_status: String(p.payment_status || ''),
+          performed_by: 'admin',
+          user_id: req.user.id,
+          notes: reason || null,
+          action: 'refund-partial',
+        })
+        await recalcBookingPaymentStatus(p.booking_id)
+      } catch (e) {
+        console.warn('log/refcalc after partial refund failed:', e?.message)
+      }
+    }
+
+    return res.status(201).json({ refund })
+  } catch (err) {
+    console.error('admin createRefund error:', err)
+    res.status(500).json({ error: 'Failed to create refund' })
+  }
+}
+
+module.exports.createRefund = createRefundHandler
