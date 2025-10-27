@@ -71,10 +71,12 @@ async function createBooking(req, res) {
       })
     }
 
-    // Conflict check (same date & time with accepted only)
+    // Conflict check (same date & time with accepted only), scoped to same package
     const conflicts = await checkBookingConflictsModel({
       event_date,
       event_time,
+      event_end_time,
+      packageid,
     })
     if (conflicts.length) {
       return res.status(409).json({ message: 'Timeslot not available' })
@@ -234,10 +236,17 @@ async function editBookingRequest(req, res) {
         try {
           const proposedDate = newDate || currentDate
           const proposedTime = normalizeTime(newTime || currentTime)
+          const proposedEnd = normalizeTime(newEnd || currentEnd)
+          const proposedPackageId =
+            typeof packageid === 'number' && packageid > 0
+              ? packageid
+              : existing.packageid
           if (proposedDate && proposedTime) {
             const conflicts = await checkBookingConflictsModel({
               event_date: proposedDate,
               event_time: proposedTime,
+              event_end_time: proposedEnd || null,
+              packageid: proposedPackageId,
             })
             if (conflicts.length) {
               return res.status(409).json({ message: 'Timeslot not available' })

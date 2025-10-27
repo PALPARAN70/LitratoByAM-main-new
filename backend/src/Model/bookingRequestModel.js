@@ -330,21 +330,118 @@ async function getBookingRequestsByDateRange(startDate, endDate) {
   return result.rows
 }
 
-// Check if a date/time slot is already taken (accepted only)
+// Check if a date/time slot conflicts with accepted bookings, including setup/cleanup buffers
+// Adds a -/+ buffer (hours) around both the new request and existing accepted bookings.
+// Defaults to 2 hours before and after.
+// Note: If a package id is provided, conflicts are checked only against bookings with the SAME package (photobooth).
 async function checkBookingConflicts(params) {
   const event_date =
     params.event_date ?? params.eventdate ?? params.eventDate ?? null
   const event_time =
     params.event_time ?? params.eventtime ?? params.eventTime ?? null
+  const event_end_time = params.event_end_time ?? params.eventEndTime ?? null
+  const bufferHours = Number(params.bufferHours ?? 2)
+  // Optional: limit conflicts to the same package if provided
+  let newPackageId =
+    params.packageid ?? params.packageId ?? params.package_id ?? null
+  newPackageId = Number(newPackageId)
+  if (!Number.isFinite(newPackageId) || newPackageId <= 0) newPackageId = null
+
+  if (!event_date || !event_time) return []
+
+  // Overlap if NOT (existing_end_with_buffer <= new_start_with_buffer OR existing_start_with_buffer >= new_end_with_buffer)
+  // For rows missing event_end_time, assume a minimum 2-hour duration from start.
   const q = `
-    SELECT requestid
-    FROM booking_requests
-    WHERE event_date = $1
-      AND event_time = $2
-      AND status IN ('accepted')
+    WITH new_window AS (
+      SELECT
+        ($1::date + $2::time) - make_interval(hours => $4) AS new_start,
+        ($1::date + COALESCE($3::time, ($2::time + interval '2 hours'))) + make_interval(hours => $4) AS new_end
+    )
+    SELECT br.requestid
+    FROM booking_requests br
+    CROSS JOIN new_window nw
+    WHERE br.status IN ('accepted')
+      AND br.packageid = COALESCE($5::int, br.packageid)
+      AND NOT (
+        -- existing end (with +buffer) is before or equal new start
+        ((br.event_date::timestamp + COALESCE(br.event_end_time, (br.event_time + interval '2 hours'))) + make_interval(hours => $4)) <= nw.new_start
+        OR
+        -- existing start (with -buffer) is after or equal new end
+        ((br.event_date::timestamp + br.event_time) - make_interval(hours => $4)) >= nw.new_end
+      )
     LIMIT 1
   `
-  const { rows } = await pool.query(q, [event_date, event_time])
+  const { rows } = await pool.query(q, [
+    event_date,
+    event_time,
+    event_end_time,
+    bufferHours,
+    newPackageId,
+  ])
+  return rows // empty = no conflict
+}
+
+// Check if extending a confirmed booking to a specific total extension hours would conflict
+// Considers confirmed_bookings overrides and extension deltas, with ±bufferHours on both sides.
+// Only compares against bookings using the SAME package id as the target confirmed booking.
+async function checkExtensionConflictForConfirmedBooking(
+  bookingId,
+  nextExtensionHours,
+  bufferHours = 2
+) {
+  const id = Number(bookingId)
+  const nextExt = Math.max(0, Number(nextExtensionHours) || 0)
+  const buf = Math.max(0, Number(bufferHours) || 0)
+  if (!Number.isFinite(id)) return []
+
+  const q = `
+    WITH target AS (
+      SELECT 
+        cb.id AS booking_id,
+        br.requestid,
+        br.packageid,
+        br.event_date,
+        br.event_time,
+        COALESCE(cb.event_end_time, br.event_end_time) AS base_end_time,
+        COALESCE(cb.extension_duration, br.extension_duration, 0) AS curr_ext
+      FROM confirmed_bookings cb
+      JOIN booking_requests br ON br.requestid = cb.requestid
+      WHERE cb.id = $1
+    ),
+    new_window AS (
+      SELECT
+        (t.event_date::timestamp + t.event_time) - make_interval(hours => $3) AS new_start,
+        (
+          (t.event_date::timestamp + COALESCE(t.base_end_time, (t.event_time + interval '2 hours')))
+          + make_interval(hours => CASE WHEN t.base_end_time IS NOT NULL THEN GREATEST(0, $2::int - t.curr_ext) ELSE $2::int END)
+        ) + make_interval(hours => $3) AS new_end,
+        t.requestid AS target_requestid
+        t.packageid AS target_packageid
+      FROM target t
+    ),
+    existing AS (
+      SELECT
+        br.requestid,
+        (br.event_date::timestamp + br.event_time) - make_interval(hours => $3) AS ex_start,
+        (
+          (br.event_date::timestamp + COALESCE(COALESCE(cb.event_end_time, br.event_end_time), (br.event_time + interval '2 hours')))
+          + make_interval(hours => CASE WHEN COALESCE(cb.event_end_time, br.event_end_time) IS NOT NULL THEN GREATEST(0, COALESCE(cb.extension_duration, br.extension_duration, 0) - COALESCE(br.extension_duration, 0)) ELSE COALESCE(cb.extension_duration, br.extension_duration, 0) END)
+        ) + make_interval(hours => $3) AS ex_end,
+        TO_CHAR(br.event_date, 'YYYY-MM-DD') AS event_date,
+        TO_CHAR(br.event_time, 'HH24:MI') AS event_time
+      FROM booking_requests br
+      LEFT JOIN confirmed_bookings cb ON cb.requestid = br.requestid
+      CROSS JOIN (SELECT packageid FROM target) t
+      WHERE br.status = 'accepted' AND br.packageid = t.packageid
+    )
+    SELECT e.requestid, e.event_date, e.event_time
+    FROM new_window nw
+    JOIN existing e ON e.requestid <> nw.target_requestid
+    WHERE NOT (e.ex_end <= nw.new_start OR e.ex_start >= nw.new_end)
+    LIMIT 1
+  `
+
+  const { rows } = await pool.query(q, [id, nextExt, buf])
   return rows // empty = no conflict
 }
 
@@ -362,4 +459,5 @@ module.exports = {
   rejectBookingRequest,
   getBookingRequestsByDateRange,
   checkBookingConflicts,
+  checkExtensionConflictForConfirmedBooking,
 }

@@ -235,6 +235,7 @@ function BookingsPanel({
   const [submitting, setSubmitting] = useState<null | 'approve' | 'reject'>(
     null
   )
+  const [approveOpen, setApproveOpen] = useState(false)
   // When a selection arrives, prefill the form
   useEffect(() => {
     if (!selected) {
@@ -376,6 +377,38 @@ function BookingsPanel({
             <button
               className="bg-green-500 text-white px-4 py-2 rounded disabled:opacity-50"
               disabled={submitting !== null}
+              onClick={() => setApproveOpen(true)}
+            >
+              {submitting === 'approve' ? 'Approving…' : 'Approve'}
+            </button>
+          </span>
+        </div>
+      </div>
+
+      {/* Approve confirmation modal */}
+      <Dialog open={approveOpen} onOpenChange={setApproveOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Approve this booking?</DialogTitle>
+            <DialogDescription>
+              This will accept the booking and automatically reject other
+              pending requests with the same date, time, and package. Continue?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <DialogClose asChild>
+              <button
+                type="button"
+                className="px-4 py-2 rounded border border-gray-300 hover:bg-gray-100"
+                disabled={submitting === 'approve'}
+              >
+                Cancel
+              </button>
+            </DialogClose>
+            <button
+              type="button"
+              className="px-4 py-2 rounded bg-green-600 text-white hover:bg-green-700 disabled:opacity-50"
+              disabled={submitting === 'approve'}
               onClick={async () => {
                 if (!selected?.date) return
                 try {
@@ -384,6 +417,7 @@ function BookingsPanel({
                   if (!requestid) throw new Error('Missing request id')
                   await approveBookingRequest(requestid)
                   toast.success('Booking approved and confirmed')
+                  setApproveOpen(false)
                   window.location.reload()
                 } catch (e: unknown) {
                   const msg =
@@ -396,9 +430,9 @@ function BookingsPanel({
             >
               {submitting === 'approve' ? 'Approving…' : 'Approve'}
             </button>
-          </span>
-        </div>
-      </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
@@ -441,6 +475,20 @@ function MasterListPanel({
   const [itemsOpen, setItemsOpen] = useState(false)
   const [itemsTarget, setItemsTarget] = useState<BookingRow | null>(null)
 
+  // Extend hours dialog state
+  const [extendOpen, setExtendOpen] = useState(false)
+  const [extendTarget, setExtendTarget] = useState<{
+    row: BookingRow
+    cid: number
+  } | null>(null)
+  const [extendHours, setExtendHours] = useState<string>('1')
+  const [extendBusy, setExtendBusy] = useState(false)
+  const [extendConflict, setExtendConflict] = useState<null | {
+    requestid: number
+    event_date: string
+    event_time: string
+  }>(null)
+
   // ADD: contract upload helpers
   const uploadInputRef = useRef<HTMLInputElement | null>(null)
   const [uploadTarget, setUploadTarget] = useState<BookingRow | null>(null)
@@ -474,16 +522,14 @@ function MasterListPanel({
       const data: { contract?: { url?: string } } & {
         url?: string
         contract_url?: string
-      } = await res
-        .json()
-        .catch(
-          () =>
-            ({} as {
-              contract?: { url?: string }
-              url?: string
-              contract_url?: string
-            })
-        )
+      } = await res.json().catch(
+        () =>
+          ({} as {
+            contract?: { url?: string }
+            url?: string
+            contract_url?: string
+          })
+      )
       const url: string | undefined =
         data?.contract?.url || data?.url || data?.contract_url
       if (!url) {
@@ -832,6 +878,23 @@ function MasterListPanel({
     } catch {
       setStaffList([])
       setSelectedStaff(new Set())
+    }
+  }
+
+  // Open extend modal for approved/confirmed bookings
+  const openExtend = async (row: BookingRow) => {
+    try {
+      const cid = await ensureConfirmedId(row)
+      if (!cid) {
+        toast.error('Confirmed booking not found for this row')
+        return
+      }
+      setExtendTarget({ row, cid })
+      setExtendHours('1')
+      setExtendConflict(null)
+      setExtendOpen(true)
+    } catch (e) {
+      toast.error('Unable to open extension dialog')
     }
   }
 
@@ -1312,6 +1375,18 @@ function MasterListPanel({
                             >
                               Assign Staff
                             </button>
+                            <button
+                              type="button"
+                              className={`text-left px-2 py-1.5 rounded text-sm hover:bg-gray-100 ${
+                                row.status === 'approved'
+                                  ? ''
+                                  : 'opacity-50 cursor-not-allowed'
+                              }`}
+                              disabled={row.status !== 'approved'}
+                              onClick={() => openExtend(row)}
+                            >
+                              Extend hours…
+                            </button>
                           </div>
                         </PopoverContent>
                       </Popover>
@@ -1419,6 +1494,132 @@ function MasterListPanel({
               }}
             >
               {busy === 'cancel' ? 'Cancelling…' : 'Yes, cancel'}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Extend hours modal */}
+      <Dialog
+        open={extendOpen}
+        onOpenChange={(o) => {
+          if (!o) {
+            setExtendOpen(false)
+            setExtendTarget(null)
+            setExtendConflict(null)
+            setExtendBusy(false)
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Extend event hours</DialogTitle>
+            <DialogDescription>
+              Add hours to this confirmed booking. Conflicts include
+              setup/cleanup buffers.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <label className="block text-sm">
+              Add hours
+              <input
+                type="number"
+                min={0}
+                step={1}
+                value={extendHours}
+                onChange={(e) => setExtendHours(e.target.value)}
+                className="mt-1 w-full bg-gray-200 rounded-md px-3 py-2 text-sm focus:outline-none"
+              />
+            </label>
+            {extendConflict ? (
+              <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded p-2">
+                This extension overlaps another accepted booking on{' '}
+                {extendConflict.event_date} at {extendConflict.event_time} (with
+                buffer).
+              </div>
+            ) : null}
+          </div>
+          <DialogFooter>
+            <button
+              type="button"
+              className="px-4 py-2 rounded border text-sm"
+              onClick={() => {
+                setExtendOpen(false)
+                setExtendTarget(null)
+                setExtendConflict(null)
+              }}
+              disabled={extendBusy}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="px-4 py-2 rounded bg-litratoblack text-white text-sm disabled:opacity-50"
+              onClick={async () => {
+                if (!extendTarget) return
+                const add = Math.max(0, Number(extendHours) || 0)
+                if (!Number.isFinite(add)) return
+                setExtendBusy(true)
+                try {
+                  // Lazy import to avoid top-level coupling
+                  const {
+                    preflightAdminExtensionConflicts,
+                    setAdminExtensionDuration,
+                  } = await import(
+                    '../../../../schemas/functions/ConfirmedBookings/admin'
+                  )
+                  if (extendConflict) {
+                    await setAdminExtensionDuration(extendTarget.cid, {
+                      add_hours: add,
+                      force: true,
+                    })
+                  } else {
+                    const { conflicts } =
+                      await preflightAdminExtensionConflicts(extendTarget.cid, {
+                        add_hours: add,
+                        bufferHours: 2,
+                      })
+                    if (Array.isArray(conflicts) && conflicts.length) {
+                      setExtendConflict(conflicts[0])
+                      return
+                    }
+                    await setAdminExtensionDuration(extendTarget.cid, {
+                      add_hours: add,
+                    })
+                  }
+                  // Optimistically update the row in-place
+                  setRows((prev) =>
+                    prev.map((r) => {
+                      const same = r.requestid
+                        ? r.requestid === extendTarget.row.requestid
+                        : r.id === extendTarget.row.id
+                      if (!same) return r
+                      const base = Number(r.baseTotal || 0)
+                      const currExt = Math.max(
+                        0,
+                        Number(r.extension_duration || 0)
+                      )
+                      const nextExt = currExt + add
+                      return {
+                        ...r,
+                        extension_duration: nextExt,
+                        amountDue: base + nextExt * 2000,
+                      }
+                    })
+                  )
+                  setExtendOpen(false)
+                } catch (e) {
+                  console.error('Extension failed:', e)
+                } finally {
+                  setExtendBusy(false)
+                }
+              }}
+            >
+              {extendConflict
+                ? 'Proceed anyway'
+                : extendBusy
+                ? 'Saving…'
+                : 'Save'}
             </button>
           </DialogFooter>
         </DialogContent>

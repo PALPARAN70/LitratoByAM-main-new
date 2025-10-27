@@ -51,16 +51,17 @@ async function acceptBookingRequest(req, res) {
     // Atomic status update: only if currently pending AND no accepted booking exists for same timeslot
     const { rows: updatedRows } = await pool.query(
       `UPDATE booking_requests br
-					 SET status = 'accepted', last_updated = CURRENT_TIMESTAMP 
-				 WHERE br.requestid = $1 
-					 AND br.status = 'pending'
-					 AND NOT EXISTS (
-						 SELECT 1 FROM booking_requests bx
-							WHERE bx.event_date = br.event_date 
-								AND bx.event_time = br.event_time 
-								AND bx.status = 'accepted'
-					 )
-				 RETURNING *`,
+         SET status = 'accepted', last_updated = CURRENT_TIMESTAMP 
+       WHERE br.requestid = $1 
+         AND br.status = 'pending'
+         AND NOT EXISTS (
+           SELECT 1 FROM booking_requests bx
+            WHERE bx.event_date = br.event_date 
+              AND bx.event_time = br.event_time 
+              AND bx.status = 'accepted'
+              AND bx.packageid = br.packageid
+         )
+       RETURNING *`,
       [requestid]
     )
     if (!updatedRows[0]) {
@@ -73,8 +74,9 @@ async function acceptBookingRequest(req, res) {
             WHERE bx.event_date = $1
               AND bx.event_time = $2
               AND bx.status = 'accepted'
+              AND bx.packageid = $3
             LIMIT 1`,
-          [existing.event_date, existing.event_time]
+          [existing.event_date, existing.event_time, existing.packageid]
         )
         if (conflictCheck?.rowCount > 0) {
           return res.status(409).json({
@@ -118,6 +120,61 @@ async function acceptBookingRequest(req, res) {
 			 <p>Package: ${existing.package_name || existing.packageid}</p>
 			 <p>We will follow up with more details soon.</p>`
     )
+
+    // Auto-reject other pending requests with the same date, time, and package
+    try {
+      const reason =
+        'Automatically rejected: another booking for this package and schedule was accepted.'
+      const { rows: affected } = await pool.query(
+        `UPDATE booking_requests br
+           SET status = 'rejected',
+               notes = CASE
+                         WHEN br.notes IS NULL OR br.notes = '' THEN $5
+                         ELSE br.notes || E'\n' || $5
+                       END,
+               last_updated = CURRENT_TIMESTAMP
+         FROM users u
+         WHERE br.userid = u.id
+           AND br.status = 'pending'
+           AND br.event_date = $1
+           AND br.event_time = $2
+           AND br.packageid = $3
+           AND br.requestid <> $4
+         RETURNING br.requestid, u.username, u.firstname, u.lastname`,
+        [
+          existing.event_date,
+          existing.event_time,
+          existing.packageid,
+          requestid,
+          reason,
+        ]
+      )
+      if (Array.isArray(affected) && affected.length) {
+        for (const row of affected) {
+          const to = row.username
+          if (!to) continue
+          const name = [row.firstname, row.lastname]
+            .filter(Boolean)
+            .join(' ')
+            .trim()
+          const html = `<p>Hi ${name || 'Customer'},</p>
+            <p>Your pending booking request at the same date and time for this package has been <b>rejected</b> because another request was accepted.</p>
+            <p>You may submit a new request for a different time slot or package.</p>
+            <p>— Litrato Team</p>`
+          try {
+            await safeEmail(
+              to,
+              'Booking request rejected (schedule conflict)',
+              html
+            )
+          } catch (e) {
+            // best-effort
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('auto-reject pendings failed:', e?.message)
+    }
 
     return res.json({
       message: 'Booking request accepted',
