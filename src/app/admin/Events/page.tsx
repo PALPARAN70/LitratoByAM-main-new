@@ -32,6 +32,8 @@ import { Ellipsis } from 'lucide-react'
 import {
   fetchAdminConfirmedBookings,
   updateAdminBookingStatus,
+  preflightAdminExtensionConflicts,
+  setAdminExtensionDuration,
 } from '../../../../schemas/functions/ConfirmedBookings/admin'
 import type { AdminBookingStatus } from '../../../../schemas/functions/ConfirmedBookings/admin'
 
@@ -86,6 +88,16 @@ const paymentBadgeClass = (p: PaymentStatus) => {
 export default function AdminEventsPage() {
   // Live data derived from admin confirmed bookings
   const [rows, setRows] = useState<EventLogRow[]>([])
+  // UI state for extension
+  const [extendOpen, setExtendOpen] = useState(false)
+  const [extendTargetId, setExtendTargetId] = useState<string | null>(null)
+  const [extendHours, setExtendHours] = useState<string>('1')
+  const [extendBusy, setExtendBusy] = useState(false)
+  const [extendConflict, setExtendConflict] = useState<null | {
+    requestid: number
+    event_date: string
+    event_time: string
+  }>(null)
   // removed unused loading/error state
 
   const mapBookingStatus = (s?: string): EventStatus => {
@@ -358,6 +370,7 @@ export default function AdminEventsPage() {
                     'Event Status',
                     'Items',
                     'Payment',
+                    'Actions',
                   ].map((title, i, arr) => (
                     <th
                       key={title}
@@ -375,7 +388,7 @@ export default function AdminEventsPage() {
                   <tr className="text-left bg-gray-50">
                     <td
                       className="px-3 sm:px-4 py-6 text-center text-sm"
-                      colSpan={7}
+                      colSpan={8}
                     >
                       No events found
                     </td>
@@ -488,6 +501,19 @@ export default function AdminEventsPage() {
                         >
                           {paymentLabel(row.payment)}
                         </span>
+                      </td>
+                      <td className="px-3 sm:px-4 py-2 whitespace-nowrap">
+                        <button
+                          className="px-2 py-1.5 rounded border text-sm"
+                          onClick={() => {
+                            setExtendTargetId(row.id)
+                            setExtendHours('1')
+                            setExtendConflict(null)
+                            setExtendOpen(true)
+                          }}
+                        >
+                          Extend hours…
+                        </button>
                       </td>
                     </tr>
                   ))
@@ -603,6 +629,153 @@ export default function AdminEventsPage() {
               }}
             >
               Close
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Extend hours modal */}
+      <Dialog
+        open={extendOpen}
+        onOpenChange={(o) => {
+          if (!o) {
+            setExtendOpen(false)
+            setExtendTargetId(null)
+            setExtendConflict(null)
+            setExtendBusy(false)
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Extend event hours</DialogTitle>
+            <DialogDescription>
+              Add hours to this confirmed booking. Conflicts include
+              setup/cleanup buffers.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <label className="block text-sm">
+              Add hours
+              <input
+                type="number"
+                min={0}
+                step={1}
+                value={extendHours}
+                onChange={(e) => setExtendHours(e.target.value)}
+                className="mt-1 w-full bg-gray-200 rounded-md px-3 py-2 text-sm focus:outline-none"
+              />
+            </label>
+            {extendConflict ? (
+              <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded p-2">
+                This extension overlaps another accepted booking on{' '}
+                {extendConflict.event_date} at {extendConflict.event_time} (with
+                buffer).
+              </div>
+            ) : null}
+          </div>
+          <DialogFooter>
+            <button
+              type="button"
+              className="px-4 py-2 rounded border text-sm"
+              onClick={() => {
+                setExtendOpen(false)
+                setExtendTargetId(null)
+                setExtendConflict(null)
+              }}
+              disabled={extendBusy}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="px-4 py-2 rounded bg-black text-white text-sm disabled:opacity-50"
+              onClick={async () => {
+                if (!extendTargetId) return
+                const add = Math.max(0, Number(extendHours) || 0)
+                if (!Number.isFinite(add)) return
+                setExtendBusy(true)
+                try {
+                  if (extendConflict) {
+                    // Proceed with force
+                    await setAdminExtensionDuration(extendTargetId, {
+                      add_hours: add,
+                      force: true,
+                    })
+                  } else {
+                    // Preflight
+                    const { conflicts } =
+                      await preflightAdminExtensionConflicts(extendTargetId, {
+                        add_hours: add,
+                        bufferHours: 2,
+                      })
+                    if (Array.isArray(conflicts) && conflicts.length) {
+                      setExtendConflict(conflicts[0])
+                      // Ask to proceed: click again to force
+                      return
+                    }
+                    await setAdminExtensionDuration(extendTargetId, {
+                      add_hours: add,
+                    })
+                  }
+                  // refresh rows
+                  const bookings = await fetchAdminConfirmedBookings()
+                  // keep existing mapping logic
+                  // Filter to allowed statuses as above
+                  const allowed = new Set([
+                    'scheduled',
+                    'in_progress',
+                    'completed',
+                  ])
+                  const mapped: EventLogRow[] = bookings
+                    .filter((b: any) =>
+                      allowed.has(String(b?.booking_status || '').toLowerCase())
+                    )
+                    .map((b: any) => {
+                      const clientName =
+                        [b?.firstname, b?.lastname]
+                          .filter(Boolean)
+                          .join(' ')
+                          .trim() || String(b?.username || '')
+                      const contactInfo = String(b?.contact_info || '')
+                      const phoneMatch =
+                        contactInfo.match(/(\+?\d[\d\s-]{6,}\d)/)
+                      const contactNumber = (phoneMatch?.[1] || '').trim()
+                      return {
+                        id: String(b?.id || b?.confirmed_id || Math.random()),
+                        eventName: String(
+                          b?.event_name || b?.package_name || 'Event'
+                        ),
+                        clientName,
+                        location: String(b?.event_address || ''),
+                        date: String(b?.event_date || ''),
+                        startTime: String(b?.event_time || ''),
+                        endTime: b?.event_end_time
+                          ? String(b.event_end_time).slice(0, 5)
+                          : undefined,
+                        packageName: String(b?.package_name || ''),
+                        contactPerson: clientName,
+                        contactNumber: contactNumber || undefined,
+                        notes: '',
+                        status: mapBookingStatus(b?.booking_status),
+                        payment: mapPaymentStatus(b?.payment_status),
+                        items: { damaged: [], missing: [] },
+                      }
+                    })
+                  setRows(mapped)
+                  setExtendOpen(false)
+                } catch (e) {
+                  console.error('Extension failed:', e)
+                } finally {
+                  setExtendBusy(false)
+                }
+              }}
+            >
+              {extendConflict
+                ? 'Proceed anyway'
+                : extendBusy
+                ? 'Saving…'
+                : 'Save'}
             </button>
           </DialogFooter>
         </DialogContent>

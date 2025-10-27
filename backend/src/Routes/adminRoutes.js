@@ -502,6 +502,22 @@ router.patch(
   adminConfirmedBookingController.setTotalPrice
 )
 
+// Update extension duration (hours) for a confirmed booking
+router.patch(
+  '/confirmed-bookings/:id/extension',
+  authMiddleware,
+  roleMiddleware('admin'),
+  adminConfirmedBookingController.setExtensionDuration
+)
+
+// Preflight conflict check for proposed extension
+router.get(
+  '/confirmed-bookings/:id/extension-conflicts',
+  authMiddleware,
+  roleMiddleware('admin'),
+  adminConfirmedBookingController.checkExtensionConflicts
+)
+
 // Payment summary for a confirmed booking
 router.get(
   '/confirmed-bookings/:id/payment-summary',

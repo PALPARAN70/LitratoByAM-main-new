@@ -2,7 +2,7 @@
 import Image from 'next/image'
 import PromoCard from '../../../../Litratocomponents/Service_Card'
 import Calendar from '../../../../Litratocomponents/LitratoCalendar'
-import Timepicker from '../../../../Litratocomponents/Timepicker'
+// Timepicker removed: end time is auto-calculated from start + package duration + extension
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
@@ -69,7 +69,7 @@ export default function BookingPage() {
     null
   )
   const [prefillPkgName, setPrefillPkgName] = useState<string | null>(null)
-  const [timepickerReady, setTimepickerReady] = useState(false)
+  // Timepicker no longer used; keep simple time inputs with computed end time
   const [editingRequestId, setEditingRequestId] = useState<number | null>(null)
   // Read-only locks for fields populated from a user record (name & contact only)
   const [locks, setLocks] = useState({
@@ -195,6 +195,11 @@ export default function BookingPage() {
             setForm((p) => ({
               ...p,
               package: chosen.package_name as BookingForm['package'],
+              eventEndTime: computeEndTime(
+                p.eventTime,
+                Number((chosen as any)?.duration_hours ?? 2),
+                Number(p.extensionHours)
+              ),
             }))
           } else if (visible.length) {
             // Default to first visible package
@@ -203,6 +208,11 @@ export default function BookingPage() {
             setForm((p) => ({
               ...p,
               package: first.package_name as BookingForm['package'],
+              eventEndTime: computeEndTime(
+                p.eventTime,
+                Number((first as any)?.duration_hours ?? 2),
+                Number(p.extensionHours)
+              ),
             }))
           }
         }
@@ -226,10 +236,8 @@ export default function BookingPage() {
     })()
   }, [selectedPackageId, prefillPkgName])
 
-  // Timepicker readiness after mount (to avoid setState in render warnings)
-  useEffect(() => {
-    setTimepickerReady(true)
-  }, [])
+  // No-op mount effect retained for parity; can be removed if desired
+  useEffect(() => {}, [])
 
   // Helpers
   const setField = <K extends keyof BookingForm>(
@@ -254,6 +262,25 @@ export default function BookingPage() {
         : parsed.error.issues.filter((i) => i.path[0] === key)
       setErrors((e) => ({ ...e, [key]: fieldIssues[0]?.message }))
     }
+  }
+
+  // Auto-calc end time: start + package duration + extension hours
+  const getSelectedPackage = () =>
+    packages.find((p) => p.id === selectedPackageId) ||
+    packages.find((p) => p.package_name === form.package)
+  const computeEndTime = (
+    start: string,
+    baseHours: number,
+    extHours: number
+  ): string => {
+    const [HH, MM] = String(start || '00:00')
+      .split(':')
+      .map((n) => parseInt(n || '0', 10))
+    const base = Math.max(0, Math.floor(baseHours || 0))
+    const ext = Math.max(0, Math.floor(extHours || 0))
+    const outH = (((HH + base + ext) % 24) + 24) % 24
+    const outM = isNaN(MM) ? 0 : MM
+    return `${String(outH).padStart(2, '0')}:${String(outM).padStart(2, '0')}`
   }
 
   // Helper: derive a readable name from an email local-part (e.g., john.doe -> John Doe)
@@ -608,9 +635,17 @@ export default function BookingPage() {
             <select
               className="w-full bg-gray-200 rounded-md px-3 py-2 text-sm focus:outline-none"
               value={String(form.extensionHours)}
-              onChange={(e) =>
-                setField('extensionHours', Number(e.target.value))
-              }
+              onChange={(e) => {
+                const ext = Number(e.target.value)
+                const pkg = getSelectedPackage()
+                const end = computeEndTime(
+                  form.eventTime,
+                  Number((pkg as any)?.duration_hours ?? 2),
+                  ext
+                )
+                setField('extensionHours', ext)
+                setField('eventEndTime', end)
+              }}
             >
               <option value="0">0</option>
               <option value="1">1</option>
@@ -691,6 +726,12 @@ export default function BookingPage() {
                       'package',
                       pkg.package_name as BookingForm['package']
                     )
+                    const end = computeEndTime(
+                      form.eventTime,
+                      Number((pkg as any)?.duration_hours ?? 2),
+                      Number(form.extensionHours)
+                    )
+                    setField('eventEndTime', end)
                   }}
                 />
               ))}
@@ -785,17 +826,37 @@ export default function BookingPage() {
                 )}
               </div>
               <div className="mt-8 ">
-                {timepickerReady && (
-                  <Timepicker
-                    key={`${form.eventTime}-${form.eventEndTime}`}
-                    start={form.eventTime}
-                    end={form.eventEndTime}
-                    onChange={({ start, end }) => {
-                      setField('eventTime', start)
-                      setField('eventEndTime', end)
-                    }}
-                  />
-                )}
+                <div className="flex flex-col gap-3">
+                  <div>
+                    <label className="block text-lg mb-1">Start time:</label>
+                    <input
+                      type="time"
+                      className="w-full bg-gray-200 rounded-md px-3 py-2 text-sm focus:outline-none"
+                      value={form.eventTime}
+                      onChange={(e) => {
+                        const start = e.target.value
+                        setField('eventTime', start)
+                        const pkg = getSelectedPackage()
+                        const end = computeEndTime(
+                          start,
+                          Number((pkg as any)?.duration_hours ?? 2),
+                          Number(form.extensionHours)
+                        )
+                        setField('eventEndTime', end)
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-lg mb-1">End time:</label>
+                    <input
+                      type="time"
+                      className="w-full bg-gray-100 rounded-md px-3 py-2 text-sm"
+                      value={form.eventEndTime}
+                      readOnly
+                      aria-readonly="true"
+                    />
+                  </div>
+                </div>
                 {errors.eventTime && (
                   <p className="text-red-600 text-sm mt-1">
                     {errors.eventTime}

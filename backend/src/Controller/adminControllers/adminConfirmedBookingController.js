@@ -10,6 +10,7 @@ const {
   updateTotalPrice,
   getPaymentSummary: getPaymentSummaryModel,
   recalcAndPersistPaymentStatus: recalcPaymentStatusModel,
+  updateExtensionDuration,
 } = require('../../Model/confirmedBookingRequestModel')
 const { sendEmail } = require('../../Util/sendEmail')
 const {
@@ -149,6 +150,67 @@ async function setTotalPrice(req, res) {
   } catch (err) {
     console.error('confirmed.setTotalPrice error:', err)
     return res.status(500).json({ message: 'Error updating total price' })
+  }
+}
+
+// Set or add extension duration (hours) for a confirmed booking
+async function setExtensionDuration(req, res) {
+  try {
+    const id = parseInt(req.params.id, 10)
+    if (Number.isNaN(id)) return res.status(400).json({ message: 'Invalid id' })
+    const {
+      extension_duration = null,
+      add_hours = null,
+      force = false,
+    } = req.body || {}
+    const bufferHours = Number(req.query.bufferHours ?? 2)
+
+    const full = await getConfirmedBookingById(id)
+    if (!full) return res.status(404).json({ message: 'Not found' })
+
+    const currentExt = Math.max(0, Number(full.extension_duration || 0))
+    let nextExt = currentExt
+    if (extension_duration != null) {
+      nextExt = Math.max(0, Number(extension_duration) || 0)
+    } else if (add_hours != null) {
+      nextExt = Math.max(0, currentExt + (Number(add_hours) || 0))
+    } else {
+      return res
+        .status(400)
+        .json({ message: 'Provide extension_duration or add_hours' })
+    }
+
+    // Preflight conflict unless force
+    try {
+      const {
+        checkExtensionConflictForConfirmedBooking,
+      } = require('../../Model/bookingRequestModel')
+      const conflicts = await checkExtensionConflictForConfirmedBooking(
+        id,
+        nextExt,
+        bufferHours
+      )
+      if (!force && Array.isArray(conflicts) && conflicts.length) {
+        return res.status(409).json({
+          message:
+            'Extending this booking would conflict with another accepted booking (includes setup/cleanup buffer).',
+          conflict: conflicts[0],
+        })
+      }
+    } catch (e) {
+      console.warn('extension preflight failed (proceeding):', e?.message)
+    }
+
+    await updateExtensionDuration(id, nextExt)
+    // Optionally notify user (best-effort) and return updated booking + payment summary
+    const updated = await getConfirmedBookingById(id)
+    const pay = await getPaymentSummaryModel(id)
+    return res.json({ booking: updated, paymentSummary: pay })
+  } catch (err) {
+    console.error('confirmed.setExtensionDuration error:', err)
+    return res
+      .status(400)
+      .json({ message: err?.message || 'Error updating extension duration' })
   }
 }
 
@@ -367,8 +429,13 @@ async function createAndConfirm(req, res) {
     // uid resolved from verified user
     const uid = userRecord.id
 
-    // Prevent conflicts with already accepted bookings
-    const conflicts = await checkBookingConflicts({ event_date, event_time })
+    // Prevent conflicts with already accepted bookings (same package)
+    const conflicts = await checkBookingConflicts({
+      event_date,
+      event_time,
+      event_end_time,
+      packageid,
+    })
     if (Array.isArray(conflicts) && conflicts.length) {
       return res.status(409).json({ message: 'Timeslot not available' })
     }
@@ -465,9 +532,49 @@ module.exports = {
   setPaymentStatus,
   setBookingStatus,
   setTotalPrice,
+  setExtensionDuration,
   updateConfirmedCombined,
   cancelConfirmed,
   createAndConfirm,
+  // Preflight: check if a proposed extension would conflict
+  async checkExtensionConflicts(req, res) {
+    try {
+      const id = parseInt(req.params.id, 10)
+      if (Number.isNaN(id))
+        return res.status(400).json({ message: 'Invalid id' })
+      const { extension_duration = null, add_hours = null } = req.query || {}
+      const bufferHours = Number(req.query.bufferHours ?? 2)
+
+      const full = await getConfirmedBookingById(id)
+      if (!full) return res.status(404).json({ message: 'Not found' })
+      const currentExt = Math.max(0, Number(full.extension_duration || 0))
+      let nextExt = currentExt
+      if (extension_duration != null) {
+        nextExt = Math.max(0, Number(extension_duration) || 0)
+      } else if (add_hours != null) {
+        nextExt = Math.max(0, currentExt + (Number(add_hours) || 0))
+      } else {
+        return res
+          .status(400)
+          .json({ message: 'Provide extension_duration or add_hours' })
+      }
+
+      const {
+        checkExtensionConflictForConfirmedBooking,
+      } = require('../../Model/bookingRequestModel')
+      const conflicts = await checkExtensionConflictForConfirmedBooking(
+        id,
+        nextExt,
+        bufferHours
+      )
+      return res.json({ conflicts })
+    } catch (err) {
+      console.error('confirmed.checkExtensionConflicts error:', err)
+      return res
+        .status(400)
+        .json({ message: err?.message || 'Error checking extension conflicts' })
+    }
+  },
   // Payment summary for a confirmed booking (admin)
   async getPaymentSummary(req, res) {
     try {
