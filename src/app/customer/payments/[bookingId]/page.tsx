@@ -6,6 +6,7 @@ import {
   getLatestPaymentQR,
   uploadPaymentProof,
   createCustomerPayment,
+  getMyBookingBalance,
 } from '../../../../../schemas/functions/Payment/createPayment'
 import { toast } from 'sonner'
 
@@ -17,6 +18,12 @@ export default function CustomerPaymentPage() {
   const [referenceNo, setReferenceNo] = useState<string>('')
   const [proofUrl, setProofUrl] = useState<string>('')
   const [submitting, setSubmitting] = useState(false)
+  const [balance, setBalance] = useState<{
+    amount_due: number
+    total_paid: number
+    balance: number
+  } | null>(null)
+  const [balanceLoading, setBalanceLoading] = useState(false)
 
   useEffect(() => {
     ;(async () => {
@@ -24,6 +31,26 @@ export default function CustomerPaymentPage() {
       if (url) setQrUrl(url)
     })()
   }, [])
+
+  useEffect(() => {
+    if (!bookingId) return
+    let ignore = false
+    setBalanceLoading(true)
+    getMyBookingBalance(bookingId)
+      .then((b) => {
+        if (!ignore)
+          setBalance({
+            amount_due: b.amount_due,
+            total_paid: b.total_paid,
+            balance: b.balance,
+          })
+      })
+      .catch(() => !ignore && setBalance(null))
+      .finally(() => !ignore && setBalanceLoading(false))
+    return () => {
+      ignore = true
+    }
+  }, [bookingId])
 
   const handleUploadProof: React.ChangeEventHandler<HTMLInputElement> = async (
     e
@@ -42,6 +69,12 @@ export default function CustomerPaymentPage() {
     if (!bookingId || !amountPaid || !referenceNo) return
     setSubmitting(true)
     try {
+      if (balance && Number(amountPaid) > balance.balance) {
+        toast.error(
+          `Amount exceeds remaining balance (${balance.balance.toFixed(2)}).`
+        )
+        return
+      }
       await createCustomerPayment({
         bookingId,
         amountPaid: Number(amountPaid),
@@ -90,10 +123,21 @@ export default function CustomerPaymentPage() {
         <input
           type="number"
           min={0}
+          max={balance ? balance.balance : undefined}
           className="w-full rounded border px-3 py-2"
           value={amountPaid}
           onChange={(e) => setAmountPaid(e.target.value)}
         />
+        {balance && (
+          <div className="text-xs text-gray-600">
+            Amount due: {balance.amount_due.toFixed(2)} • Paid:{' '}
+            {balance.total_paid.toFixed(2)} • Remaining:{' '}
+            {balance.balance.toFixed(2)}
+          </div>
+        )}
+        {balanceLoading && (
+          <div className="text-xs text-gray-500">Loading balance…</div>
+        )}
       </div>
 
       <div className="space-y-2">

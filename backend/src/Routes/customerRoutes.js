@@ -112,6 +112,14 @@ router.get('/payment-qr', async (req, res) => {
   }
 })
 
+// Get my booking balance
+router.get(
+  '/bookings/:id/balance',
+  authMiddleware,
+  roleMiddleware('customer'),
+  customerPaymentsController.getMyBookingBalance
+)
+
 // Get confirmed booking by request id (owned by current user)
 router.get(
   '/confirmed-bookings/by-request/:requestid',

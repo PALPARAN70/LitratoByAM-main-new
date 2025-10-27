@@ -282,8 +282,11 @@ async function getPaymentSummary(bookingid) {
       SELECT COALESCE(SUM(amount_paid), 0)::numeric AS paid_total
       FROM payments
       WHERE booking_id = $1
-        AND LOWER(payment_status) IN ('completed','paid','succeeded')
         AND verified_at IS NOT NULL
+        AND (
+          LOWER(payment_status) IN ('completed','paid','succeeded')
+          OR payment_status IN ('Partially Paid','Fully Paid')
+        )
     `
   let paidTotal = 0
   try {
@@ -293,16 +296,38 @@ async function getPaymentSummary(bookingid) {
     paidTotal = 0
   }
 
+  // Subtract refunds for payments that are counted above
+  const refundQ = `
+      SELECT COALESCE(SUM(r.amount),0)::numeric AS refunded
+      FROM payment_refunds r
+      JOIN payments p ON p.payment_id = r.payment_id
+      WHERE p.booking_id = $1
+        AND p.verified_at IS NOT NULL
+        AND (
+          LOWER(p.payment_status) IN ('completed','paid','succeeded')
+          OR p.payment_status IN ('Partially Paid','Fully Paid')
+        )
+    `
+  let refundedTotal = 0
+  try {
+    const rr = await pool.query(refundQ, [id])
+    refundedTotal = Number(rr.rows?.[0]?.refunded || 0)
+  } catch {
+    refundedTotal = 0
+  }
+
+  const netPaid = Math.max(0, paidTotal - refundedTotal)
+
   let computedStatus = 'unpaid'
-  if (paidTotal >= amountDue && amountDue > 0) computedStatus = 'paid'
-  else if (paidTotal > 0 && paidTotal < amountDue) computedStatus = 'partial'
+  if (netPaid >= amountDue && amountDue > 0) computedStatus = 'paid'
+  else if (netPaid > 0 && netPaid < amountDue) computedStatus = 'partial'
 
   return {
     baseTotal,
     extHours,
     extCharge,
     amountDue,
-    paidTotal,
+    paidTotal: netPaid,
     computedStatus,
   }
 }

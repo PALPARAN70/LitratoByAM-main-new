@@ -59,13 +59,42 @@ export async function updateAdminPayment(
   return data.payment as Payment
 }
 
+export async function createAdminRefund(
+  paymentId: number,
+  body: { amount: number; reason?: string | null }
+): Promise<{
+  refund_id: number
+  payment_id: number
+  amount: number
+  reason?: string | null
+  created_by: number
+  created_at: string
+}> {
+  const res = await fetch(`${API_BASE}/admin/payments/${paymentId}/refunds`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...getAuthHeadersInit(),
+    },
+    body: JSON.stringify(body ?? {}),
+  })
+  if (!res.ok) throw new Error(await safeText(res, 'Failed to create refund'))
+  const data = await res.json().catch(() => ({}))
+  return data.refund
+}
+
 export type AdminCreatePaymentInput = {
   booking_id: number
   amount_paid: number
   payment_method?: string // default 'cash'
   reference_no?: string | null
   notes?: string | null
-  payment_status?: 'pending' | 'completed' | 'failed' | 'refunded'
+  payment_status?:
+    | 'Pending'
+    | 'Partially Paid'
+    | 'Failed'
+    | 'Refunded'
+    | 'Fully Paid'
   verified?: boolean // default true for cash
 }
 
@@ -101,6 +130,37 @@ export async function uploadAdminPaymentQR(
   if (!res.ok) throw new Error(await safeText(res, 'Failed to upload QR'))
   const data = await res.json().catch(() => ({}))
   return { url: String(data.url || '') }
+}
+
+export type BookingBalance = {
+  booking_id: number
+  amount_due: number
+  total_paid: number
+  balance: number
+  computed_booking_payment_status?: string
+}
+
+export async function getAdminBookingBalance(
+  bookingId: number
+): Promise<BookingBalance> {
+  const res = await fetch(`${API_BASE}/admin/bookings/${bookingId}/balance`, {
+    headers: {
+      'Content-Type': 'application/json',
+      ...getAuthHeadersInit(),
+    },
+    cache: 'no-store',
+  })
+  if (!res.ok) throw new Error(await safeText(res, 'Failed to load balance'))
+  const data = await res.json().catch(() => ({}))
+  return {
+    booking_id: Number(data.booking_id || bookingId),
+    amount_due: Number(data.amount_due || 0),
+    total_paid: Number(data.total_paid || 0),
+    balance: Number(data.balance || 0),
+    computed_booking_payment_status: String(
+      data.computed_booking_payment_status || ''
+    ),
+  }
 }
 
 export type PaymentLog = {
