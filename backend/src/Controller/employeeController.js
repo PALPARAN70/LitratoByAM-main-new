@@ -7,6 +7,10 @@ const {
   getPaymentSummary,
 } = require('../Model/confirmedBookingRequestModel')
 const { pool } = require('../Config/db')
+// NEW: reuse package/inventory models for staff-safe package items list
+const packageModel = require('../Model/packageModel')
+const packageInventoryItemModel = require('../Model/packageInventoryItemModel')
+const inventoryModel = require('../Model/inventoryModel')
 
 // Ensure the staff assignment table exists on load (best-effort)
 initConfirmedBookingStaffTable().catch((e) =>
@@ -104,5 +108,62 @@ exports.getAssignedBookingPaymentSummary = async (req, res) => {
     return res
       .status(500)
       .json({ message: 'Error loading payment summary for booking' })
+  }
+}
+
+// NEW: Allow employees to view items in a package (read-only)
+exports.listPackageItemsForPackage = async (req, res) => {
+  try {
+    const { package_id } = req.params
+    const packageId = Number(package_id)
+    if (!Number.isFinite(packageId)) {
+      return res.status(400).json({ message: 'Invalid package ID' })
+    }
+    const pkg = await packageModel.getPackageByIdAny(packageId)
+    if (!pkg) return res.status(404).json({ message: 'Package not found' })
+    const items =
+      await packageInventoryItemModel.getPackageInventoryItemsByPackage(
+        packageId
+      )
+    return res.json({ items })
+  } catch (err) {
+    console.error('employee.listPackageItemsForPackage error:', err)
+    return res
+      .status(500)
+      .json({ message: 'Error loading package items for employee' })
+  }
+}
+
+// NEW: Allow employees to update inventory condition/status (limited fields)
+exports.updateInventoryItemLimited = async (req, res) => {
+  try {
+    const { inventoryID } = req.params
+    const id = Number(inventoryID)
+    if (!Number.isFinite(id))
+      return res.status(400).json({ message: 'Invalid inventory id' })
+
+    const body = req.body || {}
+    const updates = {}
+    if (Object.prototype.hasOwnProperty.call(body, 'condition')) {
+      const c = String(body.condition || '').trim()
+      if (c) updates.condition = c
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'status')) {
+      updates.status = Boolean(body.status)
+    }
+    if (!Object.keys(updates).length) {
+      return res.status(400).json({ message: 'No updatable fields provided' })
+    }
+
+    const current = await inventoryModel.findInventoryById(id)
+    if (!current) return res.status(404).json({ message: 'Not found' })
+
+    const updated = await inventoryModel.updateInventory(id, updates)
+    return res.json({ item: updated })
+  } catch (err) {
+    console.error('employee.updateInventoryItemLimited error:', err)
+    return res
+      .status(500)
+      .json({ message: 'Error updating inventory (employee)' })
   }
 }
