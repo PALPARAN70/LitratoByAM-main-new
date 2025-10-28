@@ -42,3 +42,19 @@ router.get(
 )
 
 module.exports = router
+
+// NEW: staff can read package items list for viewing equipment in event cards
+router.get(
+  '/package/:package_id/items',
+  authMiddleware,
+  roleMiddleware('employee'),
+  employeeController.listPackageItemsForPackage
+)
+
+// NEW: staff can update inventory condition/status for assigned tasks (limited fields)
+router.patch(
+  '/inventory/:inventoryID',
+  authMiddleware,
+  roleMiddleware('employee'),
+  employeeController.updateInventoryItemLimited
+)

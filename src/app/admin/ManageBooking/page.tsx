@@ -46,6 +46,10 @@ import {
 } from '../../../../schemas/functions/staffFunctions/staffAssignment'
 import EventCard from '../../../../Litratocomponents/EventCard'
 import {
+  fetchPaymentSummaryForBooking,
+  listPackageItemsForPackage,
+} from '../../../../schemas/functions/EventCards/api'
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -67,6 +71,7 @@ type BookingRow = {
   startTime: string
   endTime: string
   package: string
+  packageId?: number | null
   grid: string // now showing actual value, comma-joined
   place: string
   status: BookingStatus
@@ -471,9 +476,115 @@ function MasterListPanel({
   const [targetRow, setTargetRow] = useState<BookingRow | null>(null)
   const [busy, setBusy] = useState<null | 'cancel' | 'undo'>(null)
 
-  // ADD: items modal state for Items overview column
-  const [itemsOpen, setItemsOpen] = useState(false)
-  const [itemsTarget, setItemsTarget] = useState<BookingRow | null>(null)
+  // NEW: Event Report modal state
+  const [reportOpen, setReportOpen] = useState(false)
+  const [reportTarget, setReportTarget] = useState<BookingRow | null>(null)
+  const [reportLoading, setReportLoading] = useState(false)
+  const [reportPayment, setReportPayment] = useState<{
+    paidTotal: number | null
+    amountDue: number | null
+    status: 'paid' | 'partial' | 'unpaid'
+  } | null>(null)
+  const [reportItems, setReportItems] = useState<{
+    total: number
+    ok: number
+    damaged: number
+    missing: number
+  } | null>(null)
+  const [reportStaff, setReportStaff] = useState<
+    Array<{ id: number; firstname?: string; lastname?: string }>
+  >([])
+  const [reportItemLists, setReportItemLists] = useState<{
+    good: Array<{ name: string; qty: number }>
+    damaged: Array<{ name: string; qty: number }>
+    missing: Array<{ name: string; qty: number }>
+  } | null>(null)
+
+  const openReport = async (row: BookingRow) => {
+    setReportTarget(row)
+    setReportOpen(true)
+    setReportLoading(true)
+    setReportPayment(null)
+    setReportItems(null)
+    setReportStaff([])
+    setReportItemLists(null)
+    try {
+      const cid = await ensureConfirmedId(row)
+      // Payment summary (admin)
+      if (cid) {
+        try {
+          const sum: any = await fetchPaymentSummaryForBooking(
+            cid as number,
+            'admin' as any
+          )
+          if (sum) {
+            setReportPayment({
+              paidTotal: Number(sum.paidTotal ?? 0),
+              amountDue: Number(sum.amountDue ?? 0),
+              status:
+                (sum.computedStatus as 'paid' | 'partial' | 'unpaid') ??
+                'unpaid',
+            })
+          }
+        } catch {}
+      }
+      // Staff list (best-effort)
+      if (cid) {
+        try {
+          const staff = await listAssignedStaff(cid)
+          setReportStaff(
+            (staff || []).map((s) => ({
+              id: Number(s.id),
+              firstname: String((s as any).firstname || ''),
+              lastname: String((s as any).lastname || ''),
+            }))
+          )
+        } catch {}
+      }
+      // Items summary if we have a packageId
+      if (row.packageId && Number(row.packageId)) {
+        try {
+          const items: any[] = await listPackageItemsForPackage(
+            Number(row.packageId)
+          )
+          let total = 0,
+            missing = 0,
+            damaged = 0,
+            ok = 0
+          const goodAgg = new Map<string, number>()
+          const damagedAgg = new Map<string, number>()
+          const missingAgg = new Map<string, number>()
+          for (const it of items) {
+            const q = Math.max(1, Number((it as any).quantity || 1))
+            total += q
+            const stat = (it as any).status
+            const cond = String((it as any).condition || '').toLowerCase()
+            const name = String((it as any).material_name || 'Item')
+            if (stat === false) {
+              missing += q
+              missingAgg.set(name, (missingAgg.get(name) || 0) + q)
+            } else if (cond === 'damaged') {
+              damaged += q
+              damagedAgg.set(name, (damagedAgg.get(name) || 0) + q)
+            } else {
+              ok += q
+              goodAgg.set(name, (goodAgg.get(name) || 0) + q)
+            }
+          }
+          setReportItems({ total, ok, damaged, missing })
+          const toArray = (m: Map<string, number>) =>
+            Array.from(m.entries()).map(([name, qty]) => ({ name, qty }))
+          setReportItemLists({
+            good: toArray(goodAgg),
+            damaged: toArray(damagedAgg),
+            missing: toArray(missingAgg),
+          })
+        } catch {}
+      }
+    } finally {
+      setReportLoading(false)
+    }
+  }
 
   // Extend hours dialog state
   const [extendOpen, setExtendOpen] = useState(false)
@@ -687,6 +798,12 @@ function MasterListPanel({
               : 'unpaid'
           const items = { damaged: [] as Item[], missing: [] as Item[] }
 
+          // NEW: capture package id when available (from confirmed bookings select)
+          const packageId =
+            typeof (rx['package_id'] as unknown) === 'number'
+              ? (rx['package_id'] as number)
+              : null
+
           return {
             id: String(r.requestid || r.confirmed_id || Math.random()),
             requestid: r.requestid ?? null,
@@ -699,6 +816,7 @@ function MasterListPanel({
             startTime,
             endTime,
             package: r.package_name || '—',
+            packageId,
             grid: r.grid || '—',
             place: r.event_address || '—',
             status,
@@ -1078,7 +1196,7 @@ function MasterListPanel({
                 <th className="text-left px-3 py-2">More Details</th>
                 <th className="text-left px-3 py-2">Approval Status</th>
                 <th className="text-left px-3 py-2">Event Status</th>
-                <th className="text-left px-3 py-2">Equipment Report</th>
+                <th className="text-left px-3 py-2">Event Report</th>
                 <th className="text-left px-3 py-2">Payment Status</th>
                 <th className="text-left px-3 py-2 rounded-tr-xl">Actions</th>
               </tr>
@@ -1128,33 +1246,12 @@ function MasterListPanel({
                               <div className="text-gray-700 whitespace-pre-wrap">
                                 <div>
                                   <span className="font-medium">Name:</span>{' '}
-                                  {(() => {
-                                    const byField = (
-                                      row.contact_person || ''
-                                    ).trim()
-                                    const byName = [row.firstname, row.lastname]
-                                      .filter(Boolean)
-                                      .join(' ')
-                                      .trim()
-                                    const val = byField || byName
-                                    return val || '—'
-                                  })()}
+                                  {(row.contact_person || '').trim() || '—'}
                                 </div>
                                 <div>
                                   <span className="font-medium">Number:</span>{' '}
-                                  {(() => {
-                                    const direct = (
-                                      row.contact_person_number || ''
-                                    ).trim()
-                                    if (direct) return direct
-                                    const info = (
-                                      row.contact_info || ''
-                                    ).toString()
-                                    // Try to extract a phone-like sequence from contact_info
-                                    const m = info.match(/(\+?\d[\d\s-]{6,}\d)/)
-                                    const extracted = (m?.[1] || '').trim()
-                                    return extracted || '—'
-                                  })()}
+                                  {(row.contact_person_number || '').trim() ||
+                                    '—'}
                                 </div>
                               </div>
                             </div>
@@ -1240,15 +1337,12 @@ function MasterListPanel({
                       </span>
                     </td>
 
-                    {/* Items overview (like EventLogs) */}
+                    {/* Event Report trigger */}
                     <td className="px-3 py-2">
                       <button
                         type="button"
                         className="px-2 py-1.5 rounded border text-xs"
-                        onClick={() => {
-                          setItemsTarget(row)
-                          setItemsOpen(true)
-                        }}
+                        onClick={() => openReport(row)}
                       >
                         View
                       </button>
@@ -1295,7 +1389,7 @@ function MasterListPanel({
                             >
                               Upload Contract
                             </button>
-                            {/* ...existing action buttons: Review, Edit, Cancel, Undo, Assign Staff... */}
+                            {/* Review */}
                             <button
                               type="button"
                               className={`text-left px-2 py-1.5 rounded text-sm hover:bg-gray-100 ${
@@ -1308,6 +1402,7 @@ function MasterListPanel({
                             >
                               Review
                             </button>
+                            {/* Edit */}
                             <button
                               type="button"
                               className={`text-left px-2 py-1.5 rounded text-sm hover:bg-gray-100 ${
@@ -1324,7 +1419,7 @@ function MasterListPanel({
                             >
                               Edit
                             </button>
-                            {/* CHANGED: open cancel confirmation dialog */}
+                            {/* Cancel */}
                             <button
                               type="button"
                               className={`text-left px-2 py-1.5 rounded text-sm hover:bg-gray-100 ${
@@ -1342,7 +1437,7 @@ function MasterListPanel({
                             >
                               Cancel
                             </button>
-                            {/* CHANGED: open undo confirmation dialog */}
+                            {/* Undo Cancel */}
                             <button
                               type="button"
                               className={`text-left px-2 py-1.5 rounded text-sm hover:bg-gray-100 ${
@@ -1363,6 +1458,7 @@ function MasterListPanel({
                             >
                               Undo Cancel
                             </button>
+                            {/* Assign staff */}
                             <button
                               type="button"
                               className={`text-left px-2 py-1.5 rounded text-sm hover:bg-gray-100 ${
@@ -1375,6 +1471,7 @@ function MasterListPanel({
                             >
                               Assign Staff
                             </button>
+                            {/* Extend hours */}
                             <button
                               type="button"
                               className={`text-left px-2 py-1.5 rounded text-sm hover:bg-gray-100 ${
@@ -1750,52 +1847,190 @@ function MasterListPanel({
         </DialogContent>
       </Dialog>
 
-      {/* Items modal */}
+      {/* Event Report modal (masterlist) */}
       <Dialog
-        open={itemsOpen}
+        open={reportOpen}
         onOpenChange={(o) => {
           if (!o) {
-            setItemsOpen(false)
-            setItemsTarget(null)
+            setReportOpen(false)
+            setReportTarget(null)
+            setReportPayment(null)
+            setReportItems(null)
+            setReportStaff([])
+            setReportItemLists(null)
           }
         }}
       >
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="sm:max-w-3xl">
           <DialogHeader>
-            <DialogTitle>Items report</DialogTitle>
+            <DialogTitle>Event report</DialogTitle>
             <DialogDescription>
-              Damaged and missing items for this booking
+              Summary of event, payment, equipment, and staff.
             </DialogDescription>
           </DialogHeader>
-          <div className="grid grid-cols-2 gap-6">
-            <div>
-              <div className="font-semibold mb-2">Damaged</div>
-              {itemsTarget?.items.damaged?.length ? (
-                <ul className="list-disc list-inside space-y-1 text-sm">
-                  {itemsTarget.items.damaged.map((it, idx) => (
-                    <li key={`d-${idx}`}>
-                      {it.name}
-                      {it.qty ? ` × ${it.qty}` : ''}
-                    </li>
-                  ))}
-                </ul>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+            {/* Event details */}
+            <div className="rounded border p-3 bg-gray-50">
+              <div className="text-[11px] uppercase text-gray-600 font-semibold mb-2">
+                Event details
+              </div>
+              <div className="space-y-1 text-gray-900">
+                <div>
+                  <span className="text-gray-600">Event:</span>{' '}
+                  {reportTarget?.eventName || '—'}
+                </div>
+                <div>
+                  <span className="text-gray-600">Date:</span>{' '}
+                  {reportTarget?.date || '—'}
+                </div>
+                <div>
+                  <span className="text-gray-600">Time:</span>{' '}
+                  {reportTarget?.startTime || '—'}
+                  {reportTarget?.endTime ? ` - ${reportTarget.endTime}` : ''}
+                </div>
+                <div>
+                  <span className="text-gray-600">Location:</span>{' '}
+                  {reportTarget?.place || '—'}
+                </div>
+                <div>
+                  <span className="text-gray-600">Package:</span>{' '}
+                  {reportTarget?.package || '—'}
+                </div>
+                <div>
+                  <span className="text-gray-600">Grid:</span>{' '}
+                  {reportTarget?.grid || '—'}
+                </div>
+                <div>
+                  <span className="text-gray-600">Event status:</span>{' '}
+                  {reportTarget
+                    ? eventStatusLabel(reportTarget.eventStatus)
+                    : '—'}
+                </div>
+              </div>
+            </div>
+
+            {/* Payment details */}
+            <div className="rounded border p-3 bg-gray-50">
+              <div className="text-[11px] uppercase text-gray-600 font-semibold mb-2">
+                Payment details
+              </div>
+              {reportLoading ? (
+                <div className="text-gray-700">Loading…</div>
               ) : (
-                <div className="text-sm text-gray-500">None</div>
+                <div className="space-y-1 text-gray-900">
+                  <div>
+                    <span className="text-gray-600">Status:</span>{' '}
+                    {reportPayment
+                      ? reportPayment.status === 'paid'
+                        ? 'Paid'
+                        : reportPayment.status === 'partial'
+                        ? 'Partially Paid'
+                        : 'Unpaid'
+                      : '—'}
+                  </div>
+                  <div>
+                    <span className="text-gray-600">Paid so far:</span>{' '}
+                    {typeof reportPayment?.paidTotal === 'number'
+                      ? `₱${reportPayment.paidTotal.toLocaleString('en-PH', {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })}`
+                      : '—'}
+                  </div>
+                  <div>
+                    <span className="text-gray-600">Amount due:</span>{' '}
+                    {typeof reportPayment?.amountDue === 'number'
+                      ? `₱${reportPayment.amountDue.toLocaleString('en-PH', {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })}`
+                      : '—'}
+                  </div>
+                </div>
               )}
             </div>
-            <div>
-              <div className="font-semibold mb-2">Missing</div>
-              {itemsTarget?.items.missing?.length ? (
-                <ul className="list-disc list-inside space-y-1 text-sm">
-                  {itemsTarget.items.missing.map((it, idx) => (
-                    <li key={`m-${idx}`}>
-                      {it.name}
-                      {it.qty ? ` × ${it.qty}` : ''}
+
+            {/* Equipment details */}
+            <div className="rounded border p-3 bg-gray-50">
+              <div className="text-[11px] uppercase text-gray-600 font-semibold mb-2">
+                Equipment details
+              </div>
+              {reportLoading ? (
+                <div className="text-gray-700">Loading…</div>
+              ) : reportItems ? (
+                <div className="space-y-3 text-gray-900">
+                  <div className="grid grid-cols-2 gap-x-6 gap-y-1">
+                    <div>
+                      <span className="text-gray-600">Total:</span>{' '}
+                      {reportItems.total}
+                    </div>
+                    <div>
+                      <span className="text-gray-600">OK:</span>{' '}
+                      {reportItems.ok}
+                    </div>
+                    <div>
+                      <span className="text-gray-600">Damaged:</span>{' '}
+                      {reportItems.damaged}
+                    </div>
+                    <div>
+                      <span className="text-gray-600">Missing:</span>{' '}
+                      {reportItems.missing}
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <div className="font-semibold mb-1">Damaged items</div>
+                      {reportItemLists && reportItemLists.damaged.length ? (
+                        <ul className="list-disc list-inside space-y-0.5">
+                          {reportItemLists.damaged.map((it, idx) => (
+                            <li key={`dam-${idx}`}>
+                              {it.name} × {it.qty}
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <div className="text-gray-700">None</div>
+                      )}
+                    </div>
+                    <div>
+                      <div className="font-semibold mb-1">Missing items</div>
+                      {reportItemLists && reportItemLists.missing.length ? (
+                        <ul className="list-disc list-inside space-y-0.5">
+                          {reportItemLists.missing.map((it, idx) => (
+                            <li key={`miss-${idx}`}>
+                              {it.name} × {it.qty}
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <div className="text-gray-700">None</div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-gray-700">No items available.</div>
+              )}
+            </div>
+
+            {/* Staff entry logs (simple list) */}
+            <div className="rounded border p-3 bg-gray-50">
+              <div className="text-[11px] uppercase text-gray-600 font-semibold mb-2">
+                Staff entry logs
+              </div>
+              {reportLoading ? (
+                <div className="text-gray-700">Loading…</div>
+              ) : reportStaff.length ? (
+                <ul className="list-disc list-inside text-gray-900">
+                  {reportStaff.map((s) => (
+                    <li key={s.id}>
+                      {`${s.firstname || ''} ${s.lastname || ''}`.trim() ||
+                        s.id}
                     </li>
                   ))}
                 </ul>
               ) : (
-                <div className="text-sm text-gray-500">None</div>
+                <div className="text-gray-700">—</div>
               )}
             </div>
           </div>
@@ -1804,8 +2039,8 @@ function MasterListPanel({
               type="button"
               className="px-4 py-2 rounded border text-sm"
               onClick={() => {
-                setItemsOpen(false)
-                setItemsTarget(null)
+                setReportOpen(false)
+                setReportTarget(null)
               }}
             >
               Close
@@ -1836,14 +2071,26 @@ function EventCardsPanel() {
   type AdminEvent = {
     id: string | number
     title: string
+    packageName?: string
+    packageId?: number
+    accountName?: string
     dateTime: string
     location: string
     status: Status
     payment: Payment
+    basePrice?: number
+    extensionHours?: number
     totalPrice?: number
     imageUrl?: string
     damagedItems?: Item[]
     missingItems?: Item[]
+    assignedStaff?: { id: number; firstname: string; lastname: string }[]
+    // extra details
+    strongestSignal?: string
+    contactInfo?: string
+    contactPerson?: string
+    contactPersonNumber?: string
+    grid?: string
   }
 
   const [events, setEvents] = useState<AdminEvent[]>([])
@@ -1897,6 +2144,7 @@ function EventCardsPanel() {
           confirmed_id?: number
           event_name?: string
           package_name?: string
+          package_id?: number
           event_date?: string
           event_time?: string
           event_address?: string
@@ -1904,6 +2152,14 @@ function EventCardsPanel() {
           total_booking_price?: number | string | null
           booking_status?: string
           payment_status?: string
+          strongest_signal?: string
+          contact_info?: string
+          contact_person?: string
+          contact_person_number?: string
+          grid?: string
+          firstname?: string
+          lastname?: string
+          username?: string
         }
         const raw: unknown[] =
           typeof data === 'object' &&
@@ -1929,20 +2185,67 @@ function EventCardsPanel() {
             const extHours = Number(b.extension_duration ?? 0)
             const base = Number(b.total_booking_price ?? 0)
             const totalPrice = base + extHours * 2000
+            const accountName =
+              [b.firstname, b.lastname].filter(Boolean).join(' ').trim() ||
+              b.username ||
+              undefined
             return {
               id: b.id ?? b.confirmed_id ?? '',
               title,
+              packageName: b.package_name || undefined,
+              packageId:
+                typeof b.package_id === 'number' ? b.package_id : undefined,
+              accountName,
               dateTime,
               location,
               status: mapBookingStatus(b.booking_status),
               payment: mapPaymentStatus(b.payment_status),
+              basePrice: base,
+              extensionHours: extHours,
               totalPrice,
               imageUrl: undefined,
               damagedItems: [],
               missingItems: [],
+              assignedStaff: [],
+              strongestSignal: b.strongest_signal || undefined,
+              contactInfo: b.contact_info || undefined,
+              contactPerson: b.contact_person || undefined,
+              contactPersonNumber: b.contact_person_number || undefined,
+              grid: b.grid || undefined,
             }
           })
-        if (mounted) setEvents(mapped)
+        if (mounted) {
+          setEvents(mapped)
+          // Fetch assigned staff for each booking (best-effort)
+          try {
+            const { listAssignedStaff } = await import(
+              '../../../../schemas/functions/staffFunctions/staffAssignment'
+            )
+            const results = await Promise.all(
+              mapped.map(async (ev) => {
+                const idNum = Number(ev.id)
+                if (!Number.isFinite(idNum)) return { id: ev.id, staff: [] }
+                const staff = await listAssignedStaff(idNum).catch(() => [])
+                return { id: ev.id, staff }
+              })
+            )
+            const byId = new Map<AdminEvent['id'], any[]>(
+              results.map((r) => [r.id, r.staff])
+            )
+            setEvents((prev) =>
+              prev.map((ev) => ({
+                ...ev,
+                assignedStaff: (byId.get(ev.id) || []).map((s: any) => ({
+                  id: Number(s.id),
+                  firstname: String(s.firstname || ''),
+                  lastname: String(s.lastname || ''),
+                })),
+              }))
+            )
+          } catch {
+            // ignore if staff fetch fails; UI will show none
+          }
+        }
       } catch (e: unknown) {
         if (mounted)
           setError(e instanceof Error ? e.message : 'Failed to load events')
@@ -2002,6 +2305,43 @@ function EventCardsPanel() {
     const start = (page - 1) * PER_PAGE
     return filteredEvents.slice(start, start + PER_PAGE)
   }, [filteredEvents, page])
+
+  // Handle status change from EventCard details
+  const handleCardStatusChange = async (
+    bookingId: AdminEvent['id'],
+    next: Status
+  ) => {
+    const toAdmin = (s: Status): 'scheduled' | 'in_progress' | 'completed' =>
+      s === 'ongoing'
+        ? 'in_progress'
+        : s === 'finished'
+        ? 'completed'
+        : 'scheduled'
+    // optimistic update
+    const prev = events
+    setEvents((cur) =>
+      cur.map((e) => (e.id === bookingId ? { ...e, status: next } : e))
+    )
+    try {
+      const { updateAdminBookingStatus } = await import(
+        '../../../../schemas/functions/ConfirmedBookings/admin'
+      )
+      await updateAdminBookingStatus(bookingId, toAdmin(next))
+      // success toast if available
+      try {
+        // @ts-ignore toast likely available in this file's scope
+        toast?.success?.('Event status updated')
+      } catch {}
+    } catch (e: unknown) {
+      // revert on failure
+      setEvents(prev)
+      try {
+        const msg = e instanceof Error ? e.message : 'Failed to update status'
+        // @ts-ignore toast likely available in this file's scope
+        toast?.error?.(msg)
+      } catch {}
+    }
+  }
 
   return (
     <div className="min-h-[60vh] w-full overflow-x-hidden">
@@ -2069,15 +2409,27 @@ function EventCardsPanel() {
               <EventCard
                 key={`${ev.title}-${idx}`}
                 bookingId={ev.id}
+                accountName={ev.accountName}
                 title={ev.title}
+                packageName={ev.packageName}
+                packageId={ev.packageId}
                 dateTime={ev.dateTime}
                 location={ev.location}
                 status={ev.status}
                 payment={ev.payment}
+                basePrice={ev.basePrice}
+                extensionHours={ev.extensionHours}
                 totalPrice={ev.totalPrice}
                 imageUrl={ev.imageUrl}
                 damagedItems={ev.damagedItems}
                 missingItems={ev.missingItems}
+                assignedStaff={ev.assignedStaff}
+                strongestSignal={ev.strongestSignal}
+                contactInfo={ev.contactInfo}
+                contactPerson={ev.contactPerson}
+                contactPersonNumber={ev.contactPersonNumber}
+                grid={ev.grid}
+                onStatusChange={(s) => handleCardStatusChange(ev.id, s)}
               />
             ))}
             {loading && (

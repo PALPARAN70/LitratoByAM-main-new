@@ -32,6 +32,18 @@ type StaffEvent = {
   location: string
   status: Status
   payment: Payment
+  // enrich details
+  accountName?: string
+  packageName?: string
+  packageId?: number
+  basePrice?: number
+  extensionHours?: number
+  totalPrice?: number
+  strongestSignal?: string
+  contactInfo?: string
+  contactPerson?: string
+  contactPersonNumber?: string
+  grid?: string
   imageUrl?: string
   damagedItems?: Item[]
   missingItems?: Item[]
@@ -120,6 +132,29 @@ export default function DashboardPage() {
               typeof idRaw === 'number' || typeof idRaw === 'string'
                 ? idRaw
                 : String(idRaw ?? '')
+            // pricing and extras: coerce strings/numbers to Number
+            const baseCandidate =
+              (r['total_booking_price'] as unknown) ??
+              (r['package_price'] as unknown) ??
+              (r['price'] as unknown) ??
+              0
+            const basePrice = Number(baseCandidate || 0)
+            const extHoursNum = Number(
+              (r['extension_duration'] as unknown) ?? 0
+            )
+            const extensionHours = Number.isFinite(extHoursNum)
+              ? Math.max(0, extHoursNum)
+              : 0
+            const totalPrice = basePrice + extensionHours * 2000
+            const accountName =
+              [r['firstname'], r['lastname']]
+                .filter(Boolean)
+                .join(' ')
+                .trim() || String(r['username'] || '')
+            const packageId =
+              typeof r['package_id'] === 'number'
+                ? (r['package_id'] as number)
+                : undefined
             return {
               id,
               title,
@@ -127,6 +162,17 @@ export default function DashboardPage() {
               location,
               status: mapBookingStatus(String(r.booking_status || '')),
               payment: mapPaymentStatus(String(r.payment_status || '')),
+              accountName,
+              packageName: String(r['package_name'] || ''),
+              packageId,
+              basePrice,
+              extensionHours,
+              totalPrice,
+              strongestSignal: String(r['strongest_signal'] || ''),
+              contactInfo: String(r['contact_info'] || ''),
+              contactPerson: String(r['contact_person'] || ''),
+              contactPersonNumber: String(r['contact_person_number'] || ''),
+              grid: String(r['grid'] || ''),
               imageUrl: undefined,
               damagedItems: [],
               missingItems: [],
@@ -280,14 +326,25 @@ export default function DashboardPage() {
                   key={`${ev.title}-${idx}`}
                   bookingId={ev.id}
                   summaryRole="employee"
+                  accountName={ev.accountName}
                   title={ev.title}
+                  packageName={ev.packageName}
+                  packageId={ev.packageId}
                   dateTime={ev.dateTime}
                   location={ev.location}
                   status={ev.status}
                   payment={ev.payment}
+                  basePrice={ev.basePrice}
+                  extensionHours={ev.extensionHours}
+                  totalPrice={ev.totalPrice}
                   imageUrl={ev.imageUrl}
                   damagedItems={ev.damagedItems}
                   missingItems={ev.missingItems}
+                  strongestSignal={ev.strongestSignal}
+                  contactInfo={ev.contactInfo}
+                  contactPerson={ev.contactPerson}
+                  contactPersonNumber={ev.contactPersonNumber}
+                  grid={ev.grid}
                 />
               ))}
             </div>

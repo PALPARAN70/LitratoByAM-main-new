@@ -7,6 +7,8 @@ export type BookingRequestRow = {
   kind: 'request' | 'confirmed'
   // request fields
   requestid?: number
+  // ensure package id is available for downstream equipment lookups
+  package_id?: number | null
   status?: 'pending' | 'accepted' | 'rejected' | 'cancelled'
   event_date?: string
   event_time?: string
@@ -88,6 +90,7 @@ export async function readBookings(
   const reqRows: BookingRequestRow[] = requests.map((r: any) => ({
     kind: 'request',
     requestid: r.requestid,
+    package_id: typeof r.package_id === 'number' ? r.package_id : null,
     status: r.status,
     event_date: r.event_date ?? r.eventdate,
     event_time: r.event_time ?? r.eventtime,
@@ -119,6 +122,7 @@ export async function readBookings(
     kind: 'confirmed',
     confirmed_id: c.id,
     requestid: c.requestid,
+    package_id: typeof c.package_id === 'number' ? c.package_id : null,
     // Derive a pseudo request status for table display
     status: 'accepted',
     event_date: c.event_date,

@@ -415,8 +415,8 @@ async function checkExtensionConflictForConfirmedBooking(
           (t.event_date::timestamp + COALESCE(t.base_end_time, (t.event_time + interval '2 hours')))
           + make_interval(hours => CASE WHEN t.base_end_time IS NOT NULL THEN GREATEST(0, $2::int - t.curr_ext) ELSE $2::int END)
         ) + make_interval(hours => $3) AS new_end,
-        t.requestid AS target_requestid
-        t.packageid AS target_packageid
+  t.requestid AS target_requestid,
+  t.packageid AS target_packageid
       FROM target t
     ),
     existing AS (
