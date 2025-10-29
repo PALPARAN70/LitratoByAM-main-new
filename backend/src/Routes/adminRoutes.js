@@ -586,6 +586,14 @@ router.put(
   adminConfirmedBookingController.replaceStaff
 )
 
+// NEW: staff logs for a confirmed booking (admin)
+router.get(
+  '/confirmed-bookings/:id/staff-logs',
+  authMiddleware,
+  roleMiddleware('admin'),
+  adminConfirmedBookingController.listStaffLogsForBooking
+)
+
 module.exports = router
 
 // keep module.exports at end

@@ -152,3 +152,71 @@ export async function fetchPaymentSummaryForBooking(
     comp === 'paid' ? 'paid' : comp === 'partial' ? 'partial' : 'unpaid'
   return { paidTotal: paid, amountDue: due, computedStatus }
 }
+
+// Staff logs types
+export type StaffLog = {
+  id?: number
+  bookingid: number
+  staff_userid: number
+  firstname?: string
+  lastname?: string
+  username?: string
+  is_me?: boolean
+  arrived_at?: string | null
+  setup_finished_at?: string | null
+  started_at?: string | null
+  ended_at?: string | null
+  picked_up_at?: string | null
+  created_at?: string
+  updated_at?: string
+}
+
+// List staff logs for a booking (role-aware)
+export async function listStaffLogsForBooking(
+  bookingId: number | string,
+  role: 'admin' | 'employee'
+): Promise<StaffLog[]> {
+  const base = getApiBase()
+  const path =
+    role === 'employee'
+      ? `/api/employee/assigned-confirmed-bookings/${encodeURIComponent(
+          String(bookingId)
+        )}/staff-logs`
+      : `/api/admin/confirmed-bookings/${encodeURIComponent(
+          String(bookingId)
+        )}/staff-logs`
+  const res = await fetch(`${base}${path}`, {
+    headers: getAuthHeader(),
+    cache: 'no-store',
+  })
+  if (!res.ok) return []
+  const data = await res.json().catch(() => ({} as any))
+  return Array.isArray(data?.logs) ? (data.logs as StaffLog[]) : []
+}
+
+// Employee updates their own staff log for a booking
+export async function patchMyStaffLog(
+  bookingId: number | string,
+  field:
+    | 'arrived_at'
+    | 'setup_finished_at'
+    | 'started_at'
+    | 'ended_at'
+    | 'picked_up_at',
+  value?: string | null
+): Promise<StaffLog | null> {
+  const base = getApiBase()
+  const res = await fetch(
+    `${base}/api/employee/assigned-confirmed-bookings/${encodeURIComponent(
+      String(bookingId)
+    )}/staff-log`,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+      body: JSON.stringify({ field, value }),
+    }
+  )
+  if (!res.ok) return null
+  const data = await res.json().catch(() => ({} as any))
+  return (data?.log as StaffLog) || null
+}

@@ -58,3 +58,17 @@ router.patch(
   roleMiddleware('employee'),
   employeeController.updateInventoryItemLimited
 )
+
+// NEW: staff logs routes (employee)
+router.get(
+  '/assigned-confirmed-bookings/:id/staff-logs',
+  authMiddleware,
+  roleMiddleware('employee'),
+  employeeController.getAssignedBookingStaffLogs
+)
+router.patch(
+  '/assigned-confirmed-bookings/:id/staff-log',
+  authMiddleware,
+  roleMiddleware('employee'),
+  employeeController.updateMyStaffLogForBooking
+)

@@ -48,6 +48,7 @@ import EventCard from '../../../../Litratocomponents/EventCard'
 import {
   fetchPaymentSummaryForBooking,
   listPackageItemsForPackage,
+  listStaffLogsForBooking,
 } from '../../../../schemas/functions/EventCards/api'
 import {
   Select,
@@ -494,6 +495,27 @@ function MasterListPanel({
   const [reportStaff, setReportStaff] = useState<
     Array<{ id: number; firstname?: string; lastname?: string }>
   >([])
+  const [reportStaffLogs, setReportStaffLogs] = useState<
+    Array<{
+      id?: number
+      staff_userid: number
+      firstname?: string
+      lastname?: string
+      username?: string
+      arrived_at?: string | null
+      setup_finished_at?: string | null
+      started_at?: string | null
+      ended_at?: string | null
+      picked_up_at?: string | null
+    }>
+  >([])
+  const [reportStaffTimeline, setReportStaffTimeline] = useState<{
+    arrived_at: string | null
+    setup_finished_at: string | null
+    started_at: string | null
+    ended_at: string | null
+    picked_up_at: string | null
+  } | null>(null)
   const [reportItemLists, setReportItemLists] = useState<{
     good: Array<{ name: string; qty: number }>
     damaged: Array<{ name: string; qty: number }>
@@ -507,6 +529,8 @@ function MasterListPanel({
     setReportPayment(null)
     setReportItems(null)
     setReportStaff([])
+    setReportStaffLogs([])
+    setReportStaffTimeline(null)
     setReportItemLists(null)
     try {
       const cid = await ensureConfirmedId(row)
@@ -539,6 +563,54 @@ function MasterListPanel({
               lastname: String((s as any).lastname || ''),
             }))
           )
+          // fetch staff logs (admin)
+          try {
+            const logs = await listStaffLogsForBooking(cid, 'admin')
+            const mapped = (logs || []).map((l: any) => ({
+              id: Number(l.id) || undefined,
+              staff_userid: Number(l.staff_userid),
+              firstname: String(l.firstname || ''),
+              lastname: String(l.lastname || ''),
+              username: String(l.username || ''),
+              arrived_at: l.arrived_at || null,
+              setup_finished_at: l.setup_finished_at || null,
+              started_at: l.started_at || null,
+              ended_at: l.ended_at || null,
+              picked_up_at: l.picked_up_at || null,
+            }))
+            setReportStaffLogs(mapped)
+            // Build aggregated timeline: earliest for Arrived/Started; latest for Setup finished/Ended/Picked up
+            const pick = (
+              arr: Array<Record<string, any>>,
+              key: keyof (typeof mapped)[number],
+              mode: 'min' | 'max'
+            ): string | null => {
+              const vals = arr
+                .map((x) => x[key] as string | null | undefined)
+                .filter((v): v is string => !!v)
+              if (!vals.length) return null
+              let bestV = vals[0]
+              let bestT = new Date(vals[0]).getTime()
+              for (let i = 1; i < vals.length; i++) {
+                const t = new Date(vals[i]).getTime()
+                if (
+                  (mode === 'min' && t < bestT) ||
+                  (mode === 'max' && t > bestT)
+                ) {
+                  bestT = t
+                  bestV = vals[i]
+                }
+              }
+              return bestV
+            }
+            setReportStaffTimeline({
+              arrived_at: pick(mapped, 'arrived_at', 'min'),
+              setup_finished_at: pick(mapped, 'setup_finished_at', 'max'),
+              started_at: pick(mapped, 'started_at', 'min'),
+              ended_at: pick(mapped, 'ended_at', 'max'),
+              picked_up_at: pick(mapped, 'picked_up_at', 'max'),
+            })
+          } catch {}
         } catch {}
       }
       // Items summary if we have a packageId
@@ -2013,22 +2085,50 @@ function MasterListPanel({
               )}
             </div>
 
-            {/* Staff entry logs (simple list) */}
+            {/* Staff entry logs (aggregated timeline) */}
             <div className="rounded border p-3 bg-gray-50">
               <div className="text-[11px] uppercase text-gray-600 font-semibold mb-2">
                 Staff entry logs
               </div>
               {reportLoading ? (
                 <div className="text-gray-700">Loading…</div>
-              ) : reportStaff.length ? (
-                <ul className="list-disc list-inside text-gray-900">
-                  {reportStaff.map((s) => (
-                    <li key={s.id}>
-                      {`${s.firstname || ''} ${s.lastname || ''}`.trim() ||
-                        s.id}
-                    </li>
-                  ))}
-                </ul>
+              ) : reportStaffTimeline ? (
+                <div className="space-y-2">
+                  <div className="border rounded p-2 bg-white text-gray-900">
+                    <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
+                      {(() => {
+                        const fmt = (v?: string | null) =>
+                          v ? new Date(v).toLocaleString() : '—'
+                        return (
+                          <>
+                            <div>
+                              <span className="text-gray-600">Arrived:</span>{' '}
+                              {fmt(reportStaffTimeline.arrived_at)}
+                            </div>
+                            <div>
+                              <span className="text-gray-600">
+                                Setup finished:
+                              </span>{' '}
+                              {fmt(reportStaffTimeline.setup_finished_at)}
+                            </div>
+                            <div>
+                              <span className="text-gray-600">Started:</span>{' '}
+                              {fmt(reportStaffTimeline.started_at)}
+                            </div>
+                            <div>
+                              <span className="text-gray-600">Ended:</span>{' '}
+                              {fmt(reportStaffTimeline.ended_at)}
+                            </div>
+                            <div>
+                              <span className="text-gray-600">Picked up:</span>{' '}
+                              {fmt(reportStaffTimeline.picked_up_at)}
+                            </div>
+                          </>
+                        )
+                      })()}
+                    </div>
+                  </div>
+                </div>
               ) : (
                 <div className="text-gray-700">—</div>
               )}

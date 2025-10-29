@@ -25,6 +25,10 @@ const {
   checkBookingConflicts,
 } = require('../../Model/bookingRequestModel')
 const { findUserById, findUserByUsername } = require('../../Model/userModel')
+const {
+  initEventStaffLogsTable,
+  getLogsForBooking: getStaffLogsForBooking,
+} = require('../../Model/eventStaffLogsModel')
 
 // Ensure table exists once when the controller is loaded (best-effort)
 initConfirmedBookingTable().catch((e) =>
@@ -33,6 +37,10 @@ initConfirmedBookingTable().catch((e) =>
 // Ensure staff assignment junction table exists
 initConfirmedBookingStaffTable().catch((e) =>
   console.warn('Init confirmed_booking_staff table failed:', e?.message)
+)
+// Ensure staff logs table exists
+initEventStaffLogsTable().catch((e) =>
+  console.warn('Init event_staff_logs table failed:', e?.message)
 )
 
 async function list(req, res) {
@@ -602,6 +610,21 @@ module.exports = {
       return res
         .status(500)
         .json({ message: 'Error loading assigned staff for booking' })
+    }
+  },
+  // NEW: list staff logs for a confirmed booking (admin)
+  async listStaffLogsForBooking(req, res) {
+    try {
+      const id = parseInt(req.params.id, 10)
+      if (Number.isNaN(id))
+        return res.status(400).json({ message: 'Invalid id' })
+      const logs = await getStaffLogsForBooking(id)
+      return res.json({ logs })
+    } catch (err) {
+      console.error('confirmed.listStaffLogsForBooking error:', err)
+      return res
+        .status(500)
+        .json({ message: 'Error loading staff logs for booking' })
     }
   },
   async assignStaff(req, res) {
