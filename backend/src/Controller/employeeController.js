@@ -11,6 +11,11 @@ const { pool } = require('../Config/db')
 const packageModel = require('../Model/packageModel')
 const packageInventoryItemModel = require('../Model/packageInventoryItemModel')
 const inventoryModel = require('../Model/inventoryModel')
+const {
+  initEventStaffLogsTable,
+  getLogsForBooking: getStaffLogsForBooking,
+  updateMyLog: updateMyStaffLog,
+} = require('../Model/eventStaffLogsModel')
 
 // Ensure the staff assignment table exists on load (best-effort)
 initConfirmedBookingStaffTable().catch((e) =>
@@ -18,6 +23,10 @@ initConfirmedBookingStaffTable().catch((e) =>
     'Init confirmed_booking_staff table (employee) failed:',
     e?.message
   )
+)
+// Ensure staff logs table exists on load
+initEventStaffLogsTable().catch((e) =>
+  console.warn('Init event_staff_logs table (employee) failed:', e?.message)
 )
 
 exports.getDashboard = (req, res) => {
@@ -165,5 +174,78 @@ exports.updateInventoryItemLimited = async (req, res) => {
     return res
       .status(500)
       .json({ message: 'Error updating inventory (employee)' })
+  }
+}
+
+// NEW: List staff logs for a booking (only for staff assigned to this booking)
+exports.getAssignedBookingStaffLogs = async (req, res) => {
+  try {
+    const uid = req?.user?.id
+    if (!uid) return res.status(401).json({ message: 'Unauthorized' })
+    const id = parseInt(req.params.id, 10)
+    if (Number.isNaN(id) || id <= 0)
+      return res.status(400).json({ message: 'Invalid booking id' })
+
+    const { rows } = await pool.query(
+      `SELECT 1 FROM confirmed_booking_staff WHERE bookingid = $1 AND staff_userid = $2 LIMIT 1`,
+      [id, uid]
+    )
+    if (!rows[0]) {
+      return res
+        .status(403)
+        .json({ message: 'You are not assigned to this booking' })
+    }
+    const raw = await getStaffLogsForBooking(id)
+    const logs = raw.map((l) => ({
+      ...l,
+      is_me: Number(l.staff_userid) === Number(uid),
+    }))
+    return res.json({ logs })
+  } catch (err) {
+    console.error('employee.getAssignedBookingStaffLogs error:', err)
+    return res
+      .status(500)
+      .json({ message: 'Error loading staff logs for booking' })
+  }
+}
+
+// NEW: Update the authenticated staff user's log for a booking
+// Body example: { field: 'arrived_at', value?: string|null } where value omitted = now
+exports.updateMyStaffLogForBooking = async (req, res) => {
+  try {
+    const uid = req?.user?.id
+    if (!uid) return res.status(401).json({ message: 'Unauthorized' })
+    const id = parseInt(req.params.id, 10)
+    if (Number.isNaN(id) || id <= 0)
+      return res.status(400).json({ message: 'Invalid booking id' })
+    const { field, value } = req.body || {}
+    const allowed = new Set([
+      'arrived_at',
+      'setup_finished_at',
+      'started_at',
+      'ended_at',
+      'picked_up_at',
+    ])
+    if (typeof field !== 'string' || !allowed.has(field)) {
+      return res.status(400).json({ message: 'Invalid field' })
+    }
+    // ensure assignment
+    const { rows } = await pool.query(
+      `SELECT 1 FROM confirmed_booking_staff WHERE bookingid = $1 AND staff_userid = $2 LIMIT 1`,
+      [id, uid]
+    )
+    if (!rows[0]) {
+      return res
+        .status(403)
+        .json({ message: 'You are not assigned to this booking' })
+    }
+    const payload = { [field]: value === undefined ? 'now' : value }
+    const updated = await updateMyStaffLog(id, uid, payload)
+    return res.json({ log: updated })
+  } catch (err) {
+    console.error('employee.updateMyStaffLogForBooking error:', err)
+    return res
+      .status(500)
+      .json({ message: 'Error updating staff log for booking' })
   }
 }

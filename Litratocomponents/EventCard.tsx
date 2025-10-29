@@ -21,6 +21,7 @@ import {
   fetchPaymentSummaryForBooking,
   listVisibleInventory,
 } from '../schemas/functions/EventCards/api'
+import StaffTimelineLogger from './StaffTimelineLogger'
 
 type Status = 'ongoing' | 'standby' | 'finished'
 type Payment = 'unpaid' | 'partially-paid' | 'paid'
@@ -658,6 +659,10 @@ export default function EventCard({
 
                 {/* RIGHT: Controls */}
                 <div className="space-y-5 text-sm">
+                  {/* Staff timeline logging (employee only) */}
+                  {summaryRole === 'employee' && bookingId ? (
+                    <StaffTimelineLogger bookingId={bookingId} />
+                  ) : null}
                   {/* Event status controls */}
                   <div className="rounded-lg border p-4">
                     <div className="font-semibold mb-2">Event Status</div>
