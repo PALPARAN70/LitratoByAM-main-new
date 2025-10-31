@@ -249,6 +249,7 @@ async function createPaymentHandler(req, res) {
       notes = null,
       payment_status = 'completed',
       verified = true,
+      proof_image_url = null,
     } = req.body || {}
 
     const bId = Number(booking_id)
@@ -292,7 +293,7 @@ async function createPaymentHandler(req, res) {
       amount,
       amount_paid: paid,
       payment_method: String(payment_method || 'cash'),
-      proof_image_url: null,
+      proof_image_url: proof_image_url ? String(proof_image_url) : null,
       reference_no: reference_no ? String(reference_no) : null,
       payment_status: String(payment_status || 'Pending'),
       notes: notes == null ? null : String(notes),
@@ -300,6 +301,9 @@ async function createPaymentHandler(req, res) {
     })
 
     try {
+      const method = String(payment_method || '').toLowerCase()
+      const customerAction =
+        method === 'gcash' ? 'customer-gcash-payment' : 'customer-cash-payment'
       await createPaymentLog({
         payment_id: row.payment_id,
         previous_status: 'n/a',
@@ -316,7 +320,7 @@ async function createPaymentHandler(req, res) {
         performed_by: 'customer',
         user_id: userId,
         notes: row.notes || null,
-        action: 'customer-cash-payment',
+        action: customerAction,
       })
     } catch (e) {
       console.error('admin create payment log failed:', e)
@@ -404,11 +408,9 @@ async function createRefundHandler(req, res) {
     const alreadyRefunded = await getTotalRefundedForPayment(paymentId)
     const refundable = Math.max(0, Number(p.amount_paid || 0) - alreadyRefunded)
     if (amt > refundable) {
-      return res
-        .status(400)
-        .json({
-          error: `Refund exceeds refundable amount (${refundable.toFixed(2)})`,
-        })
+      return res.status(400).json({
+        error: `Refund exceeds refundable amount (${refundable.toFixed(2)})`,
+      })
     }
 
     const refund = await createRefund({

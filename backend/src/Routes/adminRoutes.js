@@ -15,9 +15,11 @@ const ASSETS_DIR = path.resolve(__dirname, '..', '..', 'Assets')
 const PKG_DIR = path.join(ASSETS_DIR, 'Packages')
 const GRIDS_DIR = path.join(ASSETS_DIR, 'Grids')
 const PAYMENTS_QR_DIR = path.join(ASSETS_DIR, 'Payments', 'QR')
+const PAYMENTS_PROOFS_DIR = path.join(ASSETS_DIR, 'Payments', 'Proofs')
 fs.mkdirSync(PKG_DIR, { recursive: true })
 fs.mkdirSync(GRIDS_DIR, { recursive: true })
 fs.mkdirSync(PAYMENTS_QR_DIR, { recursive: true })
+fs.mkdirSync(PAYMENTS_PROOFS_DIR, { recursive: true })
 
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => cb(null, PKG_DIR),
@@ -47,6 +49,16 @@ const storagePaymentQR = multer.diskStorage({
   },
 })
 const uploadPaymentQR = multer({ storage: storagePaymentQR })
+
+// storage for Payment PROOF images (e.g., GCash receipt)
+const storagePaymentProof = multer.diskStorage({
+  destination: (_req, _file, cb) => cb(null, PAYMENTS_PROOFS_DIR),
+  filename: (_req, file, cb) => {
+    const safe = file.originalname.replace(/[^a-z0-9._-]/gi, '_').toLowerCase()
+    cb(null, `${Date.now()}_${safe}`)
+  },
+})
+const uploadPaymentProof = multer({ storage: storagePaymentProof })
 // -------- user management routes -------- //
 // List users by role (?role=customer|employee|admin)
 router.get(
@@ -70,6 +82,21 @@ router.post(
     const url = `${req.protocol}://${req.get(
       'host'
     )}/assets/Payments/QR/${path.basename(req.file.path)}`
+    res.json({ url })
+  }
+)
+
+// Upload customer receipt/proof image (e.g., GCash screenshot)
+router.post(
+  '/payment-proof-image',
+  authMiddleware,
+  roleMiddleware('admin'),
+  uploadPaymentProof.single('image'),
+  (req, res) => {
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' })
+    const url = `${req.protocol}://${req.get(
+      'host'
+    )}/assets/Payments/Proofs/${path.basename(req.file.path)}`
     res.json({ url })
   }
 )

@@ -5,12 +5,17 @@ const {
 const {
   updateBookingStatus,
   getPaymentSummary,
+  getConfirmedBookingById,
+  recalcAndPersistPaymentStatus,
 } = require('../Model/confirmedBookingRequestModel')
 const { pool } = require('../Config/db')
 // NEW: reuse package/inventory models for staff-safe package items list
 const packageModel = require('../Model/packageModel')
 const packageInventoryItemModel = require('../Model/packageInventoryItemModel')
 const inventoryModel = require('../Model/inventoryModel')
+// NEW: reuse payment models/logs
+const paymentModel = require('../Model/paymentModel')
+const paymentLogsModel = require('../Model/paymentLogsModel')
 const {
   initEventStaffLogsTable,
   getLogsForBooking: getStaffLogsForBooking,
@@ -247,5 +252,153 @@ exports.updateMyStaffLogForBooking = async (req, res) => {
     return res
       .status(500)
       .json({ message: 'Error updating staff log for booking' })
+  }
+}
+
+// NEW: List payments for an assigned confirmed booking (employee-only)
+exports.listAssignedBookingPayments = async (req, res) => {
+  try {
+    const uid = req?.user?.id
+    if (!uid) return res.status(401).json({ message: 'Unauthorized' })
+    const id = parseInt(req.params.id, 10)
+    if (Number.isNaN(id) || id <= 0)
+      return res.status(400).json({ message: 'Invalid booking id' })
+
+    // ensure assignment
+    const { rows } = await pool.query(
+      `SELECT 1 FROM confirmed_booking_staff WHERE bookingid = $1 AND staff_userid = $2 LIMIT 1`,
+      [id, uid]
+    )
+    if (!rows[0]) {
+      return res
+        .status(403)
+        .json({ message: 'You are not assigned to this booking' })
+    }
+
+    const payments = await paymentModel.listPayments({ booking_id: id })
+    return res.json({ payments })
+  } catch (err) {
+    console.error('employee.listAssignedBookingPayments error:', err)
+    return res
+      .status(500)
+      .json({ message: 'Error loading payments for booking' })
+  }
+}
+
+// NEW: Create a payment for an assigned confirmed booking (employee-only)
+exports.createAssignedBookingPayment = async (req, res) => {
+  try {
+    const uid = req?.user?.id
+    if (!uid) return res.status(401).json({ message: 'Unauthorized' })
+    const id = parseInt(req.params.id, 10)
+    if (Number.isNaN(id) || id <= 0)
+      return res.status(400).json({ message: 'Invalid booking id' })
+
+    // ensure assignment
+    const { rows } = await pool.query(
+      `SELECT 1 FROM confirmed_booking_staff WHERE bookingid = $1 AND staff_userid = $2 LIMIT 1`,
+      [id, uid]
+    )
+    if (!rows[0]) {
+      return res
+        .status(403)
+        .json({ message: 'You are not assigned to this booking' })
+    }
+
+    const {
+      amount_paid,
+      payment_method = 'cash',
+      reference_no = null,
+      notes = null,
+      payment_status = 'completed',
+      verified = true,
+      proof_image_url = null,
+    } = req.body || {}
+
+    const paid = Number(amount_paid)
+    if (!Number.isFinite(paid) || paid <= 0) {
+      return res.status(400).json({ error: 'amount_paid must be > 0' })
+    }
+
+    const booking = await getConfirmedBookingById(id)
+    if (!booking) return res.status(404).json({ error: 'Booking not found' })
+    const userId = Number(booking.userid)
+
+    // Prevent overpayment using payment summary
+    let remaining = null
+    try {
+      const sum = await getPaymentSummary(id)
+      remaining = Math.max(
+        0,
+        Number(sum.amountDue || 0) - Number(sum.paidTotal || 0)
+      )
+    } catch {}
+    if (remaining != null && paid > remaining) {
+      return res.status(400).json({
+        error: `Payment exceeds remaining balance (${remaining.toFixed(2)})`,
+      })
+    }
+
+    // Compute current amount due (base + extension) for record-keeping
+    let amount = Number(booking.total_booking_price || 0)
+    try {
+      const sum = await getPaymentSummary(id)
+      amount = Number(sum.amountDue || amount)
+    } catch {}
+
+    const row = await paymentModel.createPayment({
+      booking_id: id,
+      user_id: userId,
+      amount,
+      amount_paid: paid,
+      payment_method: String(payment_method || 'cash'),
+      proof_image_url: proof_image_url ? String(proof_image_url) : null,
+      reference_no: reference_no ? String(reference_no) : null,
+      payment_status: String(payment_status || 'Pending'),
+      notes: notes == null ? null : String(notes),
+      verified_at: verified ? new Date() : null,
+    })
+
+    // Logs: mark performer as employee and customer as method-aware
+    try {
+      const method = String(payment_method || '').toLowerCase()
+      const customerAction =
+        method === 'gcash' ? 'customer-gcash-payment' : 'customer-cash-payment'
+      await paymentLogsModel.createPaymentLog({
+        payment_id: row.payment_id,
+        previous_status: 'n/a',
+        new_status: row.payment_status,
+        performed_by: 'employee',
+        user_id: uid,
+        notes: row.notes || null,
+        action: 'employee-create',
+      })
+      await paymentLogsModel.createPaymentLog({
+        payment_id: row.payment_id,
+        previous_status: 'n/a',
+        new_status: row.payment_status,
+        performed_by: 'customer',
+        user_id: userId,
+        notes: row.notes || null,
+        action: customerAction,
+      })
+    } catch (e) {
+      console.error('employee create payment log failed:', e)
+    }
+
+    // Recalculate booking payment_status
+    try {
+      await recalcAndPersistPaymentStatus(row.booking_id)
+    } catch (e) {
+      console.warn(
+        'recalc booking payment status (employee create) failed:',
+        e?.message
+      )
+    }
+
+    return res.status(201).json({ payment: row })
+  } catch (err) {
+    console.error('employee.createAssignedBookingPayment error:', err)
+    return res.status(500).json({ error: 'Failed to create payment' })
   }
 }
