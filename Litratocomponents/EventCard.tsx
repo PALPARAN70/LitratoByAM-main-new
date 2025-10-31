@@ -3,6 +3,7 @@ import Image from 'next/image'
 import { useState, useEffect } from 'react'
 import { HiOutlineLocationMarker } from 'react-icons/hi'
 import { User, Phone, Signal, Grid2x2 } from 'lucide-react'
+import { toast } from 'sonner'
 import {
   Dialog,
   DialogContent,
@@ -19,9 +20,21 @@ import {
   patchInventory,
   patchInventoryEmployee,
   fetchPaymentSummaryForBooking,
+  listPaymentsForBooking,
+  createPaymentForBooking,
+  uploadPaymentProofImage,
   listVisibleInventory,
 } from '../schemas/functions/EventCards/api'
 import StaffTimelineLogger from './StaffTimelineLogger'
+// Booking status update helpers (admin/staff)
+import {
+  updateAdminBookingStatus,
+  type AdminBookingStatus,
+} from '../schemas/functions/ConfirmedBookings/admin'
+import {
+  updateAssignedBookingStatus,
+  type StaffBookingStatus,
+} from '../schemas/functions/ConfirmedBookings/staff'
 
 type Status = 'ongoing' | 'standby' | 'finished'
 type Payment = 'unpaid' | 'partially-paid' | 'paid'
@@ -114,14 +127,39 @@ export default function EventCard({
   const [summaryLoading, setSummaryLoading] = useState(false)
   // NEW: local state for event status selection within Details
   const [eventStatus, setEventStatus] = useState<Status>(status)
+  // NEW: local card status for immediate badge reflection
+  const [cardStatus, setCardStatus] = useState<Status>(status)
   // NEW: track whether we have loaded dynamic items for this open session
   const [itemsLoadedFromPackage, setItemsLoadedFromPackage] = useState(false)
 
-  // NEW: modal to view payment details/proof
-  const [viewPaymentOpen, setViewPaymentOpen] = useState(false)
-  const [proofType, setProofType] = useState<'image' | 'cash'>(
-    paymentProofUrl ? 'image' : 'cash'
-  )
+  // NEW: Payments manager modal (list + create + proof preview)
+  const [paymentsOpen, setPaymentsOpen] = useState(false)
+  const [payments, setPayments] = useState<
+    Array<{
+      payment_id: number
+      booking_id: number
+      user_id: number
+      amount: number
+      amount_paid: number
+      payment_method: string
+      proof_image_url?: string | null
+      reference_no?: string | null
+      payment_status: string
+      notes?: string | null
+      verified_at?: string | null
+      created_at?: string
+    }>
+  >([])
+  const [paymentsLoading, setPaymentsLoading] = useState(false)
+  const [paymentsError, setPaymentsError] = useState<string | null>(null)
+  // create form state
+  const [newAmount, setNewAmount] = useState<string>('')
+  const [newMethod, setNewMethod] = useState<'cash' | 'gcash'>('cash')
+  const [newRef, setNewRef] = useState<string>('')
+  const [newNotes, setNewNotes] = useState<string>('')
+  const [createBusy, setCreateBusy] = useState(false)
+  const [newProofUrl, setNewProofUrl] = useState<string>('')
+  const [uploadBusy, setUploadBusy] = useState(false)
 
   useEffect(() => {
     setPaymentStatus(payment)
@@ -129,6 +167,11 @@ export default function EventCard({
 
   useEffect(() => {
     setEventStatus(status)
+  }, [status])
+
+  // Keep local badge in sync when parent prop changes externally
+  useEffect(() => {
+    setCardStatus(status)
   }, [status])
 
   // NEW: allow staff or admin to edit, or if explicitly enabled by prop
@@ -337,6 +380,25 @@ export default function EventCard({
       setSummaryLoading(false)
     }
   }
+
+  // Load all payments for this booking into modal list
+  const loadPayments = async () => {
+    if (!bookingId) return
+    setPaymentsLoading(true)
+    setPaymentsError(null)
+    try {
+      const rows = await listPaymentsForBooking(bookingId, summaryRole)
+      setPayments(Array.isArray(rows) ? rows : [])
+    } catch (e) {
+      const msg =
+        e && typeof e === 'object' && 'message' in (e as any)
+          ? String((e as any).message || '')
+          : ''
+      setPaymentsError(msg || 'Failed to load payments')
+    } finally {
+      setPaymentsLoading(false)
+    }
+  }
   const statusStyles: Record<Status, { label: string; cls: string }> = {
     ongoing: { label: 'Ongoing', cls: 'bg-yellow-700 text-white' },
     standby: { label: 'Standby', cls: 'bg-gray-700  text-white' },
@@ -350,7 +412,7 @@ export default function EventCard({
     unpaid: { label: 'Unpaid', cls: 'bg-red-700 text-white' },
     paid: { label: 'Paid', cls: 'bg-green-700 text-white' },
   }
-  const s = statusStyles[status]
+  const s = statusStyles[cardStatus]
   const p = paymentStyles[paymentStatus]
   const HOURLY_RATE = 2000
   const extHours = Math.max(0, Number(extensionHours || 0))
@@ -774,9 +836,9 @@ export default function EventCard({
                           <button
                             type="button"
                             className="px-2 py-1 rounded border text-xs"
-                            onClick={() => setViewPaymentOpen(true)}
+                            onClick={() => setPaymentsOpen(true)}
                           >
-                            View Payment
+                            View Payments
                           </button>
                         </div>
 
@@ -796,21 +858,28 @@ export default function EventCard({
                       </div>
                     )}
 
-                    {/* View Payment modal (nested) */}
+                    {/* Payments manager modal */}
                     <Dialog
-                      open={viewPaymentOpen}
-                      onOpenChange={setViewPaymentOpen}
+                      open={paymentsOpen}
+                      onOpenChange={(o) => {
+                        setPaymentsOpen(o)
+                        if (o) {
+                          // refresh payments and summary on open
+                          void loadPayments()
+                          void fetchPaymentSummary()
+                        }
+                      }}
                     >
-                      <DialogContent className="sm:max-w-lg">
+                      <DialogContent className="sm:max-w-3xl">
                         <DialogHeader>
-                          <DialogTitle>Payment Details</DialogTitle>
+                          <DialogTitle>Payments</DialogTitle>
                           <DialogDescription>
-                            Summary, logs, and proof selection for this booking.
+                            Review existing payments and add a new one.
                           </DialogDescription>
                         </DialogHeader>
 
                         {/* Summary */}
-                        <div className="text-sm space-y-2">
+                        <div className="text-sm grid grid-cols-2 gap-4">
                           <div>
                             <span className="font-semibold">Paid so far:</span>{' '}
                             {summaryLoading
@@ -833,52 +902,311 @@ export default function EventCard({
                           </div>
                         </div>
 
-                        {/* Proof preview */}
+                        {/* List payments */}
                         <div className="mt-3">
-                          <div className="font-semibold">Proof Type</div>
-                          <div className="flex items-center text-sm">
-                            <div className=" space-y-2">
-                              <button
-                                type="button"
-                                className="px-2 py-1 rounded border text-xs disabled:opacity-50"
-                                disabled={!paymentProofUrl}
-                                onClick={() => {
-                                  if (paymentProofUrl)
-                                    window.open(paymentProofUrl, '_blank')
-                                }}
-                              >
-                                Open proof
-                              </button>
-                              {paymentProofUrl ? (
-                                <div className="border rounded p-1">
-                                  <img
-                                    src={paymentProofUrl}
-                                    alt="Payment proof"
-                                    className="max-h-64 w-auto object-contain rounded"
-                                  />
-                                </div>
-                              ) : (
-                                <div className="text-xs text-gray-500">
-                                  No proof uploaded
-                                </div>
-                              )}
+                          <div className="flex items-center justify-between mb-1">
+                            <div className="font-semibold">
+                              Existing payments
                             </div>
+                            <button
+                              type="button"
+                              className="px-2 py-1 rounded border text-xs disabled:opacity-50"
+                              disabled={paymentsLoading}
+                              onClick={() => {
+                                void loadPayments()
+                                void fetchPaymentSummary()
+                              }}
+                            >
+                              {paymentsLoading ? 'Refreshing…' : 'Refresh'}
+                            </button>
                           </div>
+                          {paymentsLoading ? (
+                            <div className="text-sm text-gray-500">
+                              Loading…
+                            </div>
+                          ) : paymentsError ? (
+                            <div className="text-sm text-red-600">
+                              {paymentsError}
+                            </div>
+                          ) : payments.length === 0 ? (
+                            <div className="text-sm text-gray-600">
+                              No payments yet.
+                            </div>
+                          ) : (
+                            <div className="max-h-64 overflow-y-auto border rounded">
+                              <table className="w-full text-sm">
+                                <thead className="bg-gray-100">
+                                  <tr>
+                                    <th className="text-left px-2 py-1">
+                                      Date
+                                    </th>
+                                    <th className="text-left px-2 py-1">
+                                      Method
+                                    </th>
+                                    <th className="text-right px-2 py-1">
+                                      Paid
+                                    </th>
+                                    <th className="text-left px-2 py-1">
+                                      Status
+                                    </th>
+                                    <th className="text-left px-2 py-1">
+                                      Ref #
+                                    </th>
+                                    <th className="text-left px-2 py-1">
+                                      Proof
+                                    </th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {payments.map((p) => (
+                                    <tr key={p.payment_id} className="border-t">
+                                      <td className="px-2 py-1">
+                                        {p.created_at
+                                          ? new Date(
+                                              p.created_at
+                                            ).toLocaleString()
+                                          : '—'}
+                                      </td>
+                                      <td className="px-2 py-1">
+                                        {p.payment_method || '—'}
+                                      </td>
+                                      <td className="px-2 py-1 text-right">
+                                        ₱
+                                        {Number(
+                                          p.amount_paid || 0
+                                        ).toLocaleString('en-PH', {
+                                          minimumFractionDigits: 2,
+                                          maximumFractionDigits: 2,
+                                        })}
+                                      </td>
+                                      <td className="px-2 py-1">
+                                        {p.payment_status || '—'}
+                                      </td>
+                                      <td className="px-2 py-1">
+                                        {p.reference_no || '—'}
+                                      </td>
+                                      <td className="px-2 py-1">
+                                        <button
+                                          type="button"
+                                          className="px-2 py-1 rounded border text-xs disabled:opacity-50"
+                                          disabled={!p.proof_image_url}
+                                          onClick={() => {
+                                            if (p.proof_image_url) {
+                                              window.open(
+                                                p.proof_image_url,
+                                                '_blank'
+                                              )
+                                            }
+                                          }}
+                                        >
+                                          View
+                                        </button>
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
                         </div>
 
-                        {/* Logs */}
-                        <div className="mt-4">
-                          <div className="font-semibold mb-1">Payment Logs</div>
-                          <div className="text-sm text-gray-600">
-                            No logs available.
+                        {/* Create new payment */}
+                        {bookingId ? (
+                          <div className="mt-4 border-t pt-3">
+                            <div className="font-semibold mb-2">
+                              Add payment
+                            </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 items-end">
+                              <div className="col-span-1">
+                                <label className="text-xs text-gray-600">
+                                  Amount paid
+                                </label>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  value={newAmount}
+                                  onChange={(e) => setNewAmount(e.target.value)}
+                                  className="w-full h-9 px-2 rounded border"
+                                  placeholder="0.00"
+                                />
+                              </div>
+                              <div className="col-span-1">
+                                <label className="text-xs text-gray-600">
+                                  Method
+                                </label>
+                                <select
+                                  value={newMethod}
+                                  onChange={(e) =>
+                                    setNewMethod(
+                                      (e.target.value as 'cash' | 'gcash') ||
+                                        'cash'
+                                    )
+                                  }
+                                  className="w-full h-9 px-2 rounded border bg-white"
+                                >
+                                  <option value="cash">Cash</option>
+                                  <option value="gcash">GCash</option>
+                                </select>
+                              </div>
+                              <div className="col-span-1">
+                                <label className="text-xs text-gray-600">
+                                  Reference #
+                                </label>
+                                <input
+                                  type="text"
+                                  value={newRef}
+                                  onChange={(e) => setNewRef(e.target.value)}
+                                  className="w-full h-9 px-2 rounded border"
+                                  placeholder="Optional"
+                                />
+                              </div>
+                              <div className="col-span-1">
+                                <label className="text-xs text-gray-600">
+                                  Notes
+                                </label>
+                                <input
+                                  type="text"
+                                  value={newNotes}
+                                  onChange={(e) => setNewNotes(e.target.value)}
+                                  className="w-full h-9 px-2 rounded border"
+                                  placeholder="Optional"
+                                />
+                              </div>
+                              {newMethod === 'gcash' ? (
+                                <div className="col-span-full">
+                                  <label className="text-xs text-gray-600">
+                                    GCash receipt (image)
+                                  </label>
+                                  <div className="flex items-center gap-3">
+                                    <input
+                                      type="file"
+                                      accept="image/*"
+                                      onChange={async (e) => {
+                                        const f = e.target.files?.[0]
+                                        if (!f) return
+                                        try {
+                                          setUploadBusy(true)
+                                          const url =
+                                            await uploadPaymentProofImage(
+                                              f,
+                                              summaryRole,
+                                              bookingId as number | string
+                                            )
+                                          setNewProofUrl(url)
+                                        } catch (err) {
+                                          // @ts-ignore optional toast
+                                          toast?.error?.('Upload failed')
+                                        } finally {
+                                          setUploadBusy(false)
+                                        }
+                                      }}
+                                    />
+                                    {uploadBusy && (
+                                      <span className="text-xs text-gray-500">
+                                        Uploading…
+                                      </span>
+                                    )}
+                                    {newProofUrl ? (
+                                      <button
+                                        type="button"
+                                        className="px-2 py-1 rounded border text-xs"
+                                        onClick={() =>
+                                          window.open(newProofUrl, '_blank')
+                                        }
+                                      >
+                                        Preview
+                                      </button>
+                                    ) : null}
+                                  </div>
+                                </div>
+                              ) : null}
+                              <div className="col-span-full flex justify-end mt-2">
+                                <button
+                                  type="button"
+                                  className="px-3 py-2 rounded bg-black text-white text-sm disabled:opacity-50"
+                                  disabled={
+                                    createBusy ||
+                                    uploadBusy ||
+                                    !newAmount ||
+                                    Number(newAmount) <= 0
+                                  }
+                                  onClick={async () => {
+                                    if (!bookingId) return
+                                    const amt = Number(newAmount)
+                                    if (!Number.isFinite(amt) || amt <= 0)
+                                      return
+                                    // Guard: prevent creating payments when already fully paid
+                                    const remaining =
+                                      typeof amountDue === 'number' &&
+                                      typeof paidTotal === 'number'
+                                        ? Math.max(0, amountDue - paidTotal)
+                                        : null
+                                    if (remaining === 0) {
+                                      toast.error(
+                                        'This booking is already fully paid. No additional payment is needed.'
+                                      )
+                                      return
+                                    }
+                                    if (remaining != null && amt > remaining) {
+                                      toast.error(
+                                        `Payment exceeds remaining balance (₱${remaining.toLocaleString(
+                                          'en-PH',
+                                          {
+                                            minimumFractionDigits: 2,
+                                            maximumFractionDigits: 2,
+                                          }
+                                        )})`
+                                      )
+                                      return
+                                    }
+                                    try {
+                                      setCreateBusy(true)
+                                      const created =
+                                        await createPaymentForBooking(
+                                          bookingId,
+                                          {
+                                            amount_paid: amt,
+                                            payment_method: newMethod,
+                                            reference_no: newRef || null,
+                                            notes: newNotes || null,
+                                            proofImageUrl:
+                                              newMethod === 'gcash' &&
+                                              newProofUrl
+                                                ? newProofUrl
+                                                : null,
+                                          },
+                                          summaryRole
+                                        )
+                                      if (created) {
+                                        toast.success('Payment recorded')
+                                        setNewAmount('')
+                                        setNewMethod('cash')
+                                        setNewRef('')
+                                        setNewNotes('')
+                                        setNewProofUrl('')
+                                        await loadPayments()
+                                        await fetchPaymentSummary()
+                                      } else {
+                                        toast.error('Failed to create payment')
+                                      }
+                                    } finally {
+                                      setCreateBusy(false)
+                                    }
+                                  }}
+                                >
+                                  {createBusy ? 'Saving…' : 'Save payment'}
+                                </button>
+                              </div>
+                            </div>
                           </div>
-                        </div>
+                        ) : null}
 
                         <DialogFooter>
                           <button
                             type="button"
                             className="px-4 py-2 rounded border text-sm"
-                            onClick={() => setViewPaymentOpen(false)}
+                            onClick={() => setPaymentsOpen(false)}
                           >
                             Close
                           </button>
@@ -996,6 +1324,35 @@ export default function EventCard({
                     onClick={() => {
                       // persist inventory changes (fire-and-forget)
                       void persistInventoryUpdates()
+                      // persist event status (fire-and-forget) and reflect immediately on card
+                      void (async () => {
+                        if (!bookingId) return
+                        // map UI status -> backend status values
+                        const mapToBackend: Record<Status, AdminBookingStatus> =
+                          {
+                            standby: 'scheduled',
+                            ongoing: 'in_progress',
+                            finished: 'completed',
+                          }
+                        try {
+                          if (summaryRole === 'employee') {
+                            await updateAssignedBookingStatus(
+                              bookingId,
+                              mapToBackend[
+                                eventStatus
+                              ] as unknown as StaffBookingStatus
+                            )
+                          } else {
+                            await updateAdminBookingStatus(
+                              bookingId,
+                              mapToBackend[eventStatus]
+                            )
+                          }
+                          setCardStatus(eventStatus)
+                        } catch (e) {
+                          // Optionally surface a toast; for now, ignore to not block UI
+                        }
+                      })()
                       onItemsChange?.(
                         editItems
                           .filter(

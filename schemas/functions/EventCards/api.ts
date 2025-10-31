@@ -153,6 +153,121 @@ export async function fetchPaymentSummaryForBooking(
   return { paidTotal: paid, amountDue: due, computedStatus }
 }
 
+// --- Payments: list + create ---
+export type PaymentRecord = {
+  payment_id: number
+  booking_id: number
+  user_id: number
+  amount: number
+  amount_paid: number
+  payment_method: string
+  proof_image_url?: string | null
+  reference_no?: string | null
+  payment_status: string
+  notes?: string | null
+  verified_at?: string | null
+  created_at?: string
+}
+
+// List payments tied to a booking
+export async function listPaymentsForBooking(
+  bookingId: number | string,
+  role: 'admin' | 'employee'
+): Promise<PaymentRecord[]> {
+  const base = getApiBase()
+  const url =
+    role === 'employee'
+      ? `${base}/api/employee/assigned-confirmed-bookings/${encodeURIComponent(
+          String(bookingId)
+        )}/payments`
+      : `${base}/api/admin/payments?booking_id=${encodeURIComponent(
+          String(bookingId)
+        )}`
+  const res = await fetch(url, { headers: getAuthHeader(), cache: 'no-store' })
+  if (!res.ok) return []
+  const data = await res.json().catch(() => ({} as any))
+  return Array.isArray(data?.payments) ? (data.payments as PaymentRecord[]) : []
+}
+
+// Create a payment (admin currently). Intended for staff use during events (cash etc.).
+export async function createPaymentForBooking(
+  bookingId: number | string,
+  payload: {
+    amount_paid: number
+    payment_method?: 'cash' | 'gcash'
+    reference_no?: string | null
+    notes?: string | null
+    // advanced flags defaulted by server; exposed for future use
+    payment_status?: string
+    verified?: boolean
+    proofImageUrl?: string | null
+  },
+  role: 'admin' | 'employee'
+): Promise<PaymentRecord | null> {
+  const base = getApiBase()
+  const body =
+    role === 'employee'
+      ? {
+          amount_paid: Number(payload.amount_paid),
+          payment_method: payload.payment_method || 'cash',
+          reference_no: payload.reference_no ?? null,
+          notes: payload.notes ?? null,
+          payment_status: payload.payment_status ?? 'completed',
+          verified: payload.verified ?? true,
+          proof_image_url: payload.proofImageUrl ?? null,
+        }
+      : {
+          booking_id: Number(bookingId),
+          amount_paid: Number(payload.amount_paid),
+          payment_method: payload.payment_method || 'cash',
+          reference_no: payload.reference_no ?? null,
+          notes: payload.notes ?? null,
+          payment_status: payload.payment_status ?? 'completed',
+          verified: payload.verified ?? true,
+          proof_image_url: payload.proofImageUrl ?? null,
+        }
+  const url =
+    role === 'employee'
+      ? `${base}/api/employee/assigned-confirmed-bookings/${encodeURIComponent(
+          String(bookingId)
+        )}/payments`
+      : `${base}/api/admin/payments`
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) return null
+  const data = await res.json().catch(() => ({} as any))
+  return (data?.payment as PaymentRecord) || null
+}
+
+// Upload a payment proof image; returns a public URL
+export async function uploadPaymentProofImage(
+  file: File,
+  role: 'admin' | 'employee',
+  bookingId?: number | string
+): Promise<string> {
+  const base = getApiBase()
+  const fd = new FormData()
+  fd.append('image', file)
+  const path =
+    role === 'employee'
+      ? `/api/employee/assigned-confirmed-bookings/${encodeURIComponent(
+          String(bookingId ?? '')
+        )}/payment-proof-image`
+      : '/api/admin/payment-proof-image'
+  const res = await fetch(`${base}${path}`, {
+    method: 'POST',
+    headers: getAuthHeader(),
+    body: fd,
+  })
+  if (!res.ok) throw new Error(`Upload failed: ${res.status}`)
+  const data = await res.json().catch(() => ({} as any))
+  if (!data?.url) throw new Error('No URL returned')
+  return String(data.url)
+}
+
 // Staff logs types
 export type StaffLog = {
   id?: number
