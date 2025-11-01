@@ -1,552 +1,342 @@
 'use client'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
-type Customer = {
-  id: string
-  firstname: string
-  lastname: string
-  email: string
-  contact: string
+type PaymentRow = {
+  payment_id: number
+  amount_paid: number
+  payment_status?: string
+  verified_at?: string | null
+  created_at?: string
+  booking_id?: number
 }
-type Package = { id: string; name: string; price: number; features: string[] }
-type InventoryItem = {
-  id: string
-  name: string
-  quantity: number
-  status: 'in-stock' | 'low' | 'out'
+type BookingRow = {
+  id: number
+  booking_status?: string
+  payment_status?: string
+  event_name?: string
 }
 
-type TabKey = 'customers' | 'packages' | 'inventory'
+export default function AdminAnalyticsPage() {
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [payments, setPayments] = useState<PaymentRow[]>([])
+  const [bookings, setBookings] = useState<BookingRow[]>([])
+  const [displayName, setDisplayName] = useState<string>('Admin')
+  const [isClient, setIsClient] = useState(false)
 
-export default function AdminDashboardPage() {
-  const [active, setActive] = useState<TabKey>('customers')
+  const API_ROOT = (process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:5000')
+    .toString()
+    .replace(/\/$/, '')
+
+  useEffect(() => {
+    setIsClient(true)
+    let mounted = true
+    async function load() {
+      setLoading(true)
+      setError(null)
+      try {
+        const token =
+          typeof window !== 'undefined'
+            ? localStorage.getItem('access_token')
+            : null
+        const headers = token ? { Authorization: `Bearer ${token}` } : undefined
+
+        const [pRes, bRes, profRes] = await Promise.all([
+          fetch(`${API_ROOT}/api/admin/payments`, { headers }),
+          fetch(`${API_ROOT}/api/admin/confirmed-bookings`, { headers }),
+          fetch(`${API_ROOT}/api/auth/getProfile`, { headers }),
+        ])
+        if (!pRes.ok) throw new Error(`payments ${pRes.status}`)
+        if (!bRes.ok) throw new Error(`bookings ${bRes.status}`)
+        if (!profRes.ok) throw new Error(`profile ${profRes.status}`)
+        const pData = await pRes.json()
+        const bData = await bRes.json()
+        const profData = await profRes.json().catch(() => ({}))
+        if (!mounted) return
+        setPayments(Array.isArray(pData?.payments) ? pData.payments : [])
+        setBookings(Array.isArray(bData?.bookings) ? bData.bookings : [])
+        // Compute friendly name
+        const first = (profData?.firstname || '').toString().trim()
+        const last = (profData?.lastname || '').toString().trim()
+        const email = (profData?.email || profData?.username || '').toString()
+        let name = [first, last].filter(Boolean).join(' ').trim()
+        if (!name && email) name = email.split('@')[0]
+        if (name) setDisplayName(name)
+      } catch (e: any) {
+        if (!mounted) return
+        setError(e?.message || 'Failed to load analytics')
+      } finally {
+        if (mounted) setLoading(false)
+      }
+    }
+    load()
+    return () => {
+      mounted = false
+    }
+  }, [API_ROOT])
+
+  // Compute metrics
+  const verifiedPaid = (row: PaymentRow) => {
+    const s = String(row.payment_status || '').toLowerCase()
+    const ok =
+      !!row.verified_at &&
+      (s === 'completed' || s === 'paid' || s === 'succeeded')
+    const legacy =
+      row.payment_status === 'Partially Paid' ||
+      row.payment_status === 'Fully Paid'
+    return ok || legacy
+  }
+
+  const totalRevenue = useMemo(
+    () =>
+      payments
+        .filter(verifiedPaid)
+        .reduce((s, r) => s + Number(r.amount_paid || 0), 0),
+    [payments]
+  )
+
+  const todayRevenue = useMemo(() => {
+    const today = new Date()
+    const yyyy = today.getFullYear()
+    const mm = today.getMonth()
+    const dd = today.getDate()
+    return payments
+      .filter(verifiedPaid)
+      .filter((r) => {
+        const d = r.created_at ? new Date(r.created_at) : null
+        return (
+          d &&
+          d.getFullYear() === yyyy &&
+          d.getMonth() === mm &&
+          d.getDate() === dd
+        )
+      })
+      .reduce((s, r) => s + Number(r.amount_paid || 0), 0)
+  }, [payments])
+
+  const last7Days = useMemo(() => {
+    if (!isClient) return [] as { label: string; total: number }[]
+    const days: { label: string; total: number }[] = []
+    const now = new Date()
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(now)
+      d.setDate(now.getDate() - i)
+      const label = d.toLocaleDateString(undefined, {
+        month: 'short',
+        day: 'numeric',
+      })
+      days.push({ label, total: 0 })
+    }
+    const start = new Date()
+    start.setDate(start.getDate() - 6)
+    start.setHours(0, 0, 0, 0)
+    payments.filter(verifiedPaid).forEach((r) => {
+      const d = r.created_at ? new Date(r.created_at) : null
+      if (!d || d < start) return
+      const label = d.toLocaleDateString(undefined, {
+        month: 'short',
+        day: 'numeric',
+      })
+      const bucket = days.find((x) => x.label === label)
+      if (bucket) bucket.total += Number(r.amount_paid || 0)
+    })
+    return days
+  }, [payments, isClient])
+
+  const bookingCounts = useMemo(() => {
+    const map: Record<string, number> = {
+      scheduled: 0,
+      in_progress: 0,
+      completed: 0,
+    }
+    bookings.forEach((b) => {
+      const s = String(b.booking_status || '').toLowerCase()
+      if (s in map) map[s] += 1
+    })
+    return map
+  }, [bookings])
+
+  const recentPayments = useMemo(() => {
+    return [...payments]
+      .sort(
+        (a, b) =>
+          new Date(b.created_at || 0).getTime() -
+          new Date(a.created_at || 0).getTime()
+      )
+      .slice(0, 10)
+  }, [payments])
+
+  const bookingById = useMemo(() => {
+    const map = new Map<number, BookingRow>()
+    bookings.forEach((b) => map.set(Number(b.id), b))
+    return map
+  }, [bookings])
+
+  const formatStatus = (s?: string) => {
+    if (!s) return '—'
+    if (s.length === 0) return '—'
+    // Capitalize only the first character; preserve the rest to avoid breaking phrases like 'Partially Paid'
+    return s.charAt(0).toUpperCase() + s.slice(1)
+  }
+
+  const currencyParts = (value: number) => {
+    const fixed = Number(value || 0).toFixed(2)
+    const [i, f] = fixed.split('.')
+    // use locale formatting for integer part only
+    const intPart = Number(i).toLocaleString('en-PH')
+    const fracPart = f || '00'
+    return { intPart, fracPart }
+  }
+  const userName = displayName
 
   return (
     <div className="p-4">
-      <header className="flex items-center justify-between mb-4">
-        <h1 className="text-2xl font-bold">Dashboard</h1>
+      <header className="mb-4">
+        <h1 className="text-2xl font-bold">Welcome, {userName}!</h1>
+        <p className="text-sm text-gray-600">
+          Key metrics for bookings and payments
+        </p>
       </header>
 
-      <nav className="flex gap-2 mb-6">
-        <TabButton
-          active={active === 'customers'}
-          onClick={() => setActive('customers')}
-        >
-          Customers
-        </TabButton>
-        <TabButton
-          active={active === 'packages'}
-          onClick={() => setActive('packages')}
-        >
-          Packages
-        </TabButton>
-        <TabButton
-          active={active === 'inventory'}
-          onClick={() => setActive('inventory')}
-        >
-          Inventory
-        </TabButton>
-      </nav>
+      {loading && (
+        <div className="text-sm text-gray-500">Loading analytics…</div>
+      )}
+      {error && <div className="text-sm text-red-600">{error}</div>}
 
-      <section className="bg-white rounded-xl shadow p-4">
-        {active === 'customers' && <CustomersPanel />}
-        {active === 'packages' && <PackagesPanel />}
-        {active === 'inventory' && <InventoryPanel />}
-      </section>
-    </div>
-  )
-}
-
-function TabButton({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean
-  onClick: () => void
-  children: React.ReactNode
-}) {
-  return (
-    <div
-      onClick={onClick}
-      className={`px-4 py-2 rounded-full cursor-pointer border font-semibold transition
-        ${
-          active
-            ? 'bg-litratoblack text-white border-litratoblack'
-            : 'bg-white text-litratoblack border-gray-300 hover:bg-gray-100'
-        }`}
-    >
-      {children}
-    </div>
-  )
-}
-
-/* Customers */
-function CustomersPanel() {
-  const [customers, setCustomers] = useState<Customer[]>([
-    {
-      id: 'c1',
-      firstname: 'Juan',
-      lastname: 'Dela Cruz',
-      email: 'juan@example.com',
-      contact: '09123456789',
-    },
-  ])
-  const [editingId, setEditingId] = useState<string | null>(null)
-  const [form, setForm] = useState<Omit<Customer, 'id'>>({
-    firstname: '',
-    lastname: '',
-    email: '',
-    contact: '',
-  })
-
-  const startEdit = (c: Customer) => {
-    setEditingId(c.id)
-    setForm({
-      firstname: c.firstname,
-      lastname: c.lastname,
-      email: c.email,
-      contact: c.contact,
-    })
-  }
-
-  const reset = () => {
-    setEditingId(null)
-    setForm({ firstname: '', lastname: '', email: '', contact: '' })
-  }
-
-  const save = () => {
-    if (!form.firstname || !form.lastname || !form.email) return
-    if (editingId) {
-      setCustomers((prev) =>
-        prev.map((c) => (c.id === editingId ? { id: editingId, ...form } : c))
-      )
-    } else {
-      setCustomers((prev) => [{ id: `c_${Date.now()}`, ...form }, ...prev])
-    }
-    reset()
-  }
-
-  const remove = (id: string) => {
-    if (!confirm('Delete this customer?')) return
-    setCustomers((prev) => prev.filter((c) => c.id !== id))
-    if (editingId === id) reset()
-  }
-
-  return (
-    <div className="grid gap-6 md:grid-cols-2">
-      <div>
-        <h2 className="text-xl font-semibold mb-3">
-          {editingId ? 'Edit Customer' : 'Add Customer'}
-        </h2>
-        <div className="grid gap-3">
-          <Input
-            label="First name"
-            value={form.firstname}
-            onChange={(v) => setForm((s) => ({ ...s, firstname: v }))}
-          />
-          <Input
-            label="Last name"
-            value={form.lastname}
-            onChange={(v) => setForm((s) => ({ ...s, lastname: v }))}
-          />
-          <Input
-            label="Email"
-            type="email"
-            value={form.email}
-            onChange={(v) => setForm((s) => ({ ...s, email: v }))}
-          />
-          <Input
-            label="Contact"
-            value={form.contact}
-            onChange={(v) => setForm((s) => ({ ...s, contact: v }))}
-          />
-          <div className="flex gap-2">
-            <button
-              onClick={save}
-              className="bg-litratoblack text-white px-4 py-2 rounded font-bold"
-            >
-              Save
-            </button>
-            {editingId && (
-              <button
-                onClick={reset}
-                className="bg-gray-200 text-litratoblack px-4 py-2 rounded-lg font-semibold"
-              >
-                Cancel
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
-
-      <div>
-        <h2 className="text-xl font-semibold mb-3">Customer Accounts</h2>
-        <div className="overflow-auto">
-          <table className="w-full text-left border border-gray-200 rounded-lg overflow-hidden">
-            <thead className="bg-gray-100">
-              <tr>
-                <Th>First</Th>
-                <Th>Last</Th>
-                <Th>Email</Th>
-                <Th>Contact</Th>
-                <Th className="text-right pr-3">Actions</Th>
-              </tr>
-            </thead>
-            <tbody>
-              {customers.map((c) => (
-                <tr key={c.id} className="border-t">
-                  <Td>{c.firstname}</Td>
-                  <Td>{c.lastname}</Td>
-                  <Td>{c.email}</Td>
-                  <Td>{c.contact}</Td>
-                  <Td>
-                    <div className="flex gap-2 justify-end">
-                      <button
-                        onClick={() => startEdit(c)}
-                        className="px-3 py-1 rounded-lg bg-gray-100 hover:bg-gray-200"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => remove(c.id)}
-                        className="px-3 py-1 rounded-lg bg-red-500 text-white hover:bg-red-600"
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  </Td>
-                </tr>
-              ))}
-              {customers.length === 0 && (
-                <tr>
-                  <td colSpan={5} className="text-center py-6 text-gray-500">
-                    No customers yet
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-/* Packages */
-function PackagesPanel() {
-  const [packages, setPackages] = useState<Package[]>([
-    {
-      id: 'p1',
-      name: 'The OG',
-      price: 8000,
-      features: ['2 hours', 'Unlimited shots'],
-    },
-  ])
-  const [name, setName] = useState('')
-  const [price, setPrice] = useState<number | ''>('')
-  const [featureInput, setFeatureInput] = useState('')
-  const [features, setFeatures] = useState<string[]>([])
-
-  const addFeature = () => {
-    const f = featureInput.trim()
-    if (!f) return
-    setFeatures((prev) => [...prev, f])
-    setFeatureInput('')
-  }
-  const removeFeature = (i: number) =>
-    setFeatures((prev) => prev.filter((_, idx) => idx !== i))
-
-  const create = () => {
-    if (!name || price === '' || Number(price) < 0) return
-    setPackages((prev) => [
-      { id: `p_${Date.now()}`, name, price: Number(price), features },
-      ...prev,
-    ])
-    setName('')
-    setPrice('')
-    setFeatures([])
-  }
-
-  const del = (id: string) => {
-    if (!confirm('Delete this package?')) return
-    setPackages((prev) => prev.filter((p) => p.id !== id))
-  }
-
-  return (
-    <div className="grid gap-6 md:grid-cols-2">
-      <div>
-        <h2 className="text-xl font-semibold mb-3">Create Package</h2>
-        <div className="grid gap-3">
-          <Input label="Name" value={name} onChange={setName} />
-          <Input
-            label="Price (₱)"
-            type="number"
-            value={String(price)}
-            onChange={(v) => setPrice(v === '' ? '' : Number(v))}
-          />
-          <div>
-            <label className="block text-sm font-medium mb-1">Features</label>
-            <div className="flex gap-2">
-              <input
-                value={featureInput}
-                onChange={(e) => setFeatureInput(e.target.value)}
-                className="flex-1 border rounded-lg px-3 py-2 outline-none"
-                placeholder="e.g., High quality photo strips"
-              />
-              <button
-                type="button"
-                onClick={addFeature}
-                className="px-3 py-2 rounded-lg bg-gray-100 hover:bg-gray-200"
-              >
-                Add
-              </button>
-            </div>
-            <ul className="mt-2 flex flex-wrap gap-2">
-              {features.map((f, i) => (
-                <li
-                  key={i}
-                  className="px-2 py-1 bg-gray-100 rounded-full text-sm flex items-center gap-2"
-                >
-                  {f}
-                  <button
-                    onClick={() => removeFeature(i)}
-                    className="text-gray-500 hover:text-red-600"
-                  >
-                    ×
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </div>
-          <button
-            onClick={create}
-            className="bg-litratoblack text-white px-4 py-2 rounded font-bold"
-          >
-            Create
-          </button>
-        </div>
-      </div>
-
-      <div>
-        <h2 className="text-xl font-semibold mb-3">Packages</h2>
-        <div className="grid gap-3">
-          {packages.map((p) => (
-            <div
-              key={p.id}
-              className="border rounded-xl p-3 flex flex-col md:flex-row md:items-center md:justify-between gap-2"
-            >
-              <div>
-                <p className="font-bold">{p.name}</p>
-                <p className="text-sm text-gray-600">
-                  ₱{p.price.toLocaleString()}
-                </p>
-                <p className="text-sm text-gray-700 mt-1">
-                  Features: {p.features.join(', ') || 'None'}
-                </p>
-              </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => del(p.id)}
-                  className="px-3 py-2 rounded-lg bg-red-500 text-white hover:bg-red-600"
-                >
-                  Delete
-                </button>
-              </div>
-            </div>
-          ))}
-          {packages.length === 0 && (
-            <p className="text-center py-6 text-gray-500">No packages yet</p>
-          )}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-/* Inventory */
-function InventoryPanel() {
-  const [items, setItems] = useState<InventoryItem[]>([
-    {
-      id: 'i1',
-      name: 'Vintage Camera',
-      quantity: 4,
-      status: 'in-stock',
-    },
-    {
-      id: 'i2',
-      name: 'Film Pack',
-      quantity: 1,
-      status: 'low',
-    },
-  ])
-  const [form, setForm] = useState<{ name: string; quantity: number }>({
-    name: '',
-    quantity: 0,
-  })
-
-  const statusOf = (q: number): InventoryItem['status'] =>
-    q <= 0 ? 'out' : q <= 2 ? 'low' : 'in-stock'
-
-  const add = () => {
-    if (!form.name) return
-    const q = Number(form.quantity) || 0
-    setItems((prev) => [
-      {
-        id: `i_${Date.now()}`,
-        name: form.name,
-        quantity: q,
-        status: statusOf(q),
-      },
-      ...prev,
-    ])
-    setForm({ name: '', quantity: 0 })
-  }
-
-  const adjust = (id: string, delta: number) => {
-    setItems((prev) =>
-      prev.map((it) =>
-        it.id === id
-          ? {
-              ...it,
-              quantity: Math.max(0, it.quantity + delta),
-              status: statusOf(Math.max(0, it.quantity + delta)),
-            }
-          : it
-      )
-    )
-  }
-
-  const remove = (id: string) => {
-    if (!confirm('Delete this item?')) return
-    setItems((prev) => prev.filter((i) => i.id !== id))
-  }
-
-  const totals = useMemo(
-    () => ({
-      count: items.length,
-      qty: items.reduce((s, i) => s + i.quantity, 0),
-      low: items.filter((i) => i.status === 'low').length,
-      out: items.filter((i) => i.status === 'out').length,
-    }),
-    [items]
-  )
-
-  return (
-    <div className="grid gap-6">
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <Stat label="Items" value={totals.count} />
-        <Stat label="Total Qty" value={totals.qty} />
-        <Stat label="Low Stock" value={totals.low} />
-        <Stat label="Out of Stock" value={totals.out} />
-      </div>
-
-      <div className="grid gap-6 md:grid-cols-2">
-        <div>
-          <h2 className="text-xl font-semibold mb-3">Add Inventory</h2>
-          <div className="grid gap-3">
-            <Input
-              label="Item name"
-              value={form.name}
-              onChange={(v) => setForm((s) => ({ ...s, name: v }))}
+      {!loading && !error && (
+        <div className="grid gap-4">
+          {/* KPIs */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            <Kpi
+              title="Total Revenue"
+              value={`₱${totalRevenue.toLocaleString('en-PH', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              })}`}
             />
-            {/* SKU field removed */}
-            <Input
-              label="Quantity"
-              type="number"
-              value={String(form.quantity)}
-              onChange={(v) =>
-                setForm((s) => ({ ...s, quantity: Number(v || 0) }))
-              }
+            <Kpi
+              title="Revenue Today"
+              value={`₱${todayRevenue.toLocaleString('en-PH', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              })}`}
             />
-            <button
-              onClick={add}
-              className="bg-litratoblack text-white px-4 py-2 rounded font-bold"
-            >
-              Add
-            </button>
+            <Kpi
+              title="Scheduled"
+              value={String(bookingCounts.scheduled || 0)}
+            />
+            <Kpi
+              title="Ongoing"
+              value={String(bookingCounts.in_progress || 0)}
+            />
           </div>
-        </div>
 
-        <div>
-          <h2 className="text-xl font-semibold mb-3">Inventory</h2>
-          <div className="grid gap-3">
-            {items.map((it) => (
-              <div
-                key={it.id}
-                className="border rounded-xl p-3 flex flex-col md:flex-row md:items-center md:justify-between gap-2"
-              >
-                <div>
-                  <p className="font-bold">{it.name}</p>
-                  <p className="text-sm">
-                    Qty: {it.quantity} •
-                    <span
-                      className={`ml-2 px-2 py-0.5 rounded-full text-xs ${
-                        it.status === 'in-stock'
-                          ? 'bg-green-100 text-green-700'
-                          : it.status === 'low'
-                          ? 'bg-yellow-100 text-yellow-700'
-                          : 'bg-red-100 text-red-700'
-                      }`}
-                    >
-                      {it.status}
-                    </span>
-                  </p>
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => adjust(it.id, 1)}
-                    className="px-3 py-2 rounded-lg bg-gray-100 hover:bg-gray-200"
+          {/* Last 7 days revenue (mini bars) */}
+          <div className="bg-white rounded-xl shadow p-4">
+            <h2 className="text-lg font-semibold mb-2">
+              Revenue (Last 7 Days)
+            </h2>
+            <div className="flex items-end gap-2 h-32">
+              {last7Days.map((d, i) => {
+                const max = Math.max(1, ...last7Days.map((x) => x.total))
+                const h = Math.round((d.total / max) * 100)
+                return (
+                  <div
+                    key={i}
+                    className="flex flex-col items-center justify-end gap-1"
                   >
-                    +1
-                  </button>
-                  <button
-                    onClick={() => adjust(it.id, -1)}
-                    className="px-3 py-2 rounded-lg bg-gray-100 hover:bg-gray-200"
-                  >
-                    -1
-                  </button>
-                  <button
-                    onClick={() => remove(it.id)}
-                    className="px-3 py-2 rounded-lg bg-red-500 text-white hover:bg-red-600"
-                  >
-                    Delete
-                  </button>
-                </div>
-              </div>
-            ))}
-            {items.length === 0 && (
-              <p className="text-center py-6 text-gray-500">No inventory yet</p>
-            )}
+                    <div
+                      className="w-8 bg-litratoblack/80 rounded"
+                      style={{ height: `${h}%` }}
+                      title={`₱${d.total.toLocaleString('en-PH', {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}`}
+                    />
+                    <div className="text-[10px] text-gray-600">{d.label}</div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Recent payments */}
+          <div className="bg-white rounded-xl shadow p-4">
+            <h2 className="text-lg font-semibold mb-2">Recent Payments</h2>
+            <div className="overflow-auto">
+              <table className="w-full text-left border border-gray-200 rounded-lg overflow-hidden table-fixed">
+                <colgroup>
+                  <col />
+                  <col />
+                  <col style={{ width: '9rem' }} />
+                  <col />
+                </colgroup>
+                <thead className="bg-gray-100">
+                  <tr>
+                    <Th>Date</Th>
+                    <Th>Event</Th>
+                    <Th className="text-left">Amount</Th>
+                    <Th>Status</Th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {recentPayments.map((p) => {
+                    const booking = bookingById.get(Number(p.booking_id || 0))
+                    const eventName = booking?.event_name || '—'
+                    const { intPart, fracPart } = currencyParts(
+                      Number(p.amount_paid || 0)
+                    )
+                    return (
+                      <tr key={p.payment_id} className="border-t">
+                        <Td>
+                          {p.created_at && isClient
+                            ? new Date(p.created_at).toLocaleString()
+                            : '—'}
+                        </Td>
+                        <Td className="truncate whitespace-nowrap">
+                          <span title={eventName}>{eventName}</span>
+                        </Td>
+                        <Td className="text-left">
+                          <span className="inline-flex w-full justify-start items-baseline">
+                            <span className="text-gray-700">₱</span>
+                            <span className="ml-1 font-mono tabular-nums">
+                              {intPart}
+                            </span>
+                            <span className="font-mono tabular-nums">
+                              .{fracPart}
+                            </span>
+                          </span>
+                        </Td>
+                        <Td>{formatStatus(p.payment_status)}</Td>
+                      </tr>
+                    )
+                  })}
+                  {recentPayments.length === 0 && (
+                    <tr>
+                      <td
+                        colSpan={4}
+                        className="text-center py-6 text-gray-500"
+                      >
+                        No payments yet
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
   )
 }
 
-/* UI helpers */
-function Input({
-  label,
-  value,
-  onChange,
-  type = 'text',
-}: {
-  label: string
-  value: string
-  onChange: (v: string) => void
-  type?: string
-}) {
+function Kpi({ title, value }: { title: string; value: string }) {
   return (
-    <label className="block">
-      <span className="block text-sm font-medium mb-1">{label}</span>
-      <input
-        type={type}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="w-full border rounded-lg px-3 py-2 outline-none "
-      />
-    </label>
+    <div className="bg-white rounded-xl shadow p-4">
+      <div className="text-sm text-gray-500">{title}</div>
+      <div className="text-2xl font-bold">{value}</div>
+    </div>
   )
 }
 
@@ -563,14 +353,12 @@ function Th({
     </th>
   )
 }
-function Td({ children }: { children: React.ReactNode }) {
-  return <td className="px-3 py-2 text-sm">{children}</td>
-}
-function Stat({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="border rounded-xl p-3 bg-white">
-      <p className="text-sm text-gray-500">{label}</p>
-      <p className="text-xl font-bold">{value}</p>
-    </div>
-  )
+function Td({
+  children,
+  className = '',
+}: {
+  children: React.ReactNode
+  className?: string
+}) {
+  return <td className={`px-3 py-2 text-sm ${className}`}>{children}</td>
 }

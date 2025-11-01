@@ -16,10 +16,12 @@ const PKG_DIR = path.join(ASSETS_DIR, 'Packages')
 const GRIDS_DIR = path.join(ASSETS_DIR, 'Grids')
 const PAYMENTS_QR_DIR = path.join(ASSETS_DIR, 'Payments', 'QR')
 const PAYMENTS_PROOFS_DIR = path.join(ASSETS_DIR, 'Payments', 'Proofs')
+const CONTRACTS_ORIGINAL_DIR = path.join(ASSETS_DIR, 'Contracts', 'Originals')
 fs.mkdirSync(PKG_DIR, { recursive: true })
 fs.mkdirSync(GRIDS_DIR, { recursive: true })
 fs.mkdirSync(PAYMENTS_QR_DIR, { recursive: true })
 fs.mkdirSync(PAYMENTS_PROOFS_DIR, { recursive: true })
+fs.mkdirSync(CONTRACTS_ORIGINAL_DIR, { recursive: true })
 
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => cb(null, PKG_DIR),
@@ -59,6 +61,29 @@ const storagePaymentProof = multer.diskStorage({
   },
 })
 const uploadPaymentProof = multer({ storage: storagePaymentProof })
+
+// storage for Original Contracts uploaded by admin
+const storageContractOriginal = multer.diskStorage({
+  destination: (_req, _file, cb) => cb(null, CONTRACTS_ORIGINAL_DIR),
+  filename: (_req, file, cb) => {
+    const safe = file.originalname.replace(/[^a-z0-9._-]/gi, '_').toLowerCase()
+    cb(null, `${Date.now()}_${safe}`)
+  },
+})
+function contractFileFilter(_req, file, cb) {
+  const allowed = [
+    'application/pdf',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'image/png',
+    'image/jpeg',
+  ]
+  if (allowed.includes(file.mimetype)) return cb(null, true)
+  return cb(new Error('Unsupported file type'))
+}
+const uploadContractOriginal = multer({
+  storage: storageContractOriginal,
+  fileFilter: contractFileFilter,
+})
 // -------- user management routes -------- //
 // List users by role (?role=customer|employee|admin)
 router.get(
@@ -70,6 +95,7 @@ router.get(
 
 // ---- Payments (admin) ----
 const adminPaymentsController = require('../Controller/adminControllers/adminPaymentsController')
+const adminContractsController = require('../Controller/adminControllers/adminContractsController')
 
 // Upload QR image for payments (e.g., GCash QR)
 router.post(
@@ -99,6 +125,29 @@ router.post(
     )}/assets/Payments/Proofs/${path.basename(req.file.path)}`
     res.json({ url })
   }
+)
+
+// ---- Contracts (admin) ----
+router.post(
+  '/bookings/:id/contract',
+  authMiddleware,
+  roleMiddleware('admin'),
+  uploadContractOriginal.single('file'),
+  adminContractsController.uploadOriginal
+)
+
+router.get(
+  '/bookings/:id/contract',
+  authMiddleware,
+  roleMiddleware('admin'),
+  adminContractsController.getContract
+)
+
+router.post(
+  '/bookings/:id/contract/verify',
+  authMiddleware,
+  roleMiddleware('admin'),
+  adminContractsController.verify
 )
 
 // List payments (filterable)

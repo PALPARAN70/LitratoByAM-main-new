@@ -45,6 +45,12 @@ import {
   type StaffUser,
 } from '../../../../schemas/functions/staffFunctions/staffAssignment'
 import EventCard from '../../../../Litratocomponents/EventCard'
+import AdminContractSection from '../../../../Litratocomponents/AdminContractSection'
+import {
+  getAdminContract,
+  verifyAdminContract,
+  type ContractStatus,
+} from '../../../../schemas/functions/Contracts/api'
 import {
   fetchPaymentSummaryForBooking,
   listPackageItemsForPackage,
@@ -94,6 +100,8 @@ type BookingRow = {
   eventStatus: 'ongoing' | 'standby' | 'finished'
   payment: 'paid' | 'unpaid' | 'partially-paid'
   items: { damaged: Item[]; missing: Item[] }
+  // NEW: contract status for admin view
+  contractStatus?: ContractStatus | null
 }
 export default function ManageBookingPage() {
   const [active, setActive] = useState<TabKey>('masterlist')
@@ -672,85 +680,47 @@ function MasterListPanel({
     event_time: string
   }>(null)
 
-  // ADD: contract upload helpers
-  const uploadInputRef = useRef<HTMLInputElement | null>(null)
-  const [uploadTarget, setUploadTarget] = useState<BookingRow | null>(null)
-  const API_BASE =
-    process.env.NEXT_PUBLIC_API_BASE?.replace(/\/$/, '') ||
-    'http://localhost:5000'
-  const CONTRACTS_CUSTOMER = `${API_BASE}/api/customer/contracts`
-  const CONTRACTS_ADMIN = `${API_BASE}/api/admin/contracts`
-  // Always return a HeadersInit-compatible object (avoid unions that confuse TS)
-  const getAuthHeader = (): HeadersInit => {
-    const token =
-      (typeof window !== 'undefined' && localStorage.getItem('access_token')) ||
-      null
-    return token
-      ? ({ Authorization: `Bearer ${token}` } as Record<string, string>)
-      : ({} as Record<string, string>)
+  // NEW: Contract dialog state (inline, no separate page)
+  const [contractOpen, setContractOpen] = useState(false)
+  const [contractTargetId, setContractTargetId] = useState<
+    number | string | null
+  >(null)
+  const openContractDialog = (row: BookingRow) => {
+    const id = row.requestid ?? row.confirmedid ?? row.id
+    setContractTargetId(id as number | string)
+    setContractOpen(true)
   }
-  const viewContract = async (row: BookingRow) => {
-    if (!row.requestid) {
-      toast.error('Missing request id.')
-      return
-    }
+
+  const quickVerifyContract = async (row: BookingRow) => {
     try {
-      const res = await fetch(
-        `${CONTRACTS_CUSTOMER}/by-request/${encodeURIComponent(
-          String(row.requestid)
-        )}`,
-        { headers: getAuthHeader(), cache: 'no-store' }
-      )
-      if (!res.ok) throw new Error(await res.text())
-      const data: { contract?: { url?: string } } & {
-        url?: string
-        contract_url?: string
-      } = await res.json().catch(
-        () =>
-          ({} as {
-            contract?: { url?: string }
-            url?: string
-            contract_url?: string
-          })
-      )
-      const url: string | undefined =
-        data?.contract?.url || data?.url || data?.contract_url
-      if (!url) {
-        toast.error('No contract available.')
+      const id = (row.requestid ?? row.confirmedid ?? row.id) as number | string
+      const ctr = await getAdminContract(id)
+      if (!ctr) {
+        toast.error('No contract record found.')
         return
       }
-      window.open(url, '_blank')
-    } catch {
-      toast.error('Failed to open contract.')
-    }
-  }
-  const onPickUpload = (row: BookingRow) => {
-    if (!row.requestid) {
-      toast.error('Missing request id.')
-      return
-    }
-    setUploadTarget(row)
-    uploadInputRef.current?.click()
-  }
-  const onUploadFile: ChangeEventHandler<HTMLInputElement> = async (e) => {
-    const file = e.target.files?.[0]
-    e.currentTarget.value = ''
-    if (!file || !uploadTarget?.requestid) return
-    try {
-      const fd = new FormData()
-      fd.append('file', file)
-      fd.append('requestid', String(uploadTarget.requestid))
-      const res = await fetch(`${CONTRACTS_ADMIN}/upload`, {
-        method: 'POST',
-        headers: getAuthHeader(),
-        body: fd,
-      })
-      if (!res.ok) throw new Error(await res.text())
-      toast.success('Contract uploaded.')
-    } catch {
-      toast.error('Upload failed.')
-    } finally {
-      setUploadTarget(null)
+      if (!ctr.signed_url) {
+        toast.error('No signed contract uploaded yet.')
+        // Offer to open the modal so admin can review
+        setContractTargetId(id)
+        setContractOpen(true)
+        return
+      }
+      const ok = await verifyAdminContract(id)
+      if (ok) {
+        toast.success('Contract marked as Verified')
+        // Optimistically update the row so the UI disables the Verify button immediately
+        setRows((prev) =>
+          prev.map((r) =>
+            r.id === row.id ? { ...r, contractStatus: 'Verified' } : r
+          )
+        )
+      } else {
+        toast.error('Failed to verify contract')
+      }
+    } catch (e) {
+      console.error('quickVerifyContract error:', e)
+      toast.error('Verification failed')
     }
   }
 
@@ -768,6 +738,20 @@ function MasterListPanel({
     if (p === 'paid') return 'bg-green-700 text-white'
     if (p === 'partially-paid') return 'bg-yellow-700 text-white'
     return 'bg-red-700 text-white' // unpaid
+  }
+  // NEW: contract status helpers
+  const contractBadgeClass = (s: ContractStatus | null | undefined) => {
+    switch (s) {
+      case 'Verified':
+        return 'bg-green-700 text-white'
+      case 'Under Review':
+        return 'bg-yellow-700 text-white'
+      case 'Signed':
+        return 'bg-blue-700 text-white'
+      case 'Pending Signature':
+      default:
+        return 'bg-gray-700 text-white'
+    }
   }
 
   useEffect(() => {
@@ -915,6 +899,32 @@ function MasterListPanel({
         const mapped = list.map(toRow)
         setRows(mapped)
         setPage(1)
+
+        // Post-load: fetch contract status for each booking (best-effort)
+        try {
+          const results = await Promise.all(
+            mapped.map(async (r) => {
+              const id = r.requestid ?? r.confirmedid ?? r.id
+              try {
+                const ctr = await getAdminContract(id as number | string)
+                return {
+                  rowId: r.id,
+                  status: (ctr?.status ?? null) as ContractStatus | null,
+                }
+              } catch {
+                return { rowId: r.id, status: null as ContractStatus | null }
+              }
+            })
+          )
+          setRows((prev) =>
+            prev.map((r) => {
+              const hit = results.find((x) => x.rowId === r.id)
+              return hit ? { ...r, contractStatus: hit.status } : r
+            })
+          )
+        } catch {
+          // ignore failures
+        }
       } catch (e: unknown) {
         if (cancelled) return
         const msg = e instanceof Error ? e.message : 'Failed to load bookings'
@@ -1270,6 +1280,7 @@ function MasterListPanel({
                 <th className="text-left px-3 py-2">Event Status</th>
                 <th className="text-left px-3 py-2">Event Report</th>
                 <th className="text-left px-3 py-2">Payment Status</th>
+                <th className="text-left px-3 py-2">Contract Status</th>
                 <th className="text-left px-3 py-2 rounded-tr-xl">Actions</th>
               </tr>
             </thead>
@@ -1278,7 +1289,7 @@ function MasterListPanel({
                 <tr>
                   <td
                     className="px-3 py-4 text-center text-gray-500"
-                    colSpan={9}
+                    colSpan={10}
                   >
                     No bookings found
                   </td>
@@ -1431,6 +1442,17 @@ function MasterListPanel({
                       </span>
                     </td>
 
+                    {/* Contract Status */}
+                    <td className="px-3 py-2">
+                      <span
+                        className={`inline-block px-2 py-1 w-26 text-center rounded-full text-xs font-medium ${contractBadgeClass(
+                          row.contractStatus ?? null
+                        )}`}
+                      >
+                        {row.contractStatus ?? '—'}
+                      </span>
+                    </td>
+
                     {/* Actions */}
                     <td className="px-3 py-2">
                       <Popover>
@@ -1450,16 +1472,28 @@ function MasterListPanel({
                             <button
                               type="button"
                               className="text-left px-2 py-1.5 rounded text-sm hover:bg-gray-100"
-                              onClick={() => viewContract(row)}
+                              onClick={() => openContractDialog(row)}
                             >
                               View Contract
                             </button>
                             <button
                               type="button"
                               className="text-left px-2 py-1.5 rounded text-sm hover:bg-gray-100"
-                              onClick={() => onPickUpload(row)}
+                              onClick={() => openContractDialog(row)}
                             >
                               Upload Contract
+                            </button>
+                            <button
+                              type="button"
+                              className={`text-left px-2 py-1.5 rounded text-sm hover:bg-gray-100 ${
+                                row.contractStatus === 'Verified'
+                                  ? 'opacity-50 cursor-not-allowed'
+                                  : ''
+                              }`}
+                              disabled={row.contractStatus === 'Verified'}
+                              onClick={() => quickVerifyContract(row)}
+                            >
+                              Verify Contract
                             </button>
                             {/* Review */}
                             <button
@@ -2149,14 +2183,37 @@ function MasterListPanel({
         </DialogContent>
       </Dialog>
 
-      {/* NEW: Hidden input for contract upload */}
-      <input
-        ref={uploadInputRef}
-        type="file"
-        accept="application/pdf,image/*"
-        className="hidden"
-        onChange={onUploadFile}
-      />
+      {/* Contract management modal */}
+      <Dialog
+        open={contractOpen}
+        onOpenChange={(o) => {
+          if (!o) {
+            setContractOpen(false)
+            setContractTargetId(null)
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Contract</DialogTitle>
+            <DialogDescription>
+              Upload, view, and verify the contract for this booking.
+            </DialogDescription>
+          </DialogHeader>
+          {contractTargetId != null ? (
+            <AdminContractSection bookingId={contractTargetId} />
+          ) : null}
+          <DialogFooter>
+            <button
+              type="button"
+              className="px-4 py-2 rounded border text-sm"
+              onClick={() => setContractOpen(false)}
+            >
+              Close
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

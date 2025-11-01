@@ -35,6 +35,8 @@ import {
   DialogFooter,
   DialogClose,
 } from '@/components/ui/dialog'
+import ContractSection from '../../../../Litratocomponents/ContractSection'
+import { getMyContract } from '../../../../schemas/functions/Contracts/api'
 
 const API_BASE =
   (process.env.NEXT_PUBLIC_API_BASE?.replace(/\/$/, '') ||
@@ -361,25 +363,8 @@ export default function DashboardPage() {
             continue
           }
           try {
-            const res = await fetch(
-              `${getApiBase()}/by-request/${encodeURIComponent(
-                String(r.requestid)
-              )}`,
-              { headers: getAuthHeader(), cache: 'no-store' }
-            )
-            if (!res.ok) {
-              results.push({ requestid: r.requestid, status: 'pending' })
-              continue
-            }
-            const data: unknown = await res.json().catch(() => ({} as unknown))
-            // Heuristics: consider finished when a signed contract url is present
-            const rec = data as Record<string, unknown>
-            const hasSigned = !!(
-              (rec.signed_contract as { url?: string } | undefined)?.url ||
-              (rec.signed_url as string | undefined) ||
-              (rec.signedContractUrl as string | undefined) ||
-              (rec.user_signed_url as string | undefined)
-            )
+            const ctr = await getMyContract(r.requestid)
+            const hasSigned = !!ctr?.signed_url
             results.push({
               requestid: r.requestid,
               status: hasSigned ? 'finished' : 'pending',
@@ -451,9 +436,11 @@ export default function DashboardPage() {
   const [reschedOpen, setReschedOpen] = useState(false)
   const [reschedTarget, setReschedTarget] = useState<Row | null>(null)
 
-  // Contract upload helpers
-  const uploadInputRef = useRef<HTMLInputElement | null>(null)
-  const [uploadTarget, setUploadTarget] = useState<Row | null>(null)
+  // Contract modal
+  const [contractOpen, setContractOpen] = useState(false)
+  const [contractTargetId, setContractTargetId] = useState<
+    number | string | null
+  >(null)
 
   const handleReschedule = (row: Row) => {
     if (!row.requestid) {
@@ -587,65 +574,13 @@ export default function DashboardPage() {
 
   // Contract API helpers are defined above via useCallback: getApiBase, getAuthHeader
 
-  const viewContract = async (row: Row) => {
+  const openContractDialog = (row: Row) => {
     if (!row.requestid) {
       toast.error('Missing request id.')
       return
     }
-    try {
-      const res = await fetch(
-        `${getApiBase()}/by-request/${encodeURIComponent(
-          String(row.requestid)
-        )}`,
-        { headers: getAuthHeader(), cache: 'no-store' }
-      )
-      if (!res.ok) throw new Error(await res.text())
-      const data = await res.json().catch(() => ({}))
-      const url: string | undefined =
-        data?.contract?.url || data?.url || data?.contract_url
-      if (!url) {
-        toast.error('No contract available.')
-        return
-      }
-      window.open(url, '_blank')
-    } catch {
-      toast.error('Failed to open contract.')
-    }
-  }
-
-  const onPickUpload = (row: Row) => {
-    setUploadTarget(row)
-    uploadInputRef.current?.click()
-  }
-
-  const onUploadFile: ChangeEventHandler<HTMLInputElement> = async (e) => {
-    const file = e.target.files?.[0]
-    e.currentTarget.value = ''
-    if (!file || !uploadTarget?.requestid) return
-    try {
-      const fd = new FormData()
-      fd.append('file', file)
-      fd.append('requestid', String(uploadTarget.requestid))
-      const res = await fetch(`${getApiBase()}/upload-signed`, {
-        method: 'POST',
-        headers: getAuthHeader(),
-        body: fd,
-      })
-      if (!res.ok) throw new Error(await res.text())
-      toast.success('Signed contract uploaded.')
-      // NEW: mark this row as finished
-      setRows((prev) =>
-        prev.map((r) =>
-          r.requestid === uploadTarget.requestid
-            ? { ...r, contractStatus: 'finished' }
-            : r
-        )
-      )
-    } catch {
-      toast.error('Upload failed.')
-    } finally {
-      setUploadTarget(null)
-    }
+    setContractTargetId(row.requestid)
+    setContractOpen(true)
   }
 
   return (
@@ -945,13 +880,13 @@ export default function DashboardPage() {
                                   {/* NEW: Contract actions moved here */}
                                   <button
                                     className="w-full rounded px-2 py-1 text-xs border"
-                                    onClick={() => viewContract(data)}
+                                    onClick={() => openContractDialog(data)}
                                   >
                                     View Contract
                                   </button>
                                   <button
                                     className="w-full rounded px-2 py-1 text-xs bg-litratoblack text-white"
-                                    onClick={() => onPickUpload(data)}
+                                    onClick={() => openContractDialog(data)}
                                   >
                                     Upload Signed Contract
                                   </button>
@@ -1210,14 +1145,37 @@ export default function DashboardPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Hidden input for contract upload */}
-      <input
-        ref={uploadInputRef}
-        type="file"
-        accept="application/pdf,image/*"
-        className="hidden"
-        onChange={onUploadFile}
-      />
+      {/* Contract modal */}
+      <Dialog
+        open={contractOpen}
+        onOpenChange={(o) => {
+          if (!o) {
+            setContractOpen(false)
+            setContractTargetId(null)
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Contract</DialogTitle>
+            <DialogDescription>
+              View the original and upload your signed copy.
+            </DialogDescription>
+          </DialogHeader>
+          {contractTargetId != null ? (
+            <ContractSection bookingId={contractTargetId} />
+          ) : null}
+          <DialogFooter>
+            <button
+              type="button"
+              className="px-4 py-2 rounded border text-sm"
+              onClick={() => setContractOpen(false)}
+            >
+              Close
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </MotionDiv>
   )
 }

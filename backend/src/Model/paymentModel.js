@@ -225,10 +225,15 @@ async function listPayments({ booking_id = null, user_id = null } = {}) {
       cb.payment_status AS booking_payment_status,
       cb.total_booking_price AS booking_base_total,
       COALESCE(cb.extension_duration, br.extension_duration, 0) AS booking_ext_hours,
-      (COALESCE(cb.total_booking_price, 0) + COALESCE(cb.extension_duration, br.extension_duration, 0) * 2000) AS booking_amount_due
+  (COALESCE(cb.total_booking_price, 0) + COALESCE(cb.extension_duration, br.extension_duration, 0) * 2000) AS booking_amount_due,
+      br.event_name AS booking_event_name,
+      u.firstname AS user_firstname,
+      u.lastname AS user_lastname,
+      u.username AS user_username
     FROM payments p
     LEFT JOIN confirmed_bookings cb ON cb.id = p.booking_id
     LEFT JOIN booking_requests br ON br.requestid = cb.requestid
+    LEFT JOIN users u ON u.id = p.user_id
     ${where}
     ORDER BY p.created_at DESC
   `
