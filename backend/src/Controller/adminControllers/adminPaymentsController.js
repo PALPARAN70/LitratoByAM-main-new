@@ -74,8 +74,22 @@ async function updatePaymentHandler(req, res) {
       payment_method,
     } = req.body || {}
 
+    // Normalize incoming status to match payments table constraint
+    const normalizeStatus = (s) => {
+      const v = String(s || '').toLowerCase()
+      if (['completed', 'paid', 'succeeded', 'success'].includes(v))
+        return 'Fully Paid'
+      if (['partial', 'partially paid', 'partially_paid'].includes(v))
+        return 'Partially Paid'
+      if (v === 'refunded') return 'Refunded'
+      if (['failed', 'failure'].includes(v)) return 'Failed'
+      if (v === 'pending') return 'Pending'
+      return s
+    }
+
     const updates = {}
-    if (payment_status != null) updates.payment_status = payment_status
+    if (payment_status != null)
+      updates.payment_status = normalizeStatus(payment_status)
     if (typeof notes !== 'undefined') updates.notes = notes
     if (typeof verified_at !== 'undefined') updates.verified_at = verified_at
     if (typeof proof_image_url !== 'undefined')
@@ -167,7 +181,9 @@ async function updatePaymentLogHandler(req, res) {
   }
 }
 
-// Generate a simple sales report PDF for a date range (created_at)
+// Generate a simple sales report PDF. Supports date range filters via query:
+//   range=today|week|month|quarter|year  OR custom start=YYYY-MM-DD&end=YYYY-MM-DD
+// The filter applies to payments.created_at
 async function generateSalesReportHandler(req, res) {
   try {
     // Lazy require to avoid crashing server if pdfkit is not installed
@@ -183,47 +199,276 @@ async function generateSalesReportHandler(req, res) {
 
     const rows = await modelListPayments({})
 
+    // Optional date filtering on created_at
+    const { range, start, end } = req.query || {}
+    let startDate = null
+    let endDate = null
+    const now = new Date()
+    const atMidnight = (d) => {
+      const x = new Date(d)
+      x.setHours(0, 0, 0, 0)
+      return x
+    }
+    const endOfDay = (d) => {
+      const x = new Date(d)
+      x.setHours(23, 59, 59, 999)
+      return x
+    }
+    const toDate = (s) => (s ? new Date(String(s)) : null)
+
+    const r = typeof range === 'string' ? range.toLowerCase() : ''
+    if (r === 'today') {
+      startDate = atMidnight(now)
+      endDate = endOfDay(now)
+    } else if (r === 'week' || r === 'weekly') {
+      const day = now.getDay() // 0=Sun
+      const diffToMon = (day + 6) % 7 // days since Monday
+      const monday = new Date(now)
+      monday.setDate(now.getDate() - diffToMon)
+      startDate = atMidnight(monday)
+      const sunday = new Date(monday)
+      sunday.setDate(monday.getDate() + 6)
+      endDate = endOfDay(sunday)
+    } else if (r === 'month' || r === 'monthly') {
+      const first = new Date(now.getFullYear(), now.getMonth(), 1)
+      const last = new Date(now.getFullYear(), now.getMonth() + 1, 0)
+      startDate = atMidnight(first)
+      endDate = endOfDay(last)
+    } else if (r === 'quarter' || r === 'quarterly') {
+      const q = Math.floor(now.getMonth() / 3) // 0..3
+      const first = new Date(now.getFullYear(), q * 3, 1)
+      const last = new Date(now.getFullYear(), q * 3 + 3, 0)
+      startDate = atMidnight(first)
+      endDate = endOfDay(last)
+    } else if (r === 'year' || r === 'yearly') {
+      const first = new Date(now.getFullYear(), 0, 1)
+      const last = new Date(now.getFullYear(), 11, 31)
+      startDate = atMidnight(first)
+      endDate = endOfDay(last)
+    } else if (start || end) {
+      const sD = toDate(start)
+      const eD = toDate(end)
+      if (sD) startDate = atMidnight(sD)
+      if (eD) endDate = endOfDay(eD)
+    }
+
+    const filteredRows = rows.filter((p) => {
+      if (!startDate && !endDate) return true
+      const created = new Date(p.created_at)
+      if (startDate && created < startDate) return false
+      if (endDate && created > endDate) return false
+      return true
+    })
+
+    const fs = require('fs')
+    const path = require('path')
     const doc = new PDFDocument({ size: 'A4', margin: 36 })
     res.setHeader('Content-Type', 'application/pdf')
     res.setHeader('Content-Disposition', 'inline; filename="sales-report.pdf"')
 
     doc.pipe(res)
 
-    doc.fontSize(16).text('Sales Report', { align: 'center' })
-    doc.moveDown(0.5)
-    doc.fontSize(10).text(`Generated at: ${new Date().toLocaleString()}`)
-    doc.moveDown()
+    // Attempt to use a font that supports the Peso sign. If not found, fall back to built-in Helvetica and "PHP" prefix.
+    let usePesoSymbol = false
+    let bodyFont = 'Helvetica'
+    let bodyBold = 'Helvetica-Bold'
+    try {
+      const fontsDir = path.resolve(__dirname, '..', '..', 'Assets', 'Fonts')
+      const candidates = [
+        'NotoSans-Regular.ttf',
+        'DejaVuSans.ttf',
+        'Inter-Regular.ttf',
+        'ArialUnicodeMS.ttf',
+      ]
+      for (const f of candidates) {
+        const p = path.join(fontsDir, f)
+        if (fs.existsSync(p)) {
+          doc.registerFont('ReportSans', p)
+          bodyFont = 'ReportSans'
+          // Try bold if available next to it
+          const bolds = [
+            f.replace('Regular', 'Bold'),
+            f.replace('.ttf', '-Bold.ttf'),
+          ]
+          for (const b of bolds) {
+            const bp = path.join(fontsDir, b)
+            if (fs.existsSync(bp)) {
+              doc.registerFont('ReportSans-Bold', bp)
+              bodyBold = 'ReportSans-Bold'
+              break
+            }
+          }
+          usePesoSymbol = true // chosen fonts above support U+20B1
+          break
+        }
+      }
+    } catch {}
 
-    // Table header
-    doc.font('Helvetica-Bold')
-    doc.text('ID', 36)
-    doc.text('User', 80)
-    doc.text('Booking', 150)
-    doc.text('Amount', 230)
-    doc.text('Paid', 300)
-    doc.text('Status', 360)
-    doc.text('Created', 430)
+    // Title
+    doc.fontSize(16).font(bodyBold).text('Sales Report', {
+      align: 'center',
+    })
     doc.moveDown(0.5)
-    doc.font('Helvetica')
+    doc
+      .fontSize(10)
+      .font(bodyFont)
+      .text(`Generated at: ${new Date().toLocaleString()}`)
+    doc.moveDown(0.5)
 
-    rows.forEach((p) => {
-      doc.text(String(p.payment_id), 36)
-      doc.text(String(p.user_id), 80)
-      doc.text(String(p.booking_id), 150)
-      doc.text(String(p.amount), 230)
-      doc.text(String(p.amount_paid), 300)
-      doc.text(String(p.payment_status), 360)
-      doc.text(new Date(p.created_at).toLocaleDateString(), 430)
-      doc.moveDown(0.2)
+    // Helpers
+    const fmtMoney = (n) =>
+      `${Number(n || 0).toLocaleString('en-PH', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      })}`
+    const cap = (s) =>
+      (s ? String(s) : '').replace(/^[a-z]/, (m) => m.toUpperCase()).trim()
+    const getName = (r) => {
+      const f = (r.user_firstname || '').toString().trim()
+      const l = (r.user_lastname || '').toString().trim()
+      if (f || l) return `${f} ${l}`.trim()
+      const email = (r.user_username || '').toString()
+      return email ? email.split('@')[0] : String(r.user_id)
+    }
+    const getDateMMDDYYYY = (d) => {
+      const dt = new Date(d)
+      const mm = String(dt.getMonth() + 1).padStart(2, '0')
+      const dd = String(dt.getDate()).padStart(2, '0')
+      const yyyy = dt.getFullYear()
+      return `${mm}/${dd}/${yyyy}`
+    }
+
+    const startX = doc.page.margins.left
+    const usableWidth =
+      doc.page.width - doc.page.margins.left - doc.page.margins.right
+    // Columns per spec: Event Name, User Name, Due Amount, Paid, Status, Created
+    // Adjust widths to keep amounts on one line and fit within page margins.
+    const EVENT_W = 83
+    const USER_W = 80
+    const DUE_W = 110
+    const PAID_W = 110
+    const STATUS_W = 60
+    const CREATED_W = Math.max(
+      80,
+      usableWidth - (EVENT_W + USER_W + DUE_W + PAID_W + STATUS_W)
+    )
+    const columns = [
+      { key: 'event', label: 'Event Name', width: EVENT_W, align: 'left' },
+      { key: 'user', label: 'User Name', width: USER_W, align: 'left' },
+      { key: 'amount', label: 'Due Amount', width: DUE_W, align: 'left' },
+      { key: 'paid', label: 'Paid', width: PAID_W, align: 'left' },
+      { key: 'status', label: 'Status', width: STATUS_W, align: 'left' },
+      { key: 'created', label: 'Created', width: CREATED_W, align: 'left' },
+    ]
+    const totalWidth = columns.reduce((s, c) => s + c.width, 0)
+
+    let y = doc.y + 4
+    const rowH = 16
+    const drawHeader = () => {
+      doc.font(bodyBold).fontSize(10)
+      let x = startX
+      columns.forEach((c) => {
+        doc.text(c.label, x, y, {
+          width: c.width,
+          align: 'left',
+          lineBreak: false,
+        })
+        x += c.width
+      })
+      y += rowH
+      doc
+        .moveTo(startX, y - 4)
+        .lineTo(startX + totalWidth, y - 4)
+        .lineWidth(0.5)
+        .strokeColor('#cccccc')
+        .stroke()
+      doc.font(bodyFont)
+    }
+
+    const maybeNewPage = () => {
+      if (y > doc.page.height - doc.page.margins.bottom - rowH) {
+        doc.addPage()
+        y = doc.page.margins.top
+        drawHeader()
+      }
+    }
+
+    drawHeader()
+
+    filteredRows.forEach((p, idx) => {
+      // Body rows slightly smaller to avoid wrapping in amount columns
+      doc.font(bodyFont).fontSize(9)
+      maybeNewPage()
+      // Use non-breaking space after PHP to keep the amount on the same line
+      const currencyPrefix = usePesoSymbol ? '₱' : 'PHP\u00A0'
+      const vals = [
+        String(p.booking_event_name || ''),
+        getName(p),
+        `${currencyPrefix}${fmtMoney(p.booking_amount_due ?? p.amount)}`,
+        `${currencyPrefix}${fmtMoney(p.amount_paid)}`,
+        cap(p.payment_status || ''),
+        getDateMMDDYYYY(p.created_at),
+      ]
+      let x = startX
+      // Optional zebra striping
+      if (idx % 2 === 1) {
+        doc
+          .rect(startX, y - 2, totalWidth, rowH)
+          .fillOpacity(0.04)
+          .fill('#000000')
+          .fillOpacity(1)
+      }
+      columns.forEach((c, i) => {
+        doc.text(vals[i], x, y, {
+          width: c.width,
+          align: c.align,
+          lineBreak: false,
+        })
+        x += c.width
+      })
+      y += rowH
     })
 
     // Summary
-    const totalPaid = rows.reduce(
+    const totalPaid = filteredRows.reduce(
       (sum, r) => sum + Number(r.amount_paid || 0),
       0
     )
-    doc.moveDown()
-    doc.font('Helvetica-Bold').text(`Total Paid: ${totalPaid.toFixed(2)}`)
+    // Period label
+    const periodLabel = (() => {
+      if (!startDate && !endDate) return 'All Time'
+      const fmt = (d) => {
+        const dt = new Date(d)
+        const mm = String(dt.getMonth() + 1).padStart(2, '0')
+        const dd = String(dt.getDate()).padStart(2, '0')
+        const yyyy = dt.getFullYear()
+        return `${mm}/${dd}/${yyyy}`
+      }
+      if (startDate && endDate) return `${fmt(startDate)} - ${fmt(endDate)}`
+      if (startDate) return `From ${fmt(startDate)}`
+      return `Until ${fmt(endDate)}`
+    })()
+    y += 6
+    maybeNewPage()
+    doc
+      .moveTo(startX, y - 2)
+      .lineTo(startX + totalWidth, y - 2)
+      .lineWidth(0.5)
+      .strokeColor('#cccccc')
+      .stroke()
+    doc
+      .font(bodyFont)
+      .fontSize(9)
+      .text(`Period: ${periodLabel}`, startX, y + 6)
+    doc
+      .font(bodyBold)
+      .fontSize(10)
+      .text(
+        `Total Amount: ${usePesoSymbol ? '₱' : 'PHP'} ${fmtMoney(totalPaid)}`,
+        startX,
+        y + 6,
+        { width: totalWidth, align: 'right' }
+      )
 
     doc.end()
   } catch (err) {
@@ -247,7 +492,7 @@ async function createPaymentHandler(req, res) {
       payment_method = 'cash',
       reference_no = null,
       notes = null,
-      payment_status = 'completed',
+      payment_status = null,
       verified = true,
       proof_image_url = null,
     } = req.body || {}
@@ -287,6 +532,25 @@ async function createPaymentHandler(req, res) {
       })
     }
 
+    // Decide row-level payment status to comply with payments table
+    let rowStatus = 'Partially Paid'
+    if (remaining != null) {
+      rowStatus = paid >= remaining ? 'Fully Paid' : 'Partially Paid'
+    }
+    // If caller explicitly provided a table-compliant status, honor it
+    if (
+      typeof payment_status === 'string' &&
+      [
+        'Pending',
+        'Partially Paid',
+        'Failed',
+        'Refunded',
+        'Fully Paid',
+      ].includes(payment_status)
+    ) {
+      rowStatus = payment_status
+    }
+
     const row = await createPayment({
       booking_id: bId,
       user_id: userId,
@@ -295,7 +559,7 @@ async function createPaymentHandler(req, res) {
       payment_method: String(payment_method || 'cash'),
       proof_image_url: proof_image_url ? String(proof_image_url) : null,
       reference_no: reference_no ? String(reference_no) : null,
-      payment_status: String(payment_status || 'Pending'),
+      payment_status: String(rowStatus),
       notes: notes == null ? null : String(notes),
       verified_at: verified ? new Date() : null,
     })

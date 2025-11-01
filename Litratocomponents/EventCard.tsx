@@ -25,6 +25,11 @@ import {
   uploadPaymentProofImage,
   listVisibleInventory,
 } from '../schemas/functions/EventCards/api'
+// Admin payments helpers (for verification from the Event modal)
+import {
+  updateAdminPayment,
+  getAdminBookingBalance,
+} from '../schemas/functions/Payment/adminPayments'
 import StaffTimelineLogger from './StaffTimelineLogger'
 // Booking status update helpers (admin/staff)
 import {
@@ -160,6 +165,11 @@ export default function EventCard({
   const [createBusy, setCreateBusy] = useState(false)
   const [newProofUrl, setNewProofUrl] = useState<string>('')
   const [uploadBusy, setUploadBusy] = useState(false)
+  // Proof viewer + verify states
+  const [proofOpen, setProofOpen] = useState(false)
+  const [proofPaymentId, setProofPaymentId] = useState<number | null>(null)
+  const [confirmVerifyOpen, setConfirmVerifyOpen] = useState(false)
+  const [verifySubmitting, setVerifySubmitting] = useState(false)
 
   useEffect(() => {
     setPaymentStatus(payment)
@@ -397,6 +407,36 @@ export default function EventCard({
       setPaymentsError(msg || 'Failed to load payments')
     } finally {
       setPaymentsLoading(false)
+    }
+  }
+
+  // Verify handler (admin only)
+  const verifyCurrentPayment = async () => {
+    if (!proofPaymentId) return
+    try {
+      setVerifySubmitting(true)
+      const current = payments.find((pp) => pp.payment_id === proofPaymentId)
+      if (!current) throw new Error('Payment not found')
+      const bal = await getAdminBookingBalance(Number(current.booking_id))
+      const remaining = Math.max(0, bal.amount_due - bal.total_paid)
+      const amt = Number(current.amount_paid || 0)
+      const rowStatus = amt >= remaining ? 'Fully Paid' : 'Partially Paid'
+      await updateAdminPayment(proofPaymentId, {
+        verified_at: new Date().toISOString(),
+        payment_status: rowStatus,
+      })
+      setConfirmVerifyOpen(false)
+      setProofOpen(false)
+      setProofPaymentId(null)
+      toast.success('Payment verified')
+      await loadPayments()
+      await fetchPaymentSummary()
+    } catch (e) {
+      // @ts-ignore
+      console.error('Verify payment failed:', e?.message || e)
+      toast.error('Failed to verify payment')
+    } finally {
+      setVerifySubmitting(false)
     }
   }
   const statusStyles: Record<Status, { label: string; cls: string }> = {
@@ -991,12 +1031,9 @@ export default function EventCard({
                                           className="px-2 py-1 rounded border text-xs disabled:opacity-50"
                                           disabled={!p.proof_image_url}
                                           onClick={() => {
-                                            if (p.proof_image_url) {
-                                              window.open(
-                                                p.proof_image_url,
-                                                '_blank'
-                                              )
-                                            }
+                                            if (!p.proof_image_url) return
+                                            setProofPaymentId(p.payment_id)
+                                            setProofOpen(true)
                                           }}
                                         >
                                           View
@@ -1209,6 +1246,154 @@ export default function EventCard({
                             onClick={() => setPaymentsOpen(false)}
                           >
                             Close
+                          </button>
+                        </DialogFooter>
+                      </DialogContent>
+                    </Dialog>
+
+                    {/* Proof Viewer Dialog (admin can verify) */}
+                    <Dialog
+                      open={proofOpen}
+                      onOpenChange={(o) => {
+                        setProofOpen(o)
+                        if (!o) setProofPaymentId(null)
+                      }}
+                    >
+                      <DialogContent className="sm:max-w-2xl">
+                        <DialogHeader>
+                          <DialogTitle>Payment Proof</DialogTitle>
+                          <DialogDescription>
+                            Review the uploaded receipt.
+                          </DialogDescription>
+                        </DialogHeader>
+                        {(() => {
+                          if (!proofPaymentId) return null
+                          const p = payments.find(
+                            (x) => x.payment_id === proofPaymentId
+                          )
+                          if (!p)
+                            return <div className="text-sm">Not found.</div>
+                          const url = p.proof_image_url || ''
+                          const isVerified = Boolean(p.verified_at)
+                          return (
+                            <div className="space-y-4">
+                              <div className="grid grid-cols-2 gap-4 text-sm">
+                                <div>
+                                  <div className="text-gray-500">
+                                    Payment ID
+                                  </div>
+                                  <div className="font-medium">
+                                    {p.payment_id}
+                                  </div>
+                                </div>
+                                <div>
+                                  <div className="text-gray-500">Method</div>
+                                  <div className="font-medium">
+                                    {p.payment_method || '—'}
+                                  </div>
+                                </div>
+                                <div>
+                                  <div className="text-gray-500">
+                                    Amount Paid
+                                  </div>
+                                  <div className="font-medium">
+                                    ₱
+                                    {Number(p.amount_paid || 0).toLocaleString(
+                                      'en-PH',
+                                      {
+                                        minimumFractionDigits: 2,
+                                        maximumFractionDigits: 2,
+                                      }
+                                    )}
+                                  </div>
+                                </div>
+                                <div>
+                                  <div className="text-gray-500">Ref #</div>
+                                  <div className="font-medium">
+                                    {p.reference_no || '—'}
+                                  </div>
+                                </div>
+                                <div>
+                                  <div className="text-gray-500">Status</div>
+                                  <div className="font-medium">
+                                    {p.payment_status || '—'}
+                                  </div>
+                                </div>
+                                <div>
+                                  <div className="text-gray-500">Verified</div>
+                                  <div className="font-medium">
+                                    {isVerified ? 'Yes' : 'No'}
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="flex justify-center">
+                                {url ? (
+                                  // eslint-disable-next-line @next/next/no-img-element
+                                  <img
+                                    src={url}
+                                    alt="Payment proof"
+                                    className="max-h-[60vh] object-contain rounded border"
+                                  />
+                                ) : (
+                                  <div className="text-sm text-gray-600">
+                                    No proof image provided.
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )
+                        })()}
+                        <DialogFooter>
+                          {summaryRole === 'admin' && proofPaymentId ? (
+                            <button
+                              type="button"
+                              className="px-3 py-2 rounded bg-black text-white text-sm disabled:opacity-50"
+                              disabled={verifySubmitting}
+                              onClick={() => setConfirmVerifyOpen(true)}
+                            >
+                              Verify
+                            </button>
+                          ) : null}
+                          <button
+                            type="button"
+                            className="px-4 py-2 rounded border text-sm"
+                            onClick={() => setProofOpen(false)}
+                          >
+                            Close
+                          </button>
+                        </DialogFooter>
+                      </DialogContent>
+                    </Dialog>
+
+                    {/* Verify Confirmation Dialog */}
+                    <Dialog
+                      open={confirmVerifyOpen}
+                      onOpenChange={(o) => {
+                        if (!o) setConfirmVerifyOpen(false)
+                      }}
+                    >
+                      <DialogContent className="sm:max-w-md">
+                        <DialogHeader>
+                          <DialogTitle>Verify payment</DialogTitle>
+                          <DialogDescription>
+                            Proceed to verify this payment?
+                          </DialogDescription>
+                        </DialogHeader>
+                        <DialogFooter>
+                          <button
+                            type="button"
+                            className="px-4 py-2 rounded border text-sm"
+                            onClick={() => setConfirmVerifyOpen(false)}
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            className="px-3 py-2 rounded bg-black text-white text-sm disabled:opacity-50"
+                            disabled={!proofPaymentId || verifySubmitting}
+                            onClick={verifyCurrentPayment}
+                          >
+                            {verifySubmitting ? 'Verifying…' : 'Confirm Verify'}
                           </button>
                         </DialogFooter>
                       </DialogContent>

@@ -6,6 +6,7 @@ const authMiddleware = require('../Middleware/authMiddleware')
 const roleMiddleware = require('../Middleware/roleMiddleware')
 const customerController = require('../Controller/customerController')
 const customerPaymentsController = require('../Controller/customerPaymentsController')
+const customerContractsController = require('../Controller/customerContractsController')
 
 const router = express.Router()
 
@@ -59,7 +60,9 @@ router.get(
 const ASSETS_DIR = path.resolve(__dirname, '..', '..', 'Assets')
 const PAYMENTS_DIR = path.join(ASSETS_DIR, 'Payments')
 const PROOFS_DIR = path.join(PAYMENTS_DIR, 'Proofs')
+const CONTRACTS_SIGNED_DIR = path.join(ASSETS_DIR, 'Contracts', 'Signed')
 fs.mkdirSync(PROOFS_DIR, { recursive: true })
+fs.mkdirSync(CONTRACTS_SIGNED_DIR, { recursive: true })
 
 const proofStorage = multer.diskStorage({
   destination: (_req, _file, cb) => cb(null, PROOFS_DIR),
@@ -69,6 +72,29 @@ const proofStorage = multer.diskStorage({
   },
 })
 const uploadProof = multer({ storage: proofStorage })
+
+// Contracts: signed upload storage
+const signedStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => cb(null, CONTRACTS_SIGNED_DIR),
+  filename: (_req, file, cb) => {
+    const safe = file.originalname.replace(/[^a-z0-9._-]/gi, '_').toLowerCase()
+    cb(null, `${Date.now()}_${safe}`)
+  },
+})
+function contractFileFilter(_req, file, cb) {
+  const allowed = [
+    'application/pdf',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'image/png',
+    'image/jpeg',
+  ]
+  if (allowed.includes(file.mimetype)) return cb(null, true)
+  return cb(new Error('Unsupported file type'))
+}
+const uploadSignedContract = multer({
+  storage: signedStorage,
+  fileFilter: contractFileFilter,
+})
 
 // Upload proof image
 router.post(
@@ -150,6 +176,22 @@ router.get(
   authMiddleware,
   roleMiddleware('customer'),
   customerPaymentsController.getMyPayment
+)
+
+// ---- Contracts (customer) ----
+router.get(
+  '/bookings/:id/contract',
+  authMiddleware,
+  roleMiddleware('customer'),
+  customerContractsController.getMyContract
+)
+
+router.post(
+  '/bookings/:id/contract-signed',
+  authMiddleware,
+  roleMiddleware('customer'),
+  uploadSignedContract.single('file'),
+  customerContractsController.uploadSigned
 )
 
 module.exports = router

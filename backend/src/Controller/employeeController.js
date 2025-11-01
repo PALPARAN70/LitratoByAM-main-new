@@ -310,8 +310,8 @@ exports.createAssignedBookingPayment = async (req, res) => {
       payment_method = 'cash',
       reference_no = null,
       notes = null,
-      payment_status = 'completed',
-      verified = true,
+      payment_status = null,
+      // 'verified' from client is ignored; we enforce rules below
       proof_image_url = null,
     } = req.body || {}
 
@@ -346,6 +346,30 @@ exports.createAssignedBookingPayment = async (req, res) => {
       amount = Number(sum.amountDue || amount)
     } catch {}
 
+    // Choose table-compliant row status based on coverage of remaining balance
+    let rowStatus = 'Partially Paid'
+    if (remaining != null) {
+      rowStatus = paid >= remaining ? 'Fully Paid' : 'Partially Paid'
+    }
+    if (
+      typeof payment_status === 'string' &&
+      [
+        'Pending',
+        'Partially Paid',
+        'Failed',
+        'Refunded',
+        'Fully Paid',
+      ].includes(payment_status)
+    ) {
+      rowStatus = payment_status
+    }
+
+    // Auto-verification rules for staff (event cards):
+    // - Non-GCash methods (e.g., cash/bank) are auto-verified
+    // - GCash is NOT auto-verified (admin must verify)
+    const methodLc = String(payment_method || 'cash').toLowerCase()
+    const autoVerified = methodLc !== 'gcash'
+
     const row = await paymentModel.createPayment({
       booking_id: id,
       user_id: userId,
@@ -354,9 +378,9 @@ exports.createAssignedBookingPayment = async (req, res) => {
       payment_method: String(payment_method || 'cash'),
       proof_image_url: proof_image_url ? String(proof_image_url) : null,
       reference_no: reference_no ? String(reference_no) : null,
-      payment_status: String(payment_status || 'Pending'),
+      payment_status: String(rowStatus),
       notes: notes == null ? null : String(notes),
-      verified_at: verified ? new Date() : null,
+      verified_at: autoVerified ? new Date() : null,
     })
 
     // Logs: mark performer as employee and customer as method-aware

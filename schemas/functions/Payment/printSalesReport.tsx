@@ -16,8 +16,21 @@ async function safeText(res: Response, fallback: string) {
 
 // Fetch the admin sales report PDF as a Blob. Throws an Error with status=501 when
 // the backend lacks a PDF generator, so callers can present a specific message.
-export async function fetchAdminSalesReport(): Promise<Blob> {
-  const res = await fetch(`${API_BASE}/admin/payments/report`, {
+export type SalesReportRange = 'today' | 'week' | 'month' | 'quarter' | 'year'
+
+export async function fetchAdminSalesReport(opts?: {
+  range?: SalesReportRange
+  start?: string // YYYY-MM-DD
+  end?: string // YYYY-MM-DD
+}): Promise<Blob> {
+  const params = new URLSearchParams()
+  if (opts?.range) params.set('range', opts.range)
+  if (opts?.start) params.set('start', opts.start)
+  if (opts?.end) params.set('end', opts.end)
+  const url = `${API_BASE}/admin/payments/report${
+    params.toString() ? `?${params.toString()}` : ''
+  }`
+  const res = await fetch(url, {
     headers: { ...getAuthHeadersInit() },
   })
   if (res.status === 501) {

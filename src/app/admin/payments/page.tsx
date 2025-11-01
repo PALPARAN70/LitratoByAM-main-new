@@ -8,6 +8,7 @@ import {
 import {
   fetchAdminSalesReport,
   openBlobInNewTabAndPrint,
+  type SalesReportRange,
 } from '../../../../schemas/functions/Payment/printSalesReport'
 import {
   uploadAdminPaymentQR,
@@ -18,6 +19,7 @@ import {
   getAdminBookingBalance,
   type BookingBalance,
   createAdminRefund,
+  updateAdminPayment,
 } from '../../../../schemas/functions/Payment/adminPayments'
 import {
   Pagination,
@@ -112,9 +114,10 @@ export default function AdminPaymentsPage() {
     process.env.NEXT_PUBLIC_API_ORIGIN ?? 'http://localhost:5000'
   const API_BASE = `${API_ORIGIN}/api`
 
+  const [reportRange, setReportRange] = useState<SalesReportRange>('month')
   const printSalesReport = async () => {
     try {
-      const blob = await fetchAdminSalesReport()
+      const blob = await fetchAdminSalesReport({ range: reportRange })
       openBlobInNewTabAndPrint(blob)
     } catch (e) {
       const err = e as Error & { status?: number }
@@ -151,6 +154,46 @@ export default function AdminPaymentsPage() {
   const [refundReason, setRefundReason] = useState<string>('')
   const [refundSubmitting, setRefundSubmitting] = useState(false)
 
+  // Proof viewer dialog state
+  const [proofOpen, setProofOpen] = useState(false)
+  const [proofPaymentId, setProofPaymentId] = useState<number | null>(null)
+  const [verifySubmitting, setVerifySubmitting] = useState(false)
+  const [confirmVerifyOpen, setConfirmVerifyOpen] = useState(false)
+
+  // Centralized verify handler used by confirmation dialog
+  const verifyCurrentPayment = async () => {
+    if (!proofPaymentId) return
+    setVerifySubmitting(true)
+    try {
+      const p = await ensurePayment(proofPaymentId)
+      if (!p) throw new Error('Payment not found')
+      const bal = p.booking_id
+        ? await getAdminBookingBalance(p.booking_id)
+        : null
+      const remaining = bal ? Math.max(0, bal.amount_due - bal.total_paid) : 0
+      const amt = Number(p.amount_paid || 0)
+      const rowStatus = amt >= remaining ? 'Fully Paid' : 'Partially Paid'
+      await updateAdminPayment(proofPaymentId, {
+        verified_at: new Date().toISOString(),
+        payment_status: rowStatus,
+      })
+      // Invalidate cache for this payment so the Verified badge refreshes
+      setPaymentCache((m) => {
+        const { [proofPaymentId]: _omit, ...rest } = m
+        return rest
+      })
+      setConfirmVerifyOpen(false)
+      setProofOpen(false)
+      setProofPaymentId(null)
+      await loadLogs()
+    } catch (e) {
+      console.error('Verify payment failed:', e)
+      alert('Failed to verify payment')
+    } finally {
+      setVerifySubmitting(false)
+    }
+  }
+
   const openEdit = (lg: PaymentLog) => {
     setEditingLog(lg)
     setEditAdditional(
@@ -180,7 +223,9 @@ export default function AdminPaymentsPage() {
   type PaymentLite = {
     booking_id: number
     user_id: number
+    amount_paid?: number
     proof_image_url?: string | null
+    verified_at?: string | null
   }
   type BookingLite = {
     event_name?: string | null
@@ -213,14 +258,19 @@ export default function AdminPaymentsPage() {
           | {
               booking_id: number
               user_id: number
+              amount_paid?: number
               proof_image_url?: string | null
+              verified_at?: string | null
             }
           | undefined
         if (p && p.booking_id) {
           const lite: PaymentLite = {
             booking_id: Number(p.booking_id),
             user_id: Number(p.user_id),
+            amount_paid:
+              p.amount_paid != null ? Number(p.amount_paid) : undefined,
             proof_image_url: p.proof_image_url ?? null,
+            verified_at: p.verified_at ?? null,
           }
           setPaymentCache((m) => ({ ...m, [paymentId]: lite }))
           return lite
@@ -463,9 +513,30 @@ export default function AdminPaymentsPage() {
         <h1 className="text-2xl font-bold">Payment Logs</h1>
         {active === 'payments' && (
           <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2">
+              <label className="text-sm text-gray-700" htmlFor="reportRange">
+                Period
+              </label>
+              <select
+                id="reportRange"
+                className="border rounded px-2 py-1 text-sm"
+                value={reportRange}
+                onChange={(e) =>
+                  setReportRange(e.target.value as SalesReportRange)
+                }
+                title="Select report period"
+              >
+                <option value="today">Today</option>
+                <option value="week">Weekly</option>
+                <option value="month">Monthly</option>
+                <option value="quarter">Quarterly</option>
+                <option value="year">Yearly</option>
+              </select>
+            </div>
             <button
               className="px-3 py-2 rounded bg-litratoblack text-white"
               onClick={printSalesReport}
+              title="Generate sales report PDF for selected period"
             >
               Sales Report (PDF)
             </button>
@@ -584,8 +655,8 @@ export default function AdminPaymentsPage() {
                       <tr className="bg-gray-300 text-left">
                         {[
                           'Date/Time',
-                          'Payment',
                           'Event',
+                          'Verified',
                           'Customer',
                           'Proof',
                           'Action',
@@ -626,14 +697,30 @@ export default function AdminPaymentsPage() {
                             <td className="px-3 py-2 whitespace-nowrap">
                               {new Date(lg.created_at).toLocaleString()}
                             </td>
-                            <td className="px-3 py-2 whitespace-nowrap">
-                              #{lg.payment_id}
-                            </td>
                             <td
                               className="px-3 py-2 whitespace-nowrap max-w-[14rem] truncate"
                               title={eventName}
                             >
                               {eventName || '—'}
+                            </td>
+                            <td className="px-3 py-2 whitespace-nowrap">
+                              {(() => {
+                                if (!p) return '—'
+                                const verified = !!p.verified_at
+                                const cls = verified
+                                  ? 'bg-green-700 text-white'
+                                  : 'bg-gray-700 text-white'
+                                const label = verified
+                                  ? 'Verified'
+                                  : 'Unverified'
+                                return (
+                                  <span
+                                    className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${cls}`}
+                                  >
+                                    {label}
+                                  </span>
+                                )
+                              })()}
                             </td>
                             <td
                               className="px-3 py-2 whitespace-nowrap max-w-[12rem] truncate"
@@ -646,8 +733,14 @@ export default function AdminPaymentsPage() {
                                 type="button"
                                 className="px-2 py-1 rounded border text-xs disabled:opacity-50"
                                 disabled={!proofUrl}
-                                onClick={() => {
-                                  if (proofUrl) window.open(proofUrl, '_blank')
+                                onClick={async () => {
+                                  setProofPaymentId(lg.payment_id)
+                                  const pLite = await ensurePayment(
+                                    lg.payment_id
+                                  )
+                                  if (pLite?.booking_id)
+                                    await ensureBooking(pLite.booking_id)
+                                  setProofOpen(true)
                                 }}
                               >
                                 View
@@ -799,6 +892,119 @@ export default function AdminPaymentsPage() {
               onClick={saveEdit}
             >
               Save
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Proof Viewer Dialog */}
+      <Dialog
+        open={proofOpen}
+        onOpenChange={(o) => {
+          if (!o) {
+            setProofOpen(false)
+            setProofPaymentId(null)
+            setVerifySubmitting(false)
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-[680px]">
+          <DialogHeader>
+            <DialogTitle>Payment Proof</DialogTitle>
+            <DialogDescription>
+              Review the uploaded receipt and verify the payment if valid.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            {(() => {
+              if (!proofPaymentId) return null
+              const p = paymentCache[proofPaymentId]
+              const b = p?.booking_id ? bookingCache[p.booking_id] : undefined
+              const eventName = b?.event_name || ''
+              const customerName =
+                [b?.firstname, b?.lastname].filter(Boolean).join(' ').trim() ||
+                b?.username ||
+                ''
+              const url = p?.proof_image_url || ''
+              return (
+                <>
+                  <div className="text-sm">Payment ID: {proofPaymentId}</div>
+                  <div className="text-sm">Event: {eventName || '—'}</div>
+                  <div className="text-sm">Customer: {customerName || '—'}</div>
+                  {url ? (
+                    // Use img to allow arbitrary remote sources
+                    <div className="border rounded overflow-hidden">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={url}
+                        alt="Payment proof"
+                        className="max-h-[420px] w-full object-contain bg-black/5"
+                      />
+                    </div>
+                  ) : (
+                    <div className="text-sm text-gray-500">
+                      No proof image provided.
+                    </div>
+                  )}
+                </>
+              )
+            })()}
+          </div>
+          <DialogFooter>
+            <DialogClose asChild>
+              <button
+                type="button"
+                className="px-4 py-2 rounded border text-sm"
+              >
+                Close
+              </button>
+            </DialogClose>
+            <button
+              type="button"
+              className="px-4 py-2 rounded bg-litratoblack text-white text-sm disabled:opacity-60"
+              disabled={!proofPaymentId || verifySubmitting}
+              onClick={() => setConfirmVerifyOpen(true)}
+            >
+              Verify
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Verify Confirmation Dialog */}
+      <Dialog
+        open={confirmVerifyOpen}
+        onOpenChange={(o) => {
+          if (!o) setConfirmVerifyOpen(false)
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Confirm Verification</DialogTitle>
+            <DialogDescription>
+              This will mark the payment as verified and set its status based on
+              the remaining balance.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-2 text-sm text-gray-700">
+            Proceed to verify this payment?
+          </div>
+          <DialogFooter>
+            <DialogClose asChild>
+              <button
+                type="button"
+                className="px-4 py-2 rounded border text-sm"
+              >
+                Cancel
+              </button>
+            </DialogClose>
+            <button
+              type="button"
+              className="px-4 py-2 rounded bg-litratoblack text-white text-sm disabled:opacity-60"
+              disabled={!proofPaymentId || verifySubmitting}
+              onClick={verifyCurrentPayment}
+            >
+              {verifySubmitting ? 'Verifying…' : 'Confirm Verify'}
             </button>
           </DialogFooter>
         </DialogContent>
@@ -1101,6 +1307,11 @@ export default function AdminPaymentsPage() {
                   await createAdminRefund(refundPaymentId, {
                     amount: amt,
                     reason: refundReason.trim() || undefined,
+                  })
+                  // Invalidate cache so any derived payment details refresh
+                  setPaymentCache((m) => {
+                    const { [refundPaymentId]: _omit, ...rest } = m
+                    return rest
                   })
                   setRefundOpen(false)
                   setRefundPaymentId(null)
