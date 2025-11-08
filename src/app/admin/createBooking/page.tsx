@@ -414,6 +414,7 @@ export default function BookingPage() {
           notes: null,
           event_name: form.eventName || null,
           strongest_signal: form.signal || null,
+          booth_placement: form.boothPlacement || null,
         }
 
         await adminCreateAndConfirm(payload)
