@@ -8,10 +8,11 @@ import {
 } from '@/components/ui/popover'
 import {
   MoreHorizontal as Ellipsis,
-  Trash2,
   Pencil,
   Eye,
   EyeOff,
+  Archive,
+  ArchiveRestore,
 } from 'lucide-react'
 // Grid Admin helpers (extracted API logic)
 import createGridAdmin, {
@@ -65,7 +66,10 @@ import {
 } from '@/components/ui/pagination'
 // Shared types hoisted for stability
 type TabKey = 'equipment' | 'package' | 'grid' | 'logitems'
+// Status key used by backend for availability
 type EquipmentTabKey = 'available' | 'unavailable'
+// UI view tab inside Equipment panel
+type EquipmentViewTabKey = 'available' | 'unavailable' | 'archived'
 type EquipmentRow = {
   id: string
   name: string
@@ -266,7 +270,7 @@ export default function InventoryManagementPage() {
 
   // Panels
   function CreateEquipmentPanel({ searchTerm }: { searchTerm?: string }) {
-    const [active, setActive] = useState<EquipmentTabKey>('available')
+    const [active, setActive] = useState<EquipmentViewTabKey>('available')
     const [items, setItems] = useState<EquipmentRow[]>([])
     const [equipmentTypes, setEquipmentTypes] = useState<string[]>(
       DEFAULT_EQUIPMENT_TYPES
@@ -449,24 +453,6 @@ export default function InventoryManagementPage() {
       [API_BASE, getAuthHeaders]
     )
 
-    const handleDelete = useCallback(
-      async (id: string) => {
-        const prev = items
-        setItems((p) => p.filter((it) => it.id !== id))
-        try {
-          const res = await fetch(`${API_BASE}/inventory/${id}`, {
-            method: 'DELETE',
-            headers: { ...getAuthHeaders() },
-          })
-          if (!res.ok) throw new Error(`DELETE /inventory/${id} ${res.status}`)
-        } catch (e) {
-          console.error('Delete failed, restoring item:', e)
-          setItems(prev)
-        }
-      },
-      [items, API_BASE, getAuthHeaders]
-    )
-
     // Columns defined once
     const columns = useMemo(
       () => [
@@ -579,11 +565,21 @@ export default function InventoryManagementPage() {
 
     // Memoized filtered rows
     const availableRows = useMemo(
-      () => filteredItems.filter((it) => it.status === 'available'),
+      () =>
+        filteredItems.filter(
+          (it) => it.status === 'available' && it.condition !== 'Archived'
+        ),
       [filteredItems]
     )
     const unavailableRows = useMemo(
-      () => filteredItems.filter((it) => it.status === 'unavailable'),
+      () =>
+        filteredItems.filter(
+          (it) => it.status === 'unavailable' && it.condition !== 'Archived'
+        ),
+      [filteredItems]
+    )
+    const archivedRows = useMemo(
+      () => filteredItems.filter((it) => it.condition === 'Archived'),
       [filteredItems]
     )
 
@@ -591,6 +587,7 @@ export default function InventoryManagementPage() {
     const PER_PAGE = 5
     const [pageAvail, setPageAvail] = useState(1)
     const [pageUnavail, setPageUnavail] = useState(1)
+    const [pageArch, setPageArch] = useState(1)
     const totalPagesAvail = Math.max(
       1,
       Math.ceil(availableRows.length / PER_PAGE)
@@ -599,6 +596,10 @@ export default function InventoryManagementPage() {
       1,
       Math.ceil(unavailableRows.length / PER_PAGE)
     )
+    const totalPagesArch = Math.max(
+      1,
+      Math.ceil(archivedRows.length / PER_PAGE)
+    )
 
     useEffect(() => {
       setPageAvail((p) => Math.min(Math.max(1, p), totalPagesAvail))
@@ -606,6 +607,9 @@ export default function InventoryManagementPage() {
     useEffect(() => {
       setPageUnavail((p) => Math.min(Math.max(1, p), totalPagesUnavail))
     }, [totalPagesUnavail])
+    useEffect(() => {
+      setPageArch((p) => Math.min(Math.max(1, p), totalPagesArch))
+    }, [totalPagesArch])
 
     const paginatedAvailableRows = useMemo(() => {
       const start = (pageAvail - 1) * PER_PAGE
@@ -616,6 +620,11 @@ export default function InventoryManagementPage() {
       const start = (pageUnavail - 1) * PER_PAGE
       return unavailableRows.slice(start, start + PER_PAGE)
     }, [unavailableRows, pageUnavail])
+
+    const paginatedArchivedRows = useMemo(() => {
+      const start = (pageArch - 1) * PER_PAGE
+      return archivedRows.slice(start, start + PER_PAGE)
+    }, [archivedRows, pageArch])
 
     return (
       <>
@@ -636,6 +645,12 @@ export default function InventoryManagementPage() {
                   onClick={() => setActive('unavailable')}
                 >
                   Unavailable
+                </TabButton>
+                <TabButton
+                  active={active === 'archived'}
+                  onClick={() => setActive('archived')}
+                >
+                  Archived
                 </TabButton>
               </div>
             </div>
@@ -788,6 +803,14 @@ export default function InventoryManagementPage() {
                 onPageChange={setPageUnavail}
               />
             )}
+            {active === 'archived' && (
+              <ArchivedEquipmentPanel
+                rows={paginatedArchivedRows}
+                currentPage={pageArch}
+                totalPages={totalPagesArch}
+                onPageChange={setPageArch}
+              />
+            )}
           </section>
         </div>
 
@@ -814,11 +837,20 @@ export default function InventoryManagementPage() {
       value,
       onChange,
       triggerClassName,
+      disabled,
     }: {
       value: EquipmentTabKey
       onChange: (v: EquipmentTabKey) => void
       triggerClassName: string
+      disabled?: boolean
     }) {
+      if (disabled) {
+        return (
+          <div className={triggerClassName}>
+            <span className="text-sm">{value}</span>
+          </div>
+        )
+      }
       return (
         <Select
           value={value}
@@ -906,12 +938,14 @@ export default function InventoryManagementPage() {
       currentPage,
       totalPages,
       onPageChange,
+      disableStatus,
     }: {
       rows: EquipmentRow[]
       triggerClassName: string
       currentPage: number
       totalPages: number
       onPageChange: (p: number) => void
+      disableStatus?: boolean
     }) {
       const goTo = (p: number) =>
         onPageChange(Math.min(Math.max(1, p), totalPages))
@@ -951,17 +985,50 @@ export default function InventoryManagementPage() {
                           className="px-4 py-2 whitespace-nowrap"
                         >
                           {col.key === 'status' ? (
-                            <div className="inline-block">
-                              <StatusSelect
-                                value={row.status}
-                                onChange={(v) => updateStatus(row.id, v)}
-                                triggerClassName={triggerClassName}
-                              />
-                            </div>
+                            disableStatus ? (
+                              // Archived view: show status like other text cells (capitalized)
+                              String(
+                                row.status.charAt(0).toUpperCase() +
+                                  row.status.slice(1)
+                              )
+                            ) : (
+                              <div className="inline-block">
+                                <StatusSelect
+                                  value={row.status}
+                                  onChange={(v) => updateStatus(row.id, v)}
+                                  triggerClassName={triggerClassName}
+                                />
+                              </div>
+                            )
                           ) : col.key === 'moreDetails' ? (
                             <MoreDetailsCell row={row} />
                           ) : col.key === 'actions' ? (
                             <div className="flex gap-2 items-center">
+                              {row.condition !== 'Archived' ? (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    updateCondition(row.id, 'Archived')
+                                  }
+                                  aria-label={`Archive ${row.name}`}
+                                  title="Archive"
+                                  className="inline-flex justify-center rounded-full text-muted-foreground hover:text-black"
+                                >
+                                  <Archive />
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    updateCondition(row.id, 'Good')
+                                  }
+                                  aria-label={`Unarchive ${row.name}`}
+                                  title="Unarchive"
+                                  className="inline-flex justify-center rounded-full text-muted-foreground hover:text-black"
+                                >
+                                  <ArchiveRestore />
+                                </button>
+                              )}
                               <button
                                 type="button"
                                 onClick={() => openEditModal(row)}
@@ -970,15 +1037,6 @@ export default function InventoryManagementPage() {
                                 className="inline-flex justify-center rounded-full text-litratoblack hover:text-black"
                               >
                                 <Pencil />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleDelete(row.id)}
-                                aria-label={`Delete ${row.name}`}
-                                title="Delete"
-                                className="inline-flex justify-center rounded-full text-litratored hover:text-red-600"
-                              >
-                                <Trash2 />
                               </button>
                             </div>
                           ) : (
@@ -1061,6 +1119,7 @@ export default function InventoryManagementPage() {
           currentPage={props.currentPage}
           totalPages={props.totalPages}
           onPageChange={props.onPageChange}
+          disableStatus={false}
         />
       )
     }
@@ -1077,6 +1136,24 @@ export default function InventoryManagementPage() {
           currentPage={props.currentPage}
           totalPages={props.totalPages}
           onPageChange={props.onPageChange}
+          disableStatus={false}
+        />
+      )
+    }
+    function ArchivedEquipmentPanel(props: {
+      rows: EquipmentRow[]
+      currentPage: number
+      totalPages: number
+      onPageChange: (p: number) => void
+    }) {
+      return (
+        <EquipmentTable
+          rows={props.rows}
+          triggerClassName="h-9 rounded text-sm opacity-60"
+          currentPage={props.currentPage}
+          totalPages={props.totalPages}
+          onPageChange={props.onPageChange}
+          disableStatus={true}
         />
       )
     }
@@ -1183,6 +1260,7 @@ export default function InventoryManagementPage() {
                     <SelectContent>
                       <SelectItem value="Good">Good</SelectItem>
                       <SelectItem value="Damaged">Damaged</SelectItem>
+                      {/* Archiving is available via the Archive button in the table */}
                     </SelectContent>
                   </Select>
                 </div>
@@ -1219,6 +1297,64 @@ export default function InventoryManagementPage() {
           </DialogContent>
         </Dialog>
       )
+    }
+
+    // PATCH equipment condition (Archive/Unarchive)
+    async function updateCondition(id: string, condition: string) {
+      // capture original for rollback
+      const original = items.find((it) => it.id === id)
+      // optimistic update
+      setItems((prev) =>
+        prev.map((it) =>
+          it.id === id
+            ? {
+                ...it,
+                condition,
+                // Always force status to unavailable whenever condition changes via archive/unarchive flow
+                status: 'unavailable' as EquipmentTabKey,
+              }
+            : it
+        )
+      )
+      try {
+        // Always send status=false so backend logs reflect unavailable after archive or unarchive
+        const payload: Record<string, unknown> = { condition, status: false }
+
+        const res = await fetch(`${API_BASE}/inventory/${id}`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            ...getAuthHeaders(),
+          },
+          body: JSON.stringify(payload),
+        })
+        if (!res.ok) throw new Error(`PATCH /inventory/${id} ${res.status}`)
+        // if server returns item, prefer it
+        try {
+          const data = await res.json()
+          const updated = (data && (data.item || data)) ?? null
+          if (updated && updated.id !== undefined) {
+            const nextRow = mapItem(updated)
+            setItems((prev) => prev.map((it) => (it.id === id ? nextRow : it)))
+          }
+        } catch {
+          // ignore body parse
+        }
+      } catch (e) {
+        console.error('Update condition failed:', e)
+        // rollback to original values if available
+        setItems((prev) =>
+          prev.map((it) =>
+            it.id === id
+              ? {
+                  ...it,
+                  condition: original?.condition ?? it.condition,
+                  status: original?.status ?? it.status,
+                }
+              : it
+          )
+        )
+      }
     }
   }
 
@@ -3083,12 +3219,21 @@ export default function InventoryManagementPage() {
           if (l.entity_type === 'Inventory') {
             if (changes?.status) {
               statusDisplay = String(changes.status[1]) // already 'available'|'unavailable'
+            } else if (changes?.condition) {
+              // Derive status from condition changes when status not explicitly logged
+              const fromCond = String(changes.condition[0])
+              const toCond = String(changes.condition[1])
+              // Archived condition implies unavailable; unarchiving (Archived -> Good/Damaged) should remain unavailable per requirements
+              if (toCond === 'Archived' || fromCond === 'Archived') {
+                statusDisplay = 'unavailable'
+              } else {
+                // default when condition change unrelated to archive
+                statusDisplay = 'available'
+              }
+              conditionDisplay = toCond
             } else {
               // fallback: if initial log (created) assume available unless explicitly different
               statusDisplay = 'available'
-            }
-            if (changes?.condition) {
-              conditionDisplay = String(changes.condition[1])
             }
           } else if (l.entity_type === 'Package') {
             if (changes?.display) {
