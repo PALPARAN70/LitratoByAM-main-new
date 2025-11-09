@@ -31,7 +31,6 @@ type NavItem = { label: string; Icon: IconType; path: string }
 const NAV_ITEMS: NavItem[] = [
   { label: 'Dashboard', Icon: FiGrid, path: '/customer/dashboard' },
   { label: 'Booking', Icon: FiCalendar, path: '/customer/booking' },
-  { label: 'Rescheduling', Icon: FiRefreshCcw, path: '/customer/rescheduling' },
   { label: 'Payments', Icon: FiCalendar, path: '/customer/payments' },
 ]
 

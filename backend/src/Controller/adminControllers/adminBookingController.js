@@ -297,6 +297,7 @@ module.exports = {
         contact_person,
         contact_person_number,
         notes,
+        booth_placement,
       } = req.body || {}
 
       // Build SET clause allowing same fields as customer edit
@@ -314,6 +315,7 @@ module.exports = {
         contact_person: true,
         contact_person_number: true,
         notes: true,
+        booth_placement: true,
       }
       const sets = []
       const values = []
@@ -332,6 +334,7 @@ module.exports = {
         contact_person,
         contact_person_number,
         notes,
+        booth_placement,
       })) {
         if (!allowed[k] || typeof v === 'undefined') continue
         sets.push(`${k} = $${idx}`)
@@ -390,7 +393,160 @@ module.exports = {
         }
       }
 
+      // Fetch the updated row (includes joined package + aggregated grid names)
       const updated = await getBookingRequestById(requestid)
+      // Build and send a change notification email when notable fields are updated
+      try {
+        const to = existing.username
+        if (to) {
+          const diffLines = []
+          const label = (k) =>
+            ({
+              contact_person: 'Contact person',
+              contact_person_number: 'Contact person number',
+              event_name: 'Event name',
+              event_address: 'Event location',
+              extension_duration: 'Extension hours',
+              strongest_signal: 'Strongest signal',
+              packageid: 'Package',
+              grid: 'Grids',
+              event_date: 'Event date',
+              event_time: 'Start time',
+              event_end_time: 'End time',
+              booth_placement: 'Booth placement',
+            }[k] || k)
+
+          // Helper to push old -> new lines (strings)
+          const pushChange = (key, oldVal, newVal) => {
+            const o = oldVal ?? ''
+            const n = newVal ?? ''
+            if (String(o) === String(n)) return
+            diffLines.push(
+              `<li>${label(key)}: <b>${o || '—'}</b> → <b>${n || '—'}</b></li>`
+            )
+          }
+
+          // Package (show names)
+          if (typeof packageid !== 'undefined') {
+            const oldPkg = existing.package_name || existing.packageid
+            const newPkg = updated?.package_name || packageid
+            pushChange('packageid', oldPkg, newPkg)
+          }
+
+          // Date/Times
+          if (typeof event_date !== 'undefined')
+            pushChange('event_date', existing.event_date, updated?.event_date)
+          if (typeof event_time !== 'undefined')
+            pushChange('event_time', existing.event_time, updated?.event_time)
+          if (typeof event_end_time !== 'undefined')
+            pushChange(
+              'event_end_time',
+              existing.event_end_time,
+              updated?.event_end_time
+            )
+
+          // Contact
+          if (typeof contact_person !== 'undefined')
+            pushChange(
+              'contact_person',
+              existing.contact_person,
+              updated?.contact_person
+            )
+          if (typeof contact_person_number !== 'undefined')
+            pushChange(
+              'contact_person_number',
+              existing.contact_person_number,
+              updated?.contact_person_number
+            )
+
+          // Event details
+          if (typeof event_name !== 'undefined')
+            pushChange('event_name', existing.event_name, updated?.event_name)
+          if (typeof event_address !== 'undefined')
+            pushChange(
+              'event_address',
+              existing.event_address,
+              updated?.event_address
+            )
+          if (typeof extension_duration !== 'undefined')
+            pushChange(
+              'extension_duration',
+              existing.extension_duration,
+              updated?.extension_duration
+            )
+          if (typeof strongest_signal !== 'undefined')
+            pushChange(
+              'strongest_signal',
+              existing.strongest_signal,
+              updated?.strongest_signal
+            )
+          if (typeof booth_placement !== 'undefined')
+            pushChange(
+              'booth_placement',
+              existing.booth_placement,
+              updated?.booth_placement
+            )
+
+          // Grids (compare names)
+          if (
+            (Array.isArray(grid_ids) && grid_ids.length >= 0) ||
+            typeof grid !== 'undefined'
+          ) {
+            const toNames = (x) =>
+              Array.isArray(x)
+                ? x
+                : typeof x === 'string' && x.trim().startsWith('[')
+                ? JSON.parse(x)
+                : typeof x === 'string' && x.trim()
+                ? x
+                    .split(',')
+                    .map((s) => s.trim())
+                    .filter(Boolean)
+                : []
+            const oldNames = toNames(existing.grid_names || existing.grid)
+            const newNames = toNames(updated?.grid_names || updated?.grid)
+            if (oldNames.join('|') !== newNames.join('|')) {
+              diffLines.push(
+                `<li>${label('grid')}: <b>${
+                  oldNames.length ? oldNames.join(', ') : '—'
+                }</b> → <b>${
+                  newNames.length ? newNames.join(', ') : '—'
+                }</b></li>`
+              )
+            }
+          }
+
+          if (diffLines.length) {
+            const name =
+              [existing.firstname, existing.lastname]
+                .filter(Boolean)
+                .join(' ')
+                .trim() || 'Customer'
+            const when = [updated?.event_date, updated?.event_time]
+              .filter(Boolean)
+              .join(' ')
+            const title = updated?.event_name || 'your booking'
+            const html = `
+              <div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#111">
+                <p>Hi ${name},</p>
+                <p>We updated some details for ${title} on <b>${
+              when || 'your scheduled date'
+            }</b>.</p>
+                <p>Here’s a summary of the changes:</p>
+                <ul style="margin:0;padding-left:20px">${diffLines.join(
+                  ''
+                )}</ul>
+                <p>If anything looks off, please reply to this email.</p>
+                <p>— Litrato Team</p>
+              </div>
+            `
+            await safeEmail(to, 'Your booking details were updated', html)
+          }
+        }
+      } catch (e) {
+        console.warn('admin updateBookingRequest email failed:', e?.message)
+      }
+
       return res.json({ message: 'Booking updated', booking: updated })
     } catch (err) {
       console.error('admin updateBookingRequest error:', err)

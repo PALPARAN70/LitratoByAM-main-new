@@ -78,6 +78,11 @@ async function initBookingRequestTable() {
       'ALTER TABLE booking_requests ADD COLUMN IF NOT EXISTS contact_person_number TEXT'
     )
     .catch(() => {})
+  await pool
+    .query(
+      'ALTER TABLE booking_requests ADD COLUMN IF NOT EXISTS booth_placement TEXT'
+    )
+    .catch(() => {})
 }
 
 // Create a new booking request
@@ -94,11 +99,12 @@ async function createBookingRequest(
   strongest_signal = null,
   grid = null,
   contact_person = null,
-  contact_person_number = null
+  contact_person_number = null,
+  booth_placement = null
 ) {
   const query = `
-    INSERT INTO booking_requests (packageid, userid, event_date, event_time, event_end_time, extension_duration, event_address, notes, event_name, strongest_signal, grid, contact_person, contact_person_number)
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+    INSERT INTO booking_requests (packageid, userid, event_date, event_time, event_end_time, extension_duration, event_address, notes, event_name, strongest_signal, grid, contact_person, contact_person_number, booth_placement)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
     RETURNING *
   `
   const values = [
@@ -115,6 +121,7 @@ async function createBookingRequest(
     grid,
     contact_person,
     contact_person_number,
+    booth_placement,
   ]
   const { rows } = await pool.query(query, values)
   return rows[0]

@@ -356,7 +356,8 @@ export default function BookingPage() {
         place: form.eventLocation,
         paymentStatus: 'Pending',
         status: 'Pending' as 'Approved' | 'Declined' | 'Pending',
-        action: ['Cancel', 'Reschedule'] as string[],
+        // Updated: second action label from Reschedule to Edit after removing rescheduling tab
+        action: ['Cancel', 'Edit'] as string[],
         requestid: resp?.booking?.requestid, // keep id for reschedule
       }
       const raw =

@@ -86,6 +86,7 @@ type BookingRow = {
   contact_person?: string | null
   contact_person_number?: string | null
   strongest_signal?: string | null
+  booth_placement?: string | null
   extension_duration?: number | null
   username?: string | null
   firstname?: string | null
@@ -118,6 +119,7 @@ export default function ManageBookingPage() {
     contact_person?: string | null
     contact_person_number?: string | null
     strongest_signal?: string | null
+    booth_placement?: string | null
     extension_duration?: number | null
     username?: string | null
     firstname?: string | null
@@ -168,6 +170,7 @@ export default function ManageBookingPage() {
                 contact_person: row.contact_person ?? null,
                 contact_person_number: row.contact_person_number ?? null,
                 strongest_signal: row.strongest_signal ?? null,
+                booth_placement: row.booth_placement ?? null,
                 extension_duration: row.extension_duration ?? null,
                 username: row.username ?? null,
                 firstname: row.firstname ?? null,
@@ -221,6 +224,7 @@ function BookingsPanel({
     contact_person?: string | null
     contact_person_number?: string | null
     strongest_signal?: string | null
+    booth_placement?: string | null
     extension_duration?: number | null
     username?: string | null
     firstname?: string | null
@@ -236,8 +240,9 @@ function BookingsPanel({
     eventName: '',
     eventLocation: '',
     extensionHours: '', // text
-    boothPlacement: '', // text
+    booth_placement: '', // text
     signal: '',
+    boothPlacementRaw: '',
     package: '', // text
     eventDate: '',
     eventTime: '',
@@ -281,6 +286,8 @@ function BookingsPanel({
       package: selected.package || p.package,
       eventDate: selected.date || p.eventDate,
       eventTime: selected.startTime || p.eventTime,
+      booth_placement: selected.booth_placement || p.booth_placement,
+      boothPlacementRaw: selected.booth_placement || p.boothPlacementRaw,
     }))
     // Mark all prefilled user booking fields as read-only (copyable)
     const ro = new Set<keyof typeof defaultForm>([
@@ -291,6 +298,7 @@ function BookingsPanel({
       'eventName',
       'eventLocation',
       'extensionHours',
+      'booth_placement',
       'signal',
       'package',
       'eventDate',
@@ -311,7 +319,7 @@ function BookingsPanel({
       key: 'extensionHours',
       label: 'Extension? (Minimum 2hrs. Additional hour is Php2000):',
     },
-    { key: 'boothPlacement', label: 'Placement of booth:' },
+    { key: 'booth_placement', label: 'Placement of booth:' },
     {
       key: 'signal',
       label: 'What signal is currently strong in the event area?:',
@@ -319,6 +327,8 @@ function BookingsPanel({
     { key: 'package', label: 'Package:' },
     { key: 'eventDate', label: 'Event date:' },
     { key: 'eventTime', label: 'Event start time:' },
+    // Hidden raw value (useful if you later convert to radios)
+    // { key: 'boothPlacementRaw', label: 'Booth placement (raw):' },
   ]
 
   const renderField = (f: { key: keyof typeof defaultForm; label: string }) => (
@@ -859,6 +869,11 @@ function MasterListPanel({
             typeof (rx['package_id'] as unknown) === 'number'
               ? (rx['package_id'] as number)
               : null
+          // Booth placement may arrive as snake_case from API; fallback to camel
+          const boothPlacement =
+            typeof rx['booth_placement'] === 'string'
+              ? (rx['booth_placement'] as string)
+              : (r as any).boothPlacement || (r as any).booth_placement || null
 
           return {
             id: String(r.requestid || r.confirmed_id || Math.random()),
@@ -880,6 +895,7 @@ function MasterListPanel({
             contact_person: r.contact_person ?? null,
             contact_person_number: r.contact_person_number ?? null,
             strongest_signal: r.strongest_signal ?? null,
+            booth_placement: boothPlacement ?? null,
             extension_duration: r.extension_duration ?? null,
             username: r.username ?? null,
             firstname: r.firstname ?? null,
@@ -949,27 +965,13 @@ function MasterListPanel({
     if (!q) return byStatus
     const tokens = q.split(/\s+/).filter(Boolean)
     if (!tokens.length) return byStatus
+    // Restrict search strictly to the event name only (per requirement)
+    // We previously searched across many concatenated fields; now we only
+    // match tokens against r.eventName. This keeps semantics simple and
+    // guarantees no accidental matches on other metadata.
     return byStatus.filter((r) => {
-      const hay = [
-        r.eventName,
-        r.clientName, // ADD: allow searching by client name
-        r.place,
-        r.date,
-        r.startTime,
-        r.endTime,
-        r.package,
-        r.grid,
-        r.username,
-        r.firstname,
-        r.lastname,
-        r.contact_info,
-        r.contact_person,
-        r.contact_person_number,
-      ]
-        .filter(Boolean)
-        .join(' ')
-        .toLowerCase()
-      return tokens.every((t) => hay.includes(t))
+      const eventName = (r.eventName || '').toLowerCase()
+      return tokens.every((t) => eventName.includes(t))
     })
   }, [statusFilter, rows, search])
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize))
@@ -1030,7 +1032,7 @@ function MasterListPanel({
           typeof row.extension_duration === 'number'
             ? row.extension_duration
             : 0,
-        boothPlacement: 'Indoor',
+        booth_placement: 'Indoor',
         signal: row.strongest_signal || '',
         package: row.package || 'The Hanz',
         selectedGrids: (row.grid || '')
@@ -1240,7 +1242,7 @@ function MasterListPanel({
               setSearch(e.target.value)
               setPage(1)
             }}
-            placeholder="Search by name, date, user, place…"
+            placeholder="Search event name…"
             className="h-9 w-64 max-w-[50vw] px-3 rounded-full outline-none bg-gray-400 text-sm "
             aria-label="Search bookings"
           />
@@ -1455,144 +1457,153 @@ function MasterListPanel({
 
                     {/* Actions */}
                     <td className="px-3 py-2">
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <button
-                            type="button"
-                            className="p-1 rounded hover:bg-gray-100"
-                            aria-label="Actions"
-                            title="Actions"
-                          >
-                            <Ellipsis />
-                          </button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-40 p-1" align="end">
-                          <div className="flex flex-col">
-                            {/* NEW: Contract actions */}
+                      {/* If declined, hide the Actions button entirely */}
+                      {row.status === 'declined' ? null : (
+                        <Popover>
+                          <PopoverTrigger asChild>
                             <button
                               type="button"
-                              className="text-left px-2 py-1.5 rounded text-sm hover:bg-gray-100"
-                              onClick={() => openContractDialog(row)}
+                              className="p-1 rounded hover:bg-gray-100"
+                              aria-label="Actions"
+                              title="Actions"
                             >
-                              View Contract
+                              <Ellipsis />
                             </button>
-                            <button
-                              type="button"
-                              className="text-left px-2 py-1.5 rounded text-sm hover:bg-gray-100"
-                              onClick={() => openContractDialog(row)}
-                            >
-                              Upload Contract
-                            </button>
-                            <button
-                              type="button"
-                              className={`text-left px-2 py-1.5 rounded text-sm hover:bg-gray-100 ${
-                                row.contractStatus === 'Verified'
-                                  ? 'opacity-50 cursor-not-allowed'
-                                  : ''
-                              }`}
-                              disabled={row.contractStatus === 'Verified'}
-                              onClick={() => quickVerifyContract(row)}
-                            >
-                              Verify Contract
-                            </button>
-                            {/* Review */}
-                            <button
-                              type="button"
-                              className={`text-left px-2 py-1.5 rounded text-sm hover:bg-gray-100 ${
-                                row.status === 'pending'
-                                  ? ''
-                                  : 'opacity-50 cursor-not-allowed'
-                              }`}
-                              disabled={row.status !== 'pending'}
-                              onClick={() => onSelectPending(row)}
-                            >
-                              Review
-                            </button>
-                            {/* Edit */}
-                            <button
-                              type="button"
-                              className={`text-left px-2 py-1.5 rounded text-sm hover:bg-gray-100 ${
-                                row.status === 'declined' ||
-                                row.status === 'cancelled'
-                                  ? 'opacity-50 cursor-not-allowed'
-                                  : ''
-                              }`}
-                              disabled={
-                                row.status === 'declined' ||
-                                row.status === 'cancelled'
-                              }
-                              onClick={() => handleEdit(row)}
-                            >
-                              Edit
-                            </button>
-                            {/* Cancel */}
-                            <button
-                              type="button"
-                              className={`text-left px-2 py-1.5 rounded text-sm hover:bg-gray-100 ${
-                                row.status === 'approved'
-                                  ? ''
-                                  : 'opacity-50 cursor-not-allowed'
-                              }`}
-                              disabled={row.status !== 'approved'}
-                              onClick={() => {
-                                if (row.status !== 'approved' || !row.requestid)
-                                  return
-                                setTargetRow(row)
-                                setCancelOpen(true)
-                              }}
-                            >
-                              Cancel
-                            </button>
-                            {/* Undo Cancel */}
-                            <button
-                              type="button"
-                              className={`text-left px-2 py-1.5 rounded text-sm hover:bg-gray-100 ${
-                                row.status === 'cancelled'
-                                  ? ''
-                                  : 'opacity-50 cursor-not-allowed'
-                              }`}
-                              disabled={row.status !== 'cancelled'}
-                              onClick={() => {
-                                if (
-                                  row.status !== 'cancelled' ||
-                                  !row.requestid
-                                )
-                                  return
-                                setTargetRow(row)
-                                setUndoOpen(true)
-                              }}
-                            >
-                              Undo Cancel
-                            </button>
-                            {/* Assign staff */}
-                            <button
-                              type="button"
-                              className={`text-left px-2 py-1.5 rounded text-sm hover:bg-gray-100 ${
-                                row.status === 'approved'
-                                  ? ''
-                                  : 'opacity-50 cursor-not-allowed'
-                              }`}
-                              disabled={row.status !== 'approved'}
-                              onClick={() => openAssign(row)}
-                            >
-                              Assign Staff
-                            </button>
-                            {/* Extend hours */}
-                            <button
-                              type="button"
-                              className={`text-left px-2 py-1.5 rounded text-sm hover:bg-gray-100 ${
-                                row.status === 'approved'
-                                  ? ''
-                                  : 'opacity-50 cursor-not-allowed'
-                              }`}
-                              disabled={row.status !== 'approved'}
-                              onClick={() => openExtend(row)}
-                            >
-                              Extend hours…
-                            </button>
-                          </div>
-                        </PopoverContent>
-                      </Popover>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-40 p-1" align="end">
+                            {(() => {
+                              const isPending = row.status === 'pending'
+                              const isApproved = row.status === 'approved'
+                              const isCancelled = row.status === 'cancelled'
+
+                              const showViewContract = !isCancelled
+                              const showUploadContract = isPending // hide for approved and cancelled
+                              const showVerifyContract = isPending // hide for approved and cancelled
+                              const showReview = isPending
+                              // Edit should not be available for pending or cancelled requests
+                              const showEdit = !isCancelled && !isPending
+                              const showCancel = isApproved
+                              const showUndoCancel = isCancelled
+                              const showAssignStaff = isApproved
+                              const showExtend = isApproved
+
+                              return (
+                                <div className="flex flex-col">
+                                  {/* Contract actions */}
+                                  {showViewContract && (
+                                    <button
+                                      type="button"
+                                      className="text-left px-2 py-1.5 rounded text-sm hover:bg-gray-100"
+                                      onClick={() => openContractDialog(row)}
+                                    >
+                                      View Contract
+                                    </button>
+                                  )}
+                                  {showUploadContract && (
+                                    <button
+                                      type="button"
+                                      className="text-left px-2 py-1.5 rounded text-sm hover:bg-gray-100"
+                                      onClick={() => openContractDialog(row)}
+                                    >
+                                      Upload Contract
+                                    </button>
+                                  )}
+                                  {showVerifyContract && (
+                                    <button
+                                      type="button"
+                                      className={`text-left px-2 py-1.5 rounded text-sm hover:bg-gray-100 ${
+                                        row.contractStatus === 'Verified'
+                                          ? 'opacity-50 cursor-not-allowed'
+                                          : ''
+                                      }`}
+                                      disabled={
+                                        row.contractStatus === 'Verified'
+                                      }
+                                      onClick={() => quickVerifyContract(row)}
+                                    >
+                                      Verify Contract
+                                    </button>
+                                  )}
+
+                                  {/* Review (only for pending) */}
+                                  {showReview && (
+                                    <button
+                                      type="button"
+                                      className="text-left px-2 py-1.5 rounded text-sm hover:bg-gray-100"
+                                      onClick={() => onSelectPending(row)}
+                                    >
+                                      Review
+                                    </button>
+                                  )}
+
+                                  {/* Edit (hidden for cancelled) */}
+                                  {showEdit && (
+                                    <button
+                                      type="button"
+                                      className="text-left px-2 py-1.5 rounded text-sm hover:bg-gray-100"
+                                      onClick={() => handleEdit(row)}
+                                    >
+                                      Edit
+                                    </button>
+                                  )}
+
+                                  {/* Cancel (only approved) */}
+                                  {showCancel && (
+                                    <button
+                                      type="button"
+                                      className="text-left px-2 py-1.5 rounded text-sm hover:bg-gray-100"
+                                      onClick={() => {
+                                        if (!row.requestid) return
+                                        setTargetRow(row)
+                                        setCancelOpen(true)
+                                      }}
+                                    >
+                                      Cancel
+                                    </button>
+                                  )}
+
+                                  {/* Undo Cancel (only cancelled) */}
+                                  {showUndoCancel && (
+                                    <button
+                                      type="button"
+                                      className="text-left px-2 py-1.5 rounded text-sm hover:bg-gray-100"
+                                      onClick={() => {
+                                        if (!row.requestid) return
+                                        setTargetRow(row)
+                                        setUndoOpen(true)
+                                      }}
+                                    >
+                                      Undo Cancel
+                                    </button>
+                                  )}
+
+                                  {/* Assign staff (only approved) */}
+                                  {showAssignStaff && (
+                                    <button
+                                      type="button"
+                                      className="text-left px-2 py-1.5 rounded text-sm hover:bg-gray-100"
+                                      onClick={() => openAssign(row)}
+                                    >
+                                      Assign Staff
+                                    </button>
+                                  )}
+
+                                  {/* Extend hours (only approved) */}
+                                  {showExtend && (
+                                    <button
+                                      type="button"
+                                      className="text-left px-2 py-1.5 rounded text-sm hover:bg-gray-100"
+                                      onClick={() => openExtend(row)}
+                                    >
+                                      Extend hours…
+                                    </button>
+                                  )}
+                                </div>
+                              )
+                            })()}
+                          </PopoverContent>
+                        </Popover>
+                      )}
                     </td>
                   </tr>
                 ))
