@@ -2,6 +2,8 @@
 import Image from 'next/image'
 import PromoCard from '../../../../Litratocomponents/Service_Card'
 import Calendar from '../../../../Litratocomponents/LitratoCalendar'
+import PackageCarousel from '../../../../Litratocomponents/PackageCarousel'
+import GridCarousel from '../../../../Litratocomponents/GridCarousel'
 // Timepicker removed: end time is auto-calculated from start + package duration + extension
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
@@ -414,7 +416,6 @@ export default function BookingPage() {
           notes: null,
           event_name: form.eventName || null,
           strongest_signal: form.signal || null,
-          booth_placement: form.boothPlacement || null,
         }
 
         await adminCreateAndConfirm(payload)
@@ -468,7 +469,7 @@ export default function BookingPage() {
     <MotionDiv>
       <div className="min-h-screen w-full overflow-y-auto">
         <div className="w-full">
-          <div className="relative h-[160px]">
+          <div className="relative h-[120px]">
             <Image
               src={'/Images/litratobg.jpg'}
               alt="Booking Header"
@@ -477,397 +478,389 @@ export default function BookingPage() {
               priority
             />
           </div>
-          <p className="text-litratoblack text-center text-4xl font-semibold font-didone pt-4">
+          <p className="text-litratoblack text-center text-3xl font-semibold font-didone pt-3 pb-2">
             Welcome, {personalForm.Firstname} {personalForm.Lastname}!<br />
             Schedule a photobooth session with us!
           </p>
         </div>
 
-        <div className=" p-4 rounded-lg shadow-md space-y-3">
-          <p className="font-semibold text-xl">Please Fill In The Following:</p>
-
-          {/* Email */}
-          <div>
-            <label className="block text-lg mb-1">Email:</label>
-            <input
-              type="email"
-              placeholder="Enter here:"
-              className="w-full bg-gray-200 rounded-md px-3 py-2 text-sm focus:outline-none"
-              value={form.email}
-              onChange={(e) => {
-                // If email changes, unlock any previously locked fields
-                setLocks({ name: false, contact: false })
-                setField('email', e.target.value)
-              }}
-              onBlur={(e) => {
-                const v = e.target.value
-                setField('email', v)
-                void handleEmailBlur(v)
-              }}
-            />
-            {errors.email && (
-              <p className="text-red-600 text-sm mt-1">{errors.email}</p>
-            )}
-          </div>
-
-          {/* Complete name */}
-          <div>
-            <label className="block text-lg mb-1">Complete name:</label>
-            <input
-              type="text"
-              placeholder="Enter here:"
-              className={`w-full rounded-md px-3 py-2 text-sm focus:outline-none ${
-                locks.name ? 'bg-gray-100 cursor-not-allowed' : 'bg-gray-200'
-              }`}
-              value={form.completeName}
-              onChange={(e) => setField('completeName', e.target.value)}
-              readOnly={locks.name}
-              aria-readonly={locks.name}
-              title={locks.name ? "Auto-filled from user's profile" : undefined}
-            />
-            {errors.completeName && (
-              <p className="text-red-600 text-sm mt-1">{errors.completeName}</p>
-            )}
-          </div>
-
-          {/* Contact #: */}
-          <div>
-            <label className="block text-lg mb-1">Contact #:</label>
-            <input
-              type="tel"
-              placeholder="e.g. +639171234567"
-              className={`w-full rounded-md px-3 py-2 text-sm focus:outline-none ${
-                locks.contact ? 'bg-gray-100 cursor-not-allowed' : 'bg-gray-200'
-              }`}
-              value={form.contactNumber}
-              onChange={(e) => setField('contactNumber', e.target.value)}
-              onBlur={(e) => setField('contactNumber', e.target.value)}
-              readOnly={locks.contact}
-              aria-readonly={locks.contact}
-              title={
-                locks.contact ? "Auto-filled from user's profile" : undefined
-              }
-            />
-            {errors.contactNumber && (
-              <p className="text-red-600 text-sm mt-1">
-                {errors.contactNumber}
-              </p>
-            )}
-          </div>
-
-          {/* Contact Person (split fields) */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-lg mb-1">Contact Person Name:</label>
-              <input
-                type="text"
-                placeholder="Enter here:"
-                className="w-full bg-gray-200 rounded-md px-3 py-2 text-sm focus:outline-none"
-                value={form.contactPersonName || ''}
-                onChange={(e) => setField('contactPersonName', e.target.value)}
-              />
-              {errors.contactPersonName && (
-                <p className="text-red-600 text-sm mt-1">
-                  {errors.contactPersonName}
-                </p>
-              )}
-            </div>
-            <div>
-              <label className="block text-lg mb-1">
-                Contact Person Number:
-              </label>
-              <input
-                type="tel"
-                placeholder="e.g. +639171234567"
-                className="w-full bg-gray-200 rounded-md px-3 py-2 text-sm focus:outline-none"
-                value={form.contactPersonNumber || ''}
-                onChange={(e) =>
-                  setField('contactPersonNumber', e.target.value)
-                }
-                onBlur={(e) => setField('contactPersonNumber', e.target.value)}
-              />
-              {errors.contactPersonNumber && (
-                <p className="text-red-600 text-sm mt-1">
-                  {errors.contactPersonNumber}
-                </p>
-              )}
-            </div>
-          </div>
-
-          {/* Event name */}
-          <div>
-            <label className="block text-lg mb-1">
-              Name of event (Ex. Maria & Jose Wedding):
-            </label>
-            <input
-              type="text"
-              placeholder="Enter here:"
-              className="w-full bg-gray-200 rounded-md px-3 py-2 text-sm focus:outline-none"
-              value={form.eventName}
-              onChange={(e) => setField('eventName', e.target.value)}
-            />
-            {errors.eventName && (
-              <p className="text-red-600 text-sm mt-1">{errors.eventName}</p>
-            )}
-          </div>
-
-          {/* Event location */}
-          <div>
-            <label className="block text-lg mb-1">Location of event:</label>
-            <input
-              type="text"
-              placeholder="Enter here:"
-              className="w-full bg-gray-200 rounded-md px-3 py-2 text-sm focus:outline-none"
-              value={form.eventLocation}
-              onChange={(e) => setField('eventLocation', e.target.value)}
-            />
-            {errors.eventLocation && (
-              <p className="text-red-600 text-sm mt-1">
-                {errors.eventLocation}
-              </p>
-            )}
-          </div>
-
-          {/* Extension hours */}
-          <div>
-            <label className="block text-lg mb-1">
-              Extension? (Our Minimum is 2hrs. Additional hour is Php2000):
-            </label>
-            <select
-              className="w-full bg-gray-200 rounded-md px-3 py-2 text-sm focus:outline-none"
-              value={String(form.extensionHours)}
-              onChange={(e) => {
-                const ext = Number(e.target.value)
-                const pkg = getSelectedPackage()
-                const end = computeEndTime(
-                  form.eventTime,
-                  Number((pkg as any)?.duration_hours ?? 2),
-                  ext
-                )
-                setField('extensionHours', ext)
-                setField('eventEndTime', end)
-              }}
-            >
-              <option value="0">0</option>
-              <option value="1">1</option>
-              <option value="2">2</option>
-            </select>
-            {errors.extensionHours && (
-              <p className="text-red-600 text-sm mt-1">
-                {errors.extensionHours}
-              </p>
-            )}
-          </div>
-
-          {/* Booth placement */}
-          <div>
-            <label className="block text-lg mb-1">Placement of booth:</label>
-            <div className="flex gap-4">
-              <label className="flex items-center gap-2">
+        <div className="max-w-5xl mx-auto px-4 pb-6 space-y-4">
+          {/* Personal Information Section */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+            <h3 className="text-lg font-semibold mb-3 text-litratoblack">
+              Client Information
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              {/* Email */}
+              <div className="min-h-[90px]">
+                <label className="block text-sm font-medium mb-1">Email</label>
                 <input
-                  type="radio"
-                  name="boothPlacement"
-                  checked={form.boothPlacement === 'Indoor'}
-                  onChange={() => setField('boothPlacement', 'Indoor')}
+                  type="email"
+                  placeholder="Enter here:"
+                  className="w-full bg-gray-50 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-litratored border border-gray-200"
+                  value={form.email}
+                  onChange={(e) => {
+                    // If email changes, unlock any previously locked fields
+                    setLocks({ name: false, contact: false })
+                    setField('email', e.target.value)
+                  }}
+                  onBlur={(e) => {
+                    const v = e.target.value
+                    setField('email', v)
+                    void handleEmailBlur(v)
+                  }}
                 />
-                Indoor
-              </label>
-              <label className="flex items-center gap-2">
+                {errors.email && (
+                  <p className="text-red-600 text-xs mt-1">{errors.email}</p>
+                )}
+              </div>
+
+              {/* Complete name */}
+              <div className="min-h-[90px]">
+                <label className="block text-sm font-medium mb-1">
+                  Complete Name
+                </label>
                 <input
-                  type="radio"
-                  name="boothPlacement"
-                  checked={form.boothPlacement === 'Outdoor'}
-                  onChange={() => setField('boothPlacement', 'Outdoor')}
+                  type="text"
+                  placeholder="Enter here:"
+                  className={`w-full rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-litratored border border-gray-200 ${
+                    locks.name ? 'bg-gray-100 cursor-not-allowed' : 'bg-gray-50'
+                  }`}
+                  value={form.completeName}
+                  onChange={(e) => setField('completeName', e.target.value)}
+                  readOnly={locks.name}
+                  aria-readonly={locks.name}
+                  title={
+                    locks.name ? "Auto-filled from user's profile" : undefined
+                  }
                 />
-                Outdoor
-              </label>
+                {errors.completeName && (
+                  <p className="text-red-600 text-xs mt-1">
+                    {errors.completeName}
+                  </p>
+                )}
+              </div>
+
+              {/* Contact #: */}
+              <div className="min-h-[90px]">
+                <label className="block text-sm font-medium mb-1">
+                  Contact #
+                </label>
+                <input
+                  type="tel"
+                  placeholder="e.g. +639171234567"
+                  className={`w-full rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-litratored border border-gray-200 ${
+                    locks.contact
+                      ? 'bg-gray-100 cursor-not-allowed'
+                      : 'bg-gray-50'
+                  }`}
+                  value={form.contactNumber}
+                  onChange={(e) => setField('contactNumber', e.target.value)}
+                  onBlur={(e) => setField('contactNumber', e.target.value)}
+                  readOnly={locks.contact}
+                  aria-readonly={locks.contact}
+                  title={
+                    locks.contact
+                      ? "Auto-filled from user's profile"
+                      : undefined
+                  }
+                />
+                {errors.contactNumber && (
+                  <p className="text-red-600 text-xs mt-1">
+                    {errors.contactNumber}
+                  </p>
+                )}
+              </div>
             </div>
-            {errors.boothPlacement && (
-              <p className="text-red-600 text-sm mt-1">
-                {errors.boothPlacement}
-              </p>
-            )}
           </div>
 
-          {/* Signal */}
-          <div>
-            <label className="block text-lg mb-1">
-              What signal is currently strong in the event area?:
-            </label>
-            <input
-              type="text"
-              placeholder="Enter here:"
-              className="w-full bg-gray-200 rounded-md px-3 py-2 text-sm focus:outline-none"
-              value={form.signal}
-              onChange={(e) => setField('signal', e.target.value)}
-            />
-            {errors.signal && (
-              <p className="text-red-600 text-sm mt-1">{errors.signal}</p>
-            )}
+          {/* Contact Person Section */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+            <h3 className="text-lg font-semibold mb-3 text-litratoblack">
+              Contact Person on Event Day
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="min-h-[110px]">
+                <label className="block text-sm font-medium mb-1">
+                  Contact Person Name
+                </label>
+                <input
+                  type="text"
+                  placeholder="Enter here:"
+                  className="w-full bg-gray-50 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-litratored border border-gray-200"
+                  value={form.contactPersonName || ''}
+                  onChange={(e) =>
+                    setField('contactPersonName', e.target.value)
+                  }
+                />
+                {errors.contactPersonName && (
+                  <p className="text-red-600 text-xs mt-1">
+                    {errors.contactPersonName}
+                  </p>
+                )}
+              </div>
+              <div className="min-h-[110px]">
+                <label className="block text-sm font-medium mb-1">
+                  Contact Person Number
+                </label>
+                <input
+                  type="tel"
+                  placeholder="e.g. +639171234567"
+                  className="w-full bg-gray-50 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-litratored border border-gray-200"
+                  value={form.contactPersonNumber || ''}
+                  onChange={(e) =>
+                    setField('contactPersonNumber', e.target.value)
+                  }
+                  onBlur={(e) =>
+                    setField('contactPersonNumber', e.target.value)
+                  }
+                />
+                {errors.contactPersonNumber && (
+                  <p className="text-red-600 text-xs mt-1">
+                    {errors.contactPersonNumber}
+                  </p>
+                )}
+              </div>
+            </div>
           </div>
 
-          {/* Packages (dynamic) */}
-          <div className="flex flex-col justify-center mt-8">
-            <p className="font-semibold text-xl">Select A Package:</p>
-            <div className="flex flex-row gap-4 justify-center flex-wrap">
-              {packages.length === 0 && (
-                <p className="text-sm text-gray-500">No packages to display.</p>
-              )}
-              {packages.map((pkg) => (
-                <PromoCard
-                  key={pkg.id}
-                  imageSrc={pkg.image_url || '/Images/litratobg.jpg'}
-                  title={pkg.package_name}
-                  price={`₱${Number(pkg.price).toLocaleString()}`}
-                  descriptions={[pkg.description || 'Package']}
-                  selected={selectedPackageId === pkg.id}
-                  onSelect={() => {
-                    setSelectedPackageId(pkg.id)
-                    setField(
-                      'package',
-                      pkg.package_name as BookingForm['package']
-                    )
+          {/* Event Details Section */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+            <h3 className="text-lg font-semibold mb-3 text-litratoblack">
+              Event Details
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {/* Event name */}
+              <div className="min-h-[90px]">
+                <label className="block text-sm font-medium mb-1">
+                  Name of Event
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Maria & Jose Wedding"
+                  className="w-full bg-gray-50 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-litratored border border-gray-200"
+                  value={form.eventName}
+                  onChange={(e) => setField('eventName', e.target.value)}
+                />
+                {errors.eventName && (
+                  <p className="text-red-600 text-xs mt-1">
+                    {errors.eventName}
+                  </p>
+                )}
+              </div>
+
+              {/* Event location */}
+              <div className="min-h-[90px]">
+                <label className="block text-sm font-medium mb-1">
+                  Location of Event
+                </label>
+                <input
+                  type="text"
+                  placeholder="Enter here:"
+                  className="w-full bg-gray-50 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-litratored border border-gray-200"
+                  value={form.eventLocation}
+                  onChange={(e) => setField('eventLocation', e.target.value)}
+                />
+                {errors.eventLocation && (
+                  <p className="text-red-600 text-xs mt-1">
+                    {errors.eventLocation}
+                  </p>
+                )}
+              </div>
+
+              {/* Signal */}
+              <div className="min-h-[90px]">
+                <label className="block text-sm font-medium mb-1">
+                  Strongest Signal in Area
+                </label>
+                <select
+                  className="w-full bg-gray-50 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-litratored border border-gray-200"
+                  value={form.signal}
+                  onChange={(e) => setField('signal', e.target.value)}
+                >
+                  <option value="">Select Signal</option>
+                  <option value="SMART">SMART</option>
+                  <option value="DITO">DITO</option>
+                  <option value="Globe">Globe</option>
+                  <option value="TM">TM</option>
+                </select>
+                {errors.signal && (
+                  <p className="text-red-600 text-xs mt-1">{errors.signal}</p>
+                )}
+              </div>
+
+              {/* Booth placement */}
+              <div className="min-h-[90px]">
+                <label className="block text-sm font-medium mb-1">
+                  Placement of Booth
+                </label>
+                <div className="flex gap-4">
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="radio"
+                      name="boothPlacement"
+                      checked={form.boothPlacement === 'Indoor'}
+                      onChange={() => setField('boothPlacement', 'Indoor')}
+                    />
+                    <span className="text-sm">Indoor</span>
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="radio"
+                      name="boothPlacement"
+                      checked={form.boothPlacement === 'Outdoor'}
+                      onChange={() => setField('boothPlacement', 'Outdoor')}
+                    />
+                    <span className="text-sm">Outdoor</span>
+                  </label>
+                </div>
+                {errors.boothPlacement && (
+                  <p className="text-red-600 text-xs mt-1">
+                    {errors.boothPlacement}
+                  </p>
+                )}
+              </div>
+
+              {/* Extension hours */}
+              <div className="md:col-span-2 min-h-[90px]">
+                <label className="block text-sm font-medium mb-1">
+                  Extension Hours (₱2,000/hour)
+                </label>
+                <select
+                  className="w-full md:w-64 bg-gray-50 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-litratored border border-gray-200"
+                  value={String(form.extensionHours)}
+                  onChange={(e) => {
+                    const ext = Number(e.target.value)
+                    const pkg = getSelectedPackage()
                     const end = computeEndTime(
                       form.eventTime,
                       Number((pkg as any)?.duration_hours ?? 2),
-                      Number(form.extensionHours)
+                      ext
                     )
+                    setField('extensionHours', ext)
                     setField('eventEndTime', end)
                   }}
-                />
-              ))}
+                >
+                  <option value="0">No extension</option>
+                  <option value="1">1 hour</option>
+                  <option value="2">2 hours</option>
+                </select>
+                {errors.extensionHours && (
+                  <p className="text-red-600 text-xs mt-1">
+                    {errors.extensionHours}
+                  </p>
+                )}
+              </div>
             </div>
+          </div>
+
+          {/* Packages (dynamic) */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+            <h3 className="text-lg font-semibold mb-3 text-litratoblack">
+              Select A Package
+            </h3>
+            <PackageCarousel
+              packages={packages}
+              selectedId={selectedPackageId}
+              onSelectAction={(pkg) => {
+                setSelectedPackageId(pkg.id)
+                setField('package', pkg.package_name as BookingForm['package'])
+                const end = computeEndTime(
+                  form.eventTime,
+                  Number((pkg as any)?.duration_hours ?? 2),
+                  Number(form.extensionHours)
+                )
+                setField('eventEndTime', end)
+              }}
+            />
             {errors.package && (
-              <p className="text-red-600 text-sm mt-1 text-center">
+              <p className="text-red-600 text-xs mt-1 text-center">
                 {errors.package}
               </p>
             )}
           </div>
 
           {/* Grids (dynamic) */}
-          <div className="flex flex-col justify-center mt-8">
-            <p className="font-semibold text-xl">
-              Select the Type of Grids you want for your Photos (max of 2) :
-            </p>
-            <div className="mt-4 flex flex-wrap gap-4 justify-center">
-              {grids.length === 0 ? (
-                <span className="text-sm text-gray-500">
-                  No grids available yet.
-                </span>
-              ) : (
-                grids.map((g) => {
-                  const picked = form.selectedGrids.includes(g.grid_name)
-                  const atLimit = form.selectedGrids.length >= 2 && !picked
-                  const imgSrc = g.image_url || '/Images/litratobg.jpg'
-                  return (
-                    <button
-                      key={g.id}
-                      type="button"
-                      disabled={atLimit}
-                      aria-pressed={picked}
-                      className={`group w-[270px] overflow-hidden rounded-xl border shadow-sm transition focus:outline-none ${
-                        picked
-                          ? 'border-2 border-red-500 ring-2 ring-red-500 ring-offset-2 ring-offset-white'
-                          : 'border-gray-200 focus-visible:ring-2 focus-visible:ring-litratored'
-                      } ${
-                        atLimit
-                          ? 'opacity-60 cursor-not-allowed'
-                          : 'hover:shadow-md'
-                      }`}
-                      onClick={() => {
-                        const next = picked
-                          ? form.selectedGrids.filter((n) => n !== g.grid_name)
-                          : [...form.selectedGrids, g.grid_name]
-                        setField('selectedGrids', next)
-                      }}
-                    >
-                      <div className="relative w-full h-[200px] bg-gray-100">
-                        <Image
-                          src={imgSrc}
-                          alt={g.grid_name}
-                          fill
-                          className="object-cover"
-                        />
-                        {picked && (
-                          <div className="absolute inset-0 bg-black/30" />
-                        )}
-                      </div>
-                      <div className="p-2 text-center">
-                        <span className="text-sm font-medium text-litratoblack">
-                          {g.grid_name}
-                        </span>
-                      </div>
-                    </button>
-                  )
-                })
-              )}
-            </div>
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+            <h3 className="text-lg font-semibold mb-3 text-litratoblack">
+              Select Photo Grids (max of 2)
+            </h3>
+            <GridCarousel
+              grids={grids}
+              selectedGrids={form.selectedGrids}
+              onSelectAction={(gridNames) =>
+                setField('selectedGrids', gridNames)
+              }
+              maxSelections={2}
+            />
             {errors.selectedGrids && (
-              <p className="text-red-600 text-sm mt-1 text-center">
+              <p className="text-red-600 text-xs mt-1 text-center">
                 {errors.selectedGrids}
               </p>
             )}
           </div>
 
           {/* Date & Time */}
-          <div className="flex flex-col justify-center mt-12">
-            <p className="font-semibold text-xl">
-              Select the date and time for your event:
-            </p>
-            <div className="flex flex-row justify-center gap-24 ">
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+            <h3 className="text-lg font-semibold mb-3 text-litratoblack">
+              Select Date and Time
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <Calendar
                   value={form.eventDate}
                   onDateChangeAction={(d) => setField('eventDate', d as Date)}
                 />
                 {errors.eventDate && (
-                  <p className="text-red-600 text-sm mt-1">
+                  <p className="text-red-600 text-xs mt-1">
                     {errors.eventDate}
                   </p>
                 )}
               </div>
-              <div className="mt-8 ">
-                <div className="flex flex-col gap-3">
-                  <div>
-                    <label className="block text-lg mb-1">Start time:</label>
-                    <input
-                      type="time"
-                      className="w-full bg-gray-200 rounded-md px-3 py-2 text-sm focus:outline-none"
-                      value={form.eventTime}
-                      onChange={(e) => {
-                        const start = e.target.value
-                        setField('eventTime', start)
-                        const pkg = getSelectedPackage()
-                        const end = computeEndTime(
-                          start,
-                          Number((pkg as any)?.duration_hours ?? 2),
-                          Number(form.extensionHours)
-                        )
-                        setField('eventEndTime', end)
-                      }}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-lg mb-1">End time:</label>
-                    <input
-                      type="time"
-                      className="w-full bg-gray-100 rounded-md px-3 py-2 text-sm"
-                      value={form.eventEndTime}
-                      readOnly
-                      aria-readonly="true"
-                    />
-                  </div>
+              <div className="flex flex-col gap-3">
+                <div>
+                  <label className="block text-sm font-medium mb-1">
+                    Start Time
+                  </label>
+                  <input
+                    type="time"
+                    className="w-full bg-gray-50 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-litratored border border-gray-200"
+                    value={form.eventTime}
+                    onChange={(e) => {
+                      const start = e.target.value
+                      setField('eventTime', start)
+                      const pkg = getSelectedPackage()
+                      const end = computeEndTime(
+                        start,
+                        Number((pkg as any)?.duration_hours ?? 2),
+                        Number(form.extensionHours)
+                      )
+                      setField('eventEndTime', end)
+                    }}
+                  />
+                  {errors.eventTime && (
+                    <p className="text-red-600 text-xs mt-1">
+                      {errors.eventTime}
+                    </p>
+                  )}
                 </div>
-                {errors.eventTime && (
-                  <p className="text-red-600 text-sm mt-1">
-                    {errors.eventTime}
-                  </p>
-                )}
-                {errors.eventEndTime && (
-                  <p className="text-red-600 text-sm mt-1">
-                    {errors.eventEndTime}
-                  </p>
-                )}
+                <div>
+                  <label className="block text-sm font-medium mb-1">
+                    End Time
+                  </label>
+                  <input
+                    type="time"
+                    className="w-full bg-gray-100 rounded-md px-3 py-2 text-sm border border-gray-200"
+                    value={form.eventEndTime}
+                    readOnly
+                    aria-readonly="true"
+                  />
+                  {errors.eventEndTime && (
+                    <p className="text-red-600 text-xs mt-1">
+                      {errors.eventEndTime}
+                    </p>
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -876,7 +869,7 @@ export default function BookingPage() {
             <button
               onClick={handleClear}
               type="button"
-              className="bg-gray-200 text-litratoblack px-4 py-2 hover:bg-gray-300 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+              className="bg-gray-200 text-litratoblack px-4 py-2 rounded-md hover:bg-gray-300 transition disabled:opacity-50 disabled:cursor-not-allowed"
               disabled={submitting}
             >
               Clear
@@ -884,7 +877,7 @@ export default function BookingPage() {
             <button
               onClick={handleSubmit}
               type="button"
-              className="bg-litratoblack text-white px-4 py-2 hover:bg-black rounded disabled:opacity-50 disabled:cursor-not-allowed"
+              className="bg-litratoblack text-white px-4 py-2 rounded-md hover:bg-black transition disabled:opacity-50 disabled:cursor-not-allowed"
               disabled={submitting}
               aria-busy={submitting}
             >
@@ -893,10 +886,11 @@ export default function BookingPage() {
                   ? 'Updating…'
                   : 'Submitting…'
                 : editingRequestId
-                ? 'Update'
-                : 'Submit'}
+                ? 'Update Booking'
+                : 'Submit Booking'}
             </button>
           </div>
+
           {showConfirmUpdate && (
             <div
               role="dialog"

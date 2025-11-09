@@ -165,7 +165,6 @@ module.exports = {
         br.contact_person_number,
         br.event_name,
         br.strongest_signal,
-  br.booth_placement,
         p.package_name,
         p.id AS package_id,
         p.price AS package_price,

@@ -24,7 +24,6 @@ function buildCustomerBookingUpdate(updates = {}) {
     grid: true,
     event_name: true,
     strongest_signal: true,
-    booth_placement: true,
     // contacts
     contact_info: true,
     contact_person: true,
@@ -63,7 +62,6 @@ async function createBooking(req, res) {
       strongest_signal = null,
       grid = null,
       grid_ids = null, // preferred moving forward
-      booth_placement = null,
     } = req.body || {}
 
     if (!packageid || !event_date || !event_time || !event_address) {
@@ -98,8 +96,7 @@ async function createBooking(req, res) {
       strongest_signal,
       grid,
       contact_person,
-      contact_person_number,
-      booth_placement
+      contact_person_number
     )
 
     // Patch contact info if provided
@@ -190,7 +187,6 @@ async function editBookingRequest(req, res) {
       contact_person,
       contact_person_number,
       notes,
-      booth_placement,
     } = req.body || {}
     const { sets, values } = buildCustomerBookingUpdate({
       packageid,
@@ -206,7 +202,6 @@ async function editBookingRequest(req, res) {
       contact_person,
       contact_person_number,
       notes,
-      booth_placement,
     })
     if (!sets.length) {
       return res.status(400).json({ message: 'Nothing to update' })

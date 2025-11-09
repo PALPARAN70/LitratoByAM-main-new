@@ -26,7 +26,6 @@ export type AdminCreateConfirmPayload = {
   notes?: string | null
   event_name?: string | null
   strongest_signal?: string | null
-  booth_placement?: string | null
 }
 
 export async function adminCreateAndConfirm(
@@ -111,6 +110,5 @@ export function buildAdminCreatePayload(
     notes: null,
     event_name: form.eventName || null,
     strongest_signal: form.signal || null,
-    booth_placement: (form as any).boothPlacement || null,
   }
 }
