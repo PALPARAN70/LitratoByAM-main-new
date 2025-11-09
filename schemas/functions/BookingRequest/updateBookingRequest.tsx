@@ -57,6 +57,7 @@ export type UpdateBookingFields = Partial<{
   contact_person?: string | null
   contact_person_number?: string | null
   notes?: string | null
+  booth_placement?: string | null
 }>
 
 // Add type-only import for the UI form shape
@@ -150,6 +151,7 @@ export function buildUpdatePayload(
     contact_person: form.contactPersonName || null,
     contact_person_number: form.contactPersonNumber || null,
     notes: null,
+    booth_placement: form.boothPlacement || null,
   }
 }
 

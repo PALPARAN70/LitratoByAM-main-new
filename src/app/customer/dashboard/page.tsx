@@ -305,7 +305,7 @@ export default function DashboardPage() {
               (b as Record<string, unknown>).payment_status ?? 'Pending'
             ),
             status: toTitle((b as Record<string, unknown>).status as string),
-            action: ['Cancel', 'Reschedule'],
+            action: ['Cancel', 'Edit'],
             requestid:
               (b as Record<string, unknown>).requestid != null
                 ? Number((b as Record<string, unknown>).requestid)
@@ -449,7 +449,7 @@ export default function DashboardPage() {
     }
     // NEW: block reschedule for cancelled bookings
     if ((row.status ?? 'Pending') === 'Cancelled') {
-      toast.error('Cancelled bookings cannot be rescheduled.')
+      toast.error('Cancelled bookings cannot be edited.')
       return
     }
     // Prevent edits within 7 days of event
@@ -865,112 +865,146 @@ export default function DashboardPage() {
 
                           {/* Actions (add contract actions here) */}
                           <td className="px-3 sm:px-4 py-2">
-                            <Popover>
-                              <PopoverTrigger asChild>
-                                <button
-                                  className="px-2 py-1 rounded hover:bg-gray-200 transition"
-                                  aria-label="Actions"
-                                >
-                                  <Ellipsis className="text-lg" />
-                                </button>
-                              </PopoverTrigger>
-                              <PopoverContent align="end" className="w-44 p-2">
-                                <div className="flex flex-col gap-2 text-center">
-                                  Approval is needed for payment.
-                                  {/* NEW: Contract actions moved here */}
-                                  <button
-                                    className="w-full rounded px-2 py-1 text-xs border"
-                                    onClick={() => openContractDialog(data)}
+                            {(() => {
+                              const st = data.status ?? 'Pending'
+                              if (st === 'Declined' || st === 'Cancelled') {
+                                // Hide Actions entirely for Declined/Cancelled
+                                return null
+                              }
+                              return (
+                                <Popover>
+                                  <PopoverTrigger asChild>
+                                    <button
+                                      className="px-2 py-1 rounded hover:bg-gray-200 transition"
+                                      aria-label="Actions"
+                                    >
+                                      <Ellipsis className="text-lg" />
+                                    </button>
+                                  </PopoverTrigger>
+                                  <PopoverContent
+                                    align="end"
+                                    className="w-44 p-2"
                                   >
-                                    View Contract
-                                  </button>
-                                  <button
-                                    className="w-full rounded px-2 py-1 text-xs bg-litratoblack text-white"
-                                    onClick={() => openContractDialog(data)}
-                                  >
-                                    Upload Signed Contract
-                                  </button>
-                                  {/* CHANGED: cancel disabled for Declined/Cancelled */}
-                                  <button
-                                    className="w-full bg-litratoblack text-white rounded px-2 py-1 text-xs sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                                    disabled={
-                                      (data.status ?? 'Pending') ===
-                                        'Declined' ||
-                                      (data.status ?? 'Pending') === 'Cancelled'
-                                    }
-                                    onClick={() => {
-                                      const st = data.status ?? 'Pending'
-                                      if (st === 'Declined') {
-                                        toast.error(
-                                          'Declined bookings cannot be cancelled.'
-                                        )
-                                        return
-                                      }
-                                      if (st === 'Cancelled') {
-                                        toast.error(
-                                          'This booking is already cancelled.'
-                                        )
-                                        return
-                                      }
-                                      setCancelTarget(data)
-                                      setCancelOpen(true)
-                                    }}
-                                  >
-                                    {data.action[0] ?? 'Cancel'}
-                                  </button>
-                                  {/* CHANGED: reschedule disabled for Cancelled or within 7 days */}
-                                  <button
-                                    className="w-full bg-litratored text-white rounded px-2 py-1 text-xs sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                                    onClick={() => {
-                                      const st = data.status ?? 'Pending'
-                                      const within7 = (() => {
-                                        try {
-                                          return daysUntil(data.date) <= 7
-                                        } catch {
-                                          return false
+                                    <div className="flex flex-col gap-2 text-center">
+                                      Approval is needed for payment.
+                                      {/* NEW: Contract actions moved here */}
+                                      <button
+                                        className="w-full rounded px-2 py-1 text-xs border disabled:opacity-50 disabled:cursor-not-allowed"
+                                        disabled={
+                                          (data.status ?? 'Pending') !==
+                                          'Approved'
                                         }
-                                      })()
-                                      if (st === 'Cancelled') {
-                                        toast.error(
-                                          'Cancelled bookings cannot be rescheduled.'
-                                        )
-                                        return
-                                      }
-                                      if (within7) {
-                                        toast.error(
-                                          'Editing is disabled within 7 days of the event.'
-                                        )
-                                        return
-                                      }
-                                      setReschedTarget(data)
-                                      setReschedOpen(true)
-                                    }}
-                                    disabled={(() => {
-                                      const st = data.status ?? 'Pending'
-                                      try {
-                                        return (
-                                          st === 'Cancelled' ||
-                                          daysUntil(data.date) <= 7
-                                        )
-                                      } catch {
-                                        return st === 'Cancelled'
-                                      }
-                                    })()}
-                                  >
-                                    {data.action[1] ?? 'Reschedule'}
-                                  </button>
-                                  <button
-                                    className="w-full bg-green-700 text-white rounded px-2 py-1 text-xs sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                                    onClick={() => handlePay(data)}
-                                    disabled={
-                                      (data.status ?? 'Pending') !== 'Approved'
-                                    }
-                                  >
-                                    Pay
-                                  </button>
-                                </div>
-                              </PopoverContent>
-                            </Popover>
+                                        title={
+                                          (data.status ?? 'Pending') !==
+                                          'Approved'
+                                            ? 'Available only after approval.'
+                                            : undefined
+                                        }
+                                        onClick={() => openContractDialog(data)}
+                                      >
+                                        View Contract
+                                      </button>
+                                      <button
+                                        className="w-full rounded px-2 py-1 text-xs bg-litratoblack text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                                        disabled={
+                                          (data.status ?? 'Pending') !==
+                                          'Approved'
+                                        }
+                                        title={
+                                          (data.status ?? 'Pending') !==
+                                          'Approved'
+                                            ? 'Available only after approval.'
+                                            : undefined
+                                        }
+                                        onClick={() => openContractDialog(data)}
+                                      >
+                                        Upload Signed Contract
+                                      </button>
+                                      {/* CHANGED: cancel disabled for Declined/Cancelled */}
+                                      <button
+                                        className="w-full bg-litratoblack text-white rounded px-2 py-1 text-xs sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                                        disabled={
+                                          (data.status ?? 'Pending') ===
+                                            'Declined' ||
+                                          (data.status ?? 'Pending') ===
+                                            'Cancelled'
+                                        }
+                                        onClick={() => {
+                                          const st = data.status ?? 'Pending'
+                                          if (st === 'Declined') {
+                                            toast.error(
+                                              'Declined bookings cannot be cancelled.'
+                                            )
+                                            return
+                                          }
+                                          if (st === 'Cancelled') {
+                                            toast.error(
+                                              'This booking is already cancelled.'
+                                            )
+                                            return
+                                          }
+                                          setCancelTarget(data)
+                                          setCancelOpen(true)
+                                        }}
+                                      >
+                                        {data.action[0] ?? 'Cancel'}
+                                      </button>
+                                      {/* CHANGED: edit (formerly reschedule) disabled for Cancelled or within 7 days */}
+                                      <button
+                                        className="w-full bg-litratored text-white rounded px-2 py-1 text-xs sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                                        onClick={() => {
+                                          const st = data.status ?? 'Pending'
+                                          const within7 = (() => {
+                                            try {
+                                              return daysUntil(data.date) <= 7
+                                            } catch {
+                                              return false
+                                            }
+                                          })()
+                                          if (st === 'Cancelled') {
+                                            toast.error(
+                                              'Cancelled bookings cannot be edited.'
+                                            )
+                                            return
+                                          }
+                                          if (within7) {
+                                            toast.error(
+                                              'Editing is disabled within 7 days of the event.'
+                                            )
+                                            return
+                                          }
+                                          setReschedTarget(data)
+                                          setReschedOpen(true)
+                                        }}
+                                        disabled={(() => {
+                                          const st = data.status ?? 'Pending'
+                                          try {
+                                            return (
+                                              st === 'Cancelled' ||
+                                              daysUntil(data.date) <= 7
+                                            )
+                                          } catch {
+                                            return st === 'Cancelled'
+                                          }
+                                        })()}
+                                      >
+                                        {data.action[1] ?? 'Edit'}
+                                      </button>
+                                      <button
+                                        className="w-full bg-green-700 text-white rounded px-2 py-1 text-xs sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                                        onClick={() => handlePay(data)}
+                                        disabled={
+                                          (data.status ?? 'Pending') !==
+                                          'Approved'
+                                        }
+                                      >
+                                        Pay
+                                      </button>
+                                    </div>
+                                  </PopoverContent>
+                                </Popover>
+                              )
+                            })()}
                           </td>
                         </tr>
                       ))
@@ -1087,7 +1121,7 @@ export default function DashboardPage() {
         </DialogContent>
       </Dialog>
 
-      {/* ADD: Reschedule confirmation dialog */}
+      {/* ADD: Edit confirmation dialog */}
       <Dialog
         open={reschedOpen}
         onOpenChange={(o) => {
@@ -1099,9 +1133,9 @@ export default function DashboardPage() {
       >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Reschedule booking?</DialogTitle>
+            <DialogTitle>Edit booking?</DialogTitle>
             <DialogDescription>
-              You will be redirected to the reschedule page.
+              You will be redirected to the edit page.
             </DialogDescription>
           </DialogHeader>
           <div className="text-sm space-y-1">
@@ -1110,11 +1144,11 @@ export default function DashboardPage() {
               {reschedTarget?.name || '—'}
             </div>
             <div>
-              <span className="font-medium">Current date:</span>{' '}
+              <span className="font-medium">Date:</span>{' '}
               {reschedTarget?.date || '—'}
             </div>
             <div>
-              <span className="font-medium">Current time:</span>{' '}
+              <span className="font-medium">Time:</span>{' '}
               {reschedTarget?.startTime || '—'}
               {reschedTarget?.endTime ? ` - ${reschedTarget.endTime}` : ''}
             </div>
@@ -1139,7 +1173,7 @@ export default function DashboardPage() {
                 setReschedTarget(null)
               }}
             >
-              Yes, reschedule
+              Yes, edit
             </button>
           </DialogFooter>
         </DialogContent>
