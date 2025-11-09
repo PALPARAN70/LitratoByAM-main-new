@@ -25,7 +25,6 @@ type CreateBookingPayload = {
   notes?: string | null
   event_name?: string | null
   strongest_signal?: string | null
-  booth_placement?: string | null
 }
 
 type CreateBookingResponse = {
@@ -144,7 +143,6 @@ export async function createBookingRequest({
     notes: buildNotes(form),
     event_name: form.eventName || null,
     strongest_signal: form.signal || null,
-    booth_placement: form.boothPlacement || null,
   }
 
   // Match backend route: backend/src/Routes/customerRoutes.js => POST /api/customer/booking

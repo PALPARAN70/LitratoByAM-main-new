@@ -20,7 +20,6 @@ export type BookingRequestRow = {
   contact_person_number?: string | null
   event_name?: string | null
   strongest_signal?: string | null
-  booth_placement?: string | null
   package_name?: string
   price?: number
   grid?: string | null
@@ -108,7 +107,6 @@ export async function readBookings(
     contact_person_number: r.contact_person_number ?? null,
     event_name: r.event_name ?? null,
     strongest_signal: r.strongest_signal ?? null,
-    booth_placement: r.booth_placement ?? null,
     package_name: r.package_name,
     price: typeof r.price === 'number' ? r.price : Number(r.price ?? 0),
     grid: r.grid ?? null,
@@ -142,7 +140,6 @@ export async function readBookings(
     contact_person_number: c.contact_person_number ?? null,
     event_name: c.event_name ?? null,
     strongest_signal: c.strongest_signal ?? null,
-    booth_placement: c.booth_placement ?? null,
     package_name: c.package_name,
     price:
       typeof c.package_price === 'number'

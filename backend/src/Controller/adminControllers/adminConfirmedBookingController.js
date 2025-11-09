@@ -210,14 +210,7 @@ async function setExtensionDuration(req, res) {
     }
 
     await updateExtensionDuration(id, nextExt)
-    // Notify user that extension hours changed (best-effort)
-    try {
-      const full = await getConfirmedBookingById(id)
-      await notifyBookingUpdate(full, { extension_duration: nextExt })
-    } catch (e) {
-      console.warn('email notify (extension) failed:', e?.message)
-    }
-    // Return updated booking + payment summary
+    // Optionally notify user (best-effort) and return updated booking + payment summary
     const updated = await getConfirmedBookingById(id)
     const pay = await getPaymentSummaryModel(id)
     return res.json({ booking: updated, paymentSummary: pay })
@@ -363,10 +356,6 @@ async function notifyBookingUpdate(booking, changes = {}, reason) {
     const v = changes.total_booking_price
     lines.push(`<li>Total price: <b>${currency(v)}</b></li>`)
   }
-  if (Object.prototype.hasOwnProperty.call(changes, 'extension_duration')) {
-    const v = changes.extension_duration
-    lines.push(`<li>Extension hours: <b>${Number(v) || 0}</b></li>`)
-  }
   if (reason) {
     lines.push(`<li>Reason: <i>${String(reason)}</i></li>`)
   }
@@ -417,7 +406,6 @@ async function createAndConfirm(req, res) {
       strongest_signal = null,
       grid = null,
       grid_ids = null,
-      booth_placement = null,
     } = req.body || {}
     // Resolve user and ensure verified
     let userRecord = null
@@ -474,8 +462,7 @@ async function createAndConfirm(req, res) {
       strongest_signal,
       grid,
       contact_person,
-      contact_person_number,
-      booth_placement
+      contact_person_number
     )
 
     // Patch contact_info if provided
