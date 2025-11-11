@@ -63,12 +63,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import {
+  formatDisplayDate,
+  formatDisplayDateTime,
+  formatDisplayTime,
+} from '@/lib/datetime'
 
 // Add shared item type for items overview
 type Item = { name: string; qty?: number }
 
 type TabKey = 'bookings' | 'masterlist' | 'eventcards' // + eventcards
 type BookingStatus = 'pending' | 'approved' | 'declined' | 'cancelled'
+type SortMode = 'nearest' | 'recent'
 type BookingRow = {
   id: string
   requestid?: number | null
@@ -103,6 +109,8 @@ type BookingRow = {
   items: { damaged: Item[]; missing: Item[] }
   // NEW: contract status for admin view
   contractStatus?: ContractStatus | null
+  createdAt?: string | null
+  lastUpdated?: string | null
 }
 export default function ManageBookingPage() {
   const [active, setActive] = useState<TabKey>('masterlist')
@@ -147,7 +155,7 @@ export default function ManageBookingPage() {
           active={active === 'eventcards'}
           onClick={() => setActive('eventcards')}
         >
-          Event Cards
+          Events
         </TabButton>
       </nav>
       <section className="bg-white rounded-xl shadow p-2">
@@ -255,6 +263,7 @@ function BookingsPanel({
     null
   )
   const [approveOpen, setApproveOpen] = useState(false)
+  const [rejectOpen, setRejectOpen] = useState(false)
   // When a selection arrives, prefill the form
   useEffect(() => {
     if (!selected) {
@@ -284,8 +293,14 @@ function BookingsPanel({
           : p.extensionHours,
       signal: selected.strongest_signal || p.signal,
       package: selected.package || p.package,
-      eventDate: selected.date || p.eventDate,
-      eventTime: selected.startTime || p.eventTime,
+      eventDate: selected.date ? formatDisplayDate(selected.date) : p.eventDate,
+      eventTime: selected.startTime
+        ? selected.endTime
+          ? `${formatDisplayTime(selected.startTime)} - ${formatDisplayTime(
+              selected.endTime
+            )}`
+          : formatDisplayTime(selected.startTime)
+        : p.eventTime,
       booth_placement: selected.booth_placement || p.booth_placement,
       boothPlacementRaw: selected.booth_placement || p.boothPlacementRaw,
     }))
@@ -364,8 +379,6 @@ function BookingsPanel({
         <div className="flex justify-between">
           {/* (api name fetching here) */}
           <p className="text-xl font-semibold">User&apos;s Booking</p>
-          {/* (date fetching here when booking was made) */}
-          <p>02/10/2025</p>
         </div>
 
         <div className=" bg-gray-300 rounded h-full">
@@ -377,23 +390,12 @@ function BookingsPanel({
             <button
               className="bg-red-500 text-white px-4 py-2 rounded disabled:opacity-50"
               disabled={submitting !== null}
-              onClick={async () => {
-                if (!selected?.date) return
-                try {
-                  setSubmitting('reject')
-                  const requestid = selected?.requestid ?? null
-                  if (!requestid) throw new Error('Missing request id')
-                  await rejectBookingRequest(requestid)
-                  // Reset selection and go back to master list
-                  toast.error('Booking rejected')
-                  window.location.reload()
-                } catch (e: unknown) {
-                  const msg =
-                    e instanceof Error ? e.message : 'Failed to reject'
-                  toast.error(msg)
-                } finally {
-                  setSubmitting(null)
+              onClick={() => {
+                if (!selected?.requestid) {
+                  toast.error('No booking selected to decline')
+                  return
                 }
+                setRejectOpen(true)
               }}
             >
               {submitting === 'reject' ? 'Rejecting…' : 'Decline'}
@@ -457,6 +459,62 @@ function BookingsPanel({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Reject confirmation modal */}
+      <Dialog
+        open={rejectOpen}
+        onOpenChange={(open) => {
+          if (!open && submitting !== 'reject') {
+            setRejectOpen(false)
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Decline this booking?</DialogTitle>
+            <DialogDescription>
+              This action will decline the pending booking request. Continue?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <DialogClose asChild>
+              <button
+                type="button"
+                className="px-4 py-2 rounded border border-gray-300 hover:bg-gray-100"
+                disabled={submitting === 'reject'}
+              >
+                Cancel
+              </button>
+            </DialogClose>
+            <button
+              type="button"
+              className="px-4 py-2 rounded bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
+              disabled={submitting === 'reject'}
+              onClick={async () => {
+                if (!selected?.requestid) {
+                  toast.error('Missing request id')
+                  return
+                }
+                try {
+                  setSubmitting('reject')
+                  await rejectBookingRequest(selected.requestid)
+                  toast.error('Booking rejected')
+                  setRejectOpen(false)
+                  window.location.reload()
+                } catch (e: unknown) {
+                  const msg =
+                    e instanceof Error ? e.message : 'Failed to reject'
+                  toast.error(msg)
+                } finally {
+                  setSubmitting(null)
+                }
+              }}
+            >
+              {submitting === 'reject' ? 'Rejecting…' : 'Decline'}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
@@ -481,6 +539,7 @@ function MasterListPanel({
   const [error, setError] = useState<string | null>(null)
   const [rows, setRows] = useState<BookingRow[]>([])
   const [search, setSearch] = useState('')
+  const [sortMode, setSortMode] = useState<SortMode>('nearest')
 
   // Assign staff dialog state
   const [assignOpen, setAssignOpen] = useState(false)
@@ -903,6 +962,18 @@ function MasterListPanel({
             baseTotal: Number.isFinite(baseTotal) ? Number(baseTotal) : null,
             extHours,
             amountDue,
+            createdAt:
+              typeof rx['created_at'] === 'string'
+                ? (rx['created_at'] as string)
+                : typeof rx['createdAt'] === 'string'
+                ? (rx['createdAt'] as string)
+                : null,
+            lastUpdated:
+              typeof rx['last_updated'] === 'string'
+                ? (rx['last_updated'] as string)
+                : typeof rx['lastUpdated'] === 'string'
+                ? (rx['lastUpdated'] as string)
+                : null,
 
             // NEW: integrated fields
             clientName,
@@ -974,9 +1045,77 @@ function MasterListPanel({
       return tokens.every((t) => eventName.includes(t))
     })
   }, [statusFilter, rows, search])
-  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize))
+  const sorted = useMemo(() => {
+    const now = Date.now()
+    const items = [...filtered]
+    const statusRank = (row: BookingRow) =>
+      row.status === 'cancelled' || row.status === 'declined' ? 1 : 0
+    const toStartMs = (row: BookingRow): number | null => {
+      const date = row.date
+      if (!date || date === '—') return null
+      const time =
+        row.startTime && /^\d{2}:\d{2}$/.test(row.startTime)
+          ? row.startTime
+          : '00:00'
+      const ms = Date.parse(`${date}T${time}`)
+      return Number.isNaN(ms) ? null : ms
+    }
+    const toCreatedMs = (row: BookingRow): number => {
+      const timePart =
+        row.startTime && /^\d{2}:\d{2}$/.test(row.startTime)
+          ? row.startTime
+          : null
+      const eventCandidate = row.date
+        ? timePart
+          ? `${row.date}T${timePart}`
+          : row.date
+        : null
+      const candidates: Array<string | null | undefined> = [
+        row.createdAt,
+        row.lastUpdated,
+        eventCandidate,
+      ]
+      for (const candidate of candidates) {
+        if (!candidate) continue
+        const ms = Date.parse(candidate)
+        if (!Number.isNaN(ms)) return ms
+      }
+      return 0
+    }
+    items.sort((a, b) => {
+      const statusDiff = statusRank(a) - statusRank(b)
+      if (statusDiff !== 0) return statusDiff
+
+      if (sortMode === 'recent') {
+        return toCreatedMs(b) - toCreatedMs(a)
+      }
+
+      const aStart = toStartMs(a)
+      const bStart = toStartMs(b)
+      const aFuture = typeof aStart === 'number' && aStart >= now
+      const bFuture = typeof bStart === 'number' && bStart >= now
+      if (aFuture !== bFuture) return aFuture ? -1 : 1
+
+      const aDist =
+        typeof aStart === 'number'
+          ? Math.abs(aStart - now)
+          : Number.POSITIVE_INFINITY
+      const bDist =
+        typeof bStart === 'number'
+          ? Math.abs(bStart - now)
+          : Number.POSITIVE_INFINITY
+      if (aDist !== bDist) return aDist - bDist
+
+      return toCreatedMs(b) - toCreatedMs(a)
+    })
+    return items
+  }, [filtered, sortMode])
+  const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize))
+  useEffect(() => {
+    setPage((prev) => Math.max(1, Math.min(prev, totalPages)))
+  }, [totalPages])
   const startIdx = (page - 1) * pageSize
-  const pageRows = filtered.slice(startIdx, startIdx + pageSize)
+  const pageRows = sorted.slice(startIdx, startIdx + pageSize)
   const windowPages = useMemo(
     () => pageWindow(page, totalPages, 3),
     [page, totalPages]
@@ -997,8 +1136,14 @@ function MasterListPanel({
       { value: 'declined', label: 'Declined' },
       { value: 'cancelled', label: 'Cancelled' },
     ]
+  const sortOptions: Array<{ value: SortMode; label: string }> = [
+    { value: 'nearest', label: 'Nearest date' },
+    { value: 'recent', label: 'Newest created' },
+  ]
   const currentLabel =
     statusOptions.find((o) => o.value === statusFilter)?.label ?? 'All'
+  const sortLabel =
+    sortOptions.find((o) => o.value === sortMode)?.label ?? 'Nearest date'
 
   // Handlers for actions menu
   const handleEdit = (row: BookingRow) => {
@@ -1190,7 +1335,7 @@ function MasterListPanel({
   }
 
   return (
-    <div className="p-2 flex flex-col h-[60vh] min-h-0">
+    <div className="p-2 flex flex-col min-h-[60vh]">
       {/* Filter toolbar: popover styled like a select */}
       <div className="flex items-center gap-4 mb-3">
         {/* ...existing code... optional left title/space ... */}
@@ -1235,6 +1380,46 @@ function MasterListPanel({
         </Popover>
 
         <div className="flex items-center gap-2">
+          <Popover>
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                className="inline-flex items-center justify-between gap-2 h-9 px-3 rounded border border-gray-300 bg-white text-sm"
+                aria-label="Sort bookings"
+                title="Sort bookings"
+              >
+                <span className="text-gray-700">Sort: {sortLabel}</span>
+                <ChevronDown className="w-4 h-4 text-gray-700" />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent className="w-40 p-1" align="end">
+              <div className="flex flex-col">
+                {sortOptions.map((option) => {
+                  const selected = option.value === sortMode
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => {
+                        setSortMode(option.value)
+                        setPage(1)
+                      }}
+                      className={`flex items-center justify-between w-full text-left px-2 py-1.5 rounded text-sm hover:bg-gray-100 ${
+                        selected ? 'bg-gray-50' : ''
+                      }`}
+                    >
+                      <span>{option.label}</span>
+                      {selected ? (
+                        <Check className="w-4 h-4 text-black" />
+                      ) : (
+                        <span className="w-4 h-4" />
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
+            </PopoverContent>
+          </Popover>
           <input
             type="text"
             value={search}
@@ -1262,8 +1447,8 @@ function MasterListPanel({
         </div>
       </div>
 
-      <div className="bg-white rounded-t-xl border-2 flex-1 min-h-0 flex flex-col overflow-hidden">
-        <div className="flex-1 min-h-0 ">
+      <div className="bg-white rounded-t-xl border-2 flex-1 min-h-0 flex flex-col">
+        <div className="flex-1 min-h-0 overflow-auto">
           {loading && (
             <div className="p-4 text-sm text-gray-500">Loading bookings…</div>
           )}
@@ -1682,12 +1867,16 @@ function MasterListPanel({
             </div>
             <div>
               <span className="font-medium">Date:</span>{' '}
-              {targetRow?.date || '—'}
+              {targetRow?.date ? formatDisplayDate(targetRow.date) : '—'}
             </div>
             <div>
               <span className="font-medium">Time:</span>{' '}
-              {targetRow?.startTime || '—'}
-              {targetRow?.endTime ? ` - ${targetRow.endTime}` : ''}
+              {targetRow?.startTime
+                ? formatDisplayTime(targetRow.startTime)
+                : '—'}
+              {targetRow?.endTime
+                ? ` - ${formatDisplayTime(targetRow.endTime)}`
+                : ''}
             </div>
           </div>
           <DialogFooter>
@@ -1863,12 +2052,16 @@ function MasterListPanel({
             </div>
             <div>
               <span className="font-medium">Date:</span>{' '}
-              {targetRow?.date || '—'}
+              {targetRow?.date ? formatDisplayDate(targetRow.date) : '—'}
             </div>
             <div>
               <span className="font-medium">Time:</span>{' '}
-              {targetRow?.startTime || '—'}
-              {targetRow?.endTime ? ` - ${targetRow.endTime}` : ''}
+              {targetRow?.startTime
+                ? formatDisplayTime(targetRow.startTime)
+                : '—'}
+              {targetRow?.endTime
+                ? ` - ${formatDisplayTime(targetRow.endTime)}`
+                : ''}
             </div>
           </div>
           <DialogFooter>
@@ -1998,12 +2191,18 @@ function MasterListPanel({
                 </div>
                 <div>
                   <span className="text-gray-600">Date:</span>{' '}
-                  {reportTarget?.date || '—'}
+                  {reportTarget?.date
+                    ? formatDisplayDate(reportTarget.date)
+                    : '—'}
                 </div>
                 <div>
                   <span className="text-gray-600">Time:</span>{' '}
-                  {reportTarget?.startTime || '—'}
-                  {reportTarget?.endTime ? ` - ${reportTarget.endTime}` : ''}
+                  {reportTarget?.startTime
+                    ? formatDisplayTime(reportTarget.startTime)
+                    : '—'}
+                  {reportTarget?.endTime
+                    ? ` - ${formatDisplayTime(reportTarget.endTime)}`
+                    : ''}
                 </div>
                 <div>
                   <span className="text-gray-600">Location:</span>{' '}
@@ -2141,7 +2340,7 @@ function MasterListPanel({
                 <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
                   {reportStaffLogs.map((log, idx) => {
                     const fmt = (v?: string | null) =>
-                      v ? new Date(v).toLocaleString() : '—'
+                      v ? formatDisplayDateTime(v) : '—'
                     const name =
                       `${log.firstname || ''} ${log.lastname || ''}`.trim() ||
                       log.username ||
@@ -2325,6 +2524,7 @@ function EventCardsPanel() {
           package_id?: number
           event_date?: string
           event_time?: string
+          event_end_time?: string | null
           event_address?: string
           extension_duration?: number | string | null
           total_booking_price?: number | string | null
@@ -2358,7 +2558,47 @@ function EventCardsPanel() {
             const title = b.event_name || b.package_name || 'Event'
             const date = b.event_date || ''
             const time = b.event_time || ''
-            const dateTime = [date, time].filter(Boolean).join(' - ')
+            const rawEnd =
+              typeof b.event_end_time === 'string'
+                ? b.event_end_time
+                : undefined
+            const prettyDate = date
+              ? (() => {
+                  const out = formatDisplayDate(date, { long: true })
+                  return out === '—' ? '' : out
+                })()
+              : ''
+            const prettyStart = time
+              ? (() => {
+                  const out = formatDisplayTime(time)
+                  return out === '—' ? '' : out
+                })()
+              : ''
+            const prettyEnd = rawEnd
+              ? (() => {
+                  const out = formatDisplayTime(rawEnd)
+                  return out === '—' ? '' : out
+                })()
+              : ''
+            let dateTime = ''
+            if (prettyDate && prettyStart) {
+              dateTime = `${prettyDate} • ${prettyStart}${
+                prettyEnd ? ` – ${prettyEnd}` : ''
+              }`
+            } else if (prettyDate) {
+              dateTime = prettyDate
+            } else if (prettyStart) {
+              dateTime = prettyEnd
+                ? `${prettyStart} – ${prettyEnd}`
+                : prettyStart
+            }
+            if (!dateTime) {
+              const isoStart =
+                date && time ? `${date}T${time}` : date ? `${date}T00:00` : ''
+              dateTime = isoStart
+                ? formatDisplayDateTime(isoStart, { long: true })
+                : '—'
+            }
             const location = b.event_address || ''
             const extHours = Number(b.extension_duration ?? 0)
             const base = Number(b.total_booking_price ?? 0)
