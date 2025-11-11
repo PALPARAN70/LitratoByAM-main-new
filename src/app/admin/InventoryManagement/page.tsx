@@ -3351,15 +3351,9 @@ export default function InventoryManagementPage() {
     const STATUS_OPTIONS_INV = useMemo(
       () =>
         STATUS_OPTIONS_ALL.filter((o) =>
-          [
-            'all',
-            'available',
-            'unavailable',
-            'good',
-            'damaged',
-            'archived',
-            'unarchived',
-          ].includes(o.value)
+          ['all', 'available', 'unavailable', 'good', 'damaged'].includes(
+            o.value
+          )
         ),
       [STATUS_OPTIONS_ALL]
     )
@@ -3435,21 +3429,24 @@ export default function InventoryManagementPage() {
             return key
           }
           if (l.entity_type === 'Inventory') {
+            // For equipment, "Status" should only ever be available/unavailable
             if (changes?.status) {
+              // Direct availability change
               statusDisplay = normalizeAvailability(changes.status[1])
             } else if (changes?.condition) {
+              // Condition change: keep condition in separate column; status remains availability only
               const fromCond = toKey(changes.condition[0])
               const toCondKey = toKey(changes.condition[1])
-              if (toCondKey === 'archived') statusDisplay = 'archived'
-              else if (fromCond === 'archived' && toCondKey !== 'archived')
-                statusDisplay = 'unarchived'
-              else if (toCondKey === 'good') statusDisplay = 'good'
-              else if (toCondKey === 'damaged') statusDisplay = 'damaged'
-              else statusDisplay = toCondKey || 'available'
+              // Archive/unarchive flows should appear as unavailable in Status
+              if (toCondKey === 'archived' || fromCond === 'archived') {
+                statusDisplay = 'unavailable'
+              }
               conditionDisplay = String(changes.condition[1] ?? '')
             } else if (l.status === 'archived' || l.status === 'unarchived') {
-              statusDisplay = l.status
+              // Treat archive/unarchive events as unavailable for equipment
+              statusDisplay = 'unavailable'
             } else {
+              // Default when unspecified
               statusDisplay = 'available'
             }
           } else if (l.entity_type === 'Package') {
@@ -3484,10 +3481,26 @@ export default function InventoryManagementPage() {
           } else {
             statusDisplay = toKey(l.status)
           }
-
+          // Global fallback, but keep equipment limited to available/unavailable
           if (!statusDisplay) {
             const fallback = toKey(l.status)
-            if (fallback) statusDisplay = fallback
+            if (l.entity_type === 'Inventory') {
+              statusDisplay = ['available', 'unavailable'].includes(fallback)
+                ? fallback
+                : 'available'
+            } else if (fallback) {
+              statusDisplay = fallback
+            }
+          }
+
+          // Final guard: enforce equipment status values
+          if (
+            l.entity_type === 'Inventory' &&
+            !['available', 'unavailable'].includes(statusDisplay)
+          ) {
+            // Map any other value (good/damaged/archived/unarchived/etc.) appropriately
+            statusDisplay =
+              statusDisplay === 'available' ? 'available' : 'unavailable'
           }
           return {
             ...l,
@@ -3556,11 +3569,17 @@ export default function InventoryManagementPage() {
           l.entity_type === 'Inventory' ? 'Equipment' : l.entity_type
         if (filterEntity !== 'all' && entityTypeNormalized !== filterEntity)
           return false
-        if (
-          filterStatus !== 'all' &&
-          (l._statusDisplay || '').toLowerCase() !== filterStatus
-        ) {
-          return false
+        if (filterStatus !== 'all') {
+          const wanted = filterStatus.toLowerCase()
+          if (
+            l.entity_type === 'Inventory' &&
+            (wanted === 'good' || wanted === 'damaged')
+          ) {
+            const cond = (l._conditionDisplay || '').toLowerCase()
+            if (cond !== wanted) return false
+          } else {
+            if ((l._statusDisplay || '').toLowerCase() !== wanted) return false
+          }
         }
         if (q) {
           const name =

@@ -18,6 +18,11 @@ type CalendarProps = {
   initialMonth?: Date | null
   value?: Date | null
   onDateChangeAction?: (date: Date) => void
+  // Optional: per-date markers for custom highlighting (key = 'YYYY-MM-DD')
+  // Use 'yellow' for single approved booking, 'red' for 2 or more
+  markers?: Record<string, 'yellow' | 'red'>
+  // Optional: dates that have pending requests; these get a blue outline ring
+  pendingOutline?: Record<string, boolean>
 }
 
 export default function Calendar({
@@ -25,6 +30,8 @@ export default function Calendar({
   initialMonth = null,
   value = null,
   onDateChangeAction,
+  markers = {},
+  pendingOutline = {},
 }: CalendarProps) {
   const initial = value ?? initialMonth ?? new Date()
   const [currentMonth, setCurrentMonth] = useState(initial)
@@ -86,19 +93,27 @@ export default function Calendar({
       for (let i = 0; i < 7; i++) {
         const cloneDay = day
         const formattedDate = format(day, 'd')
+        const isoKey = format(day, 'yyyy-MM-dd')
 
         const isCurrentMonth = isSameMonth(day, monthStart)
         const isToday = isSameDay(day, new Date())
         const isSelected = isSameDay(day, selectedDate)
         const isMarked = markedDate ? isSameDay(day, markedDate) : false
+        const hasPending = isCurrentMonth && !!pendingOutline[isoKey]
 
         const commonClass = `flex justify-center items-center h-12 w-12 mx-auto rounded-full transition duration-150 ease-in-out`
 
         let cellClass = commonClass
         if (!isCurrentMonth) {
           cellClass += ' text-gray-400 cursor-default'
+        } else if (isCurrentMonth && markers[isoKey] === 'red') {
+          // Two or more approved bookings
+          cellClass += ' bg-red-500 text-white cursor-pointer'
+        } else if (isCurrentMonth && markers[isoKey] === 'yellow') {
+          // One approved booking
+          cellClass += ' bg-yellow-400 text-black cursor-pointer'
         } else if (isMarked) {
-          // Mark requested booking date in red
+          // Legacy single marked date (e.g., selected request)
           cellClass += ' bg-red-500 text-white cursor-pointer'
         } else if (isToday) {
           cellClass += ' bg-litratoblack text-white cursor-pointer'
@@ -108,6 +123,18 @@ export default function Calendar({
         } else {
           cellClass +=
             ' text-litratoblack hover:bg-litratoblack hover:text-white cursor-pointer'
+        }
+
+        // Overlay a blue ring if there are pending requests on this date
+        if (hasPending) {
+          cellClass +=
+            ' ring-2 ring-blue-500 ring-offset-2 ring-offset-gray-300'
+        }
+
+        // Always show a strong selection ring, even on colored days
+        if (isSelected) {
+          cellClass +=
+            ' ring-2 ring-litratoblack ring-offset-2 ring-offset-gray-300'
         }
 
         days.push(
