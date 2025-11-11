@@ -44,7 +44,7 @@ import {
 
 type Status = 'ongoing' | 'standby' | 'finished'
 type Payment = 'unpaid' | 'partially-paid' | 'paid'
-type Item = { name: string; qty?: number }
+type Item = { name: string; qty?: number; notes?: string }
 
 interface EventCardProps {
   bookingId?: number | string
@@ -74,7 +74,12 @@ interface EventCardProps {
   contactPerson?: string
   contactPersonNumber?: string
   onItemsChange?: (
-    items: Array<{ type: 'damaged' | 'missing'; name: string; qty?: number }>
+    items: Array<{
+      type: 'damaged' | 'missing'
+      name: string
+      qty?: number
+      notes?: string
+    }>
   ) => void
   // NEW: allow changing event status from Details dialog
   onStatusChange?: (status: Status) => void
@@ -224,14 +229,60 @@ export default function EventCard({
       .map((n) => n.trim())
       .filter(Boolean)
 
-    const damagedSet = new Set(damagedItems.map((it) => it.name))
-    const missingSet = new Set(missingItems.map((it) => it.name))
+    const normalize = (value: string) =>
+      value
+        .replace(/\s*\(.*?\)\s*$/, '')
+        .trim()
+        .toLowerCase()
+    const damagedMap = new Map(
+      damagedItems
+        .map((it) => {
+          const key = normalize(String(it.name || ''))
+          if (!key.length) return null
+          const note =
+            typeof it.notes === 'string' && it.notes.trim().length
+              ? it.notes.trim()
+              : undefined
+          return [key, note] as [string, string | undefined]
+        })
+        .filter(Boolean) as Array<[string, string | undefined]>
+    )
+    const missingMap = new Map(
+      missingItems
+        .map((it) => {
+          const key = normalize(String(it.name || ''))
+          if (!key.length) return null
+          const note =
+            typeof it.notes === 'string' && it.notes.trim().length
+              ? it.notes.trim()
+              : undefined
+          return [key, note] as [string, string | undefined]
+        })
+        .filter(Boolean) as Array<[string, string | undefined]>
+    )
 
     const toEntries: ItemEntry[] = catalog.map((name, i) => {
-      if (damagedSet.has(name))
-        return { id: `d-${i}-${name}`, name, type: 'damaged' }
-      if (missingSet.has(name))
-        return { id: `m-${i}-${name}`, name, type: 'missing' }
+      const key = normalize(name)
+      if (damagedMap.has(key)) {
+        const note = (damagedMap.get(key) as string | undefined)?.trim()
+        return {
+          id: `d-${i}-${name}`,
+          name,
+          type: 'damaged',
+          notes: note,
+          showNotes: Boolean(note?.length),
+        }
+      }
+      if (missingMap.has(key)) {
+        const note = (missingMap.get(key) as string | undefined)?.trim()
+        return {
+          id: `m-${i}-${name}`,
+          name,
+          type: 'missing',
+          notes: note,
+          showNotes: Boolean(note?.length),
+        }
+      }
       return { id: `o-${i}-${name}`, name, type: 'ok' }
     })
     setEditItems(toEntries)
@@ -245,18 +296,19 @@ export default function EventCard({
         summaryRole === 'employee'
           ? await listPackageItemsForPackageEmployee(packageId)
           : await listPackageItemsForPackage(packageId)
-      // Fetch current inventory to reflect latest condition/status in the UI.
-      // This may be admin-only; if forbidden, proceed without it.
+      // Fetch current inventory to reflect latest condition/status in the UI when permitted.
       let inventory: Array<{
         id: number
         condition?: string
         status?: boolean
         notes?: string | null
       }> = []
-      try {
-        inventory = await listVisibleInventory()
-      } catch {
-        inventory = []
+      if (summaryRole !== 'employee') {
+        try {
+          inventory = await listVisibleInventory()
+        } catch {
+          inventory = []
+        }
       }
       const invMap = new Map<
         number,
@@ -278,28 +330,57 @@ export default function EventCard({
       }
 
       // Build entries per unit so each unit can be marked Good/Damaged/Missing
-      const damagedSet = new Set(
-        damagedItems.map((it) => String(it.name || '').trim())
+      const normalize = (value: string) =>
+        value
+          .replace(/\s*\(.*?\)\s*$/, '')
+          .trim()
+          .toLowerCase()
+      const damagedMap = new Map(
+        damagedItems
+          .map((it) => {
+            const key = normalize(String(it.name || ''))
+            if (!key.length) return null
+            const note =
+              typeof it.notes === 'string' && it.notes.trim().length
+                ? it.notes.trim()
+                : undefined
+            return [key, note] as [string, string | undefined]
+          })
+          .filter(Boolean) as Array<[string, string | undefined]>
       )
-      const missingSet = new Set(
-        missingItems.map((it) => String(it.name || '').trim())
+      const missingMap = new Map(
+        missingItems
+          .map((it) => {
+            const key = normalize(String(it.name || ''))
+            if (!key.length) return null
+            const note =
+              typeof it.notes === 'string' && it.notes.trim().length
+                ? it.notes.trim()
+                : undefined
+            return [key, note] as [string, string | undefined]
+          })
+          .filter(Boolean) as Array<[string, string | undefined]>
       )
       const entries: ItemEntry[] = []
       items.forEach((it, idx) => {
         const baseName = String(it.material_name || '').trim()
+        if (!baseName.length) return
+        const normalizedName = normalize(baseName)
         const qty = Math.max(1, Number(it.quantity || 1))
         const invId =
           typeof it.inventory_id === 'number' ? it.inventory_id : undefined
         const current =
-          it && (typeof it.status === 'boolean' || it.condition)
-            ? {
+          invId != null
+            ? invMap.get(invId) ?? {
                 condition: it.condition,
                 status: it.status,
-                notes: (it as any).notes ?? null,
+                notes: it.inventory_notes ?? null,
               }
-            : invId != null
-            ? invMap.get(invId)
-            : undefined
+            : {
+                condition: it.condition,
+                status: it.status,
+                notes: it.inventory_notes ?? null,
+              }
         for (let i = 0; i < qty; i++) {
           const label = qty > 1 ? `${baseName} (${i + 1}/${qty})` : baseName
           // Priority for initial selection:
@@ -316,17 +397,31 @@ export default function EventCard({
             current.condition.toLowerCase() === 'damaged'
           ) {
             type = 'damaged'
-          } else if (damagedSet.has(baseName)) {
+          } else if (damagedMap.has(normalizedName)) {
             type = 'damaged'
-          } else if (missingSet.has(baseName)) {
+          } else if (missingMap.has(normalizedName)) {
             type = 'missing'
           }
+          const inventoryNotes =
+            typeof current?.notes === 'string' && current.notes.trim().length
+              ? current.notes.trim()
+              : undefined
+          const packageNotes =
+            typeof it.inventory_notes === 'string' &&
+            it.inventory_notes.trim().length
+              ? it.inventory_notes.trim()
+              : undefined
+          const listNotes =
+            damagedMap.get(normalizedName) || missingMap.get(normalizedName)
+          const existingNotes =
+            inventoryNotes || packageNotes || listNotes || undefined
           entries.push({
             id: `pkg-${idx}-${i}-${baseName}`,
             name: label,
             type,
             inventoryId: invId,
-            notes: current?.notes ?? undefined,
+            notes: existingNotes,
+            showNotes: Boolean(existingNotes && existingNotes.length),
           })
         }
       })

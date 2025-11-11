@@ -9,6 +9,7 @@ export type PackageItem = {
   quantity?: number
   condition?: string
   status?: boolean
+  inventory_notes?: string | null
 }
 
 export type InventoryItem = {

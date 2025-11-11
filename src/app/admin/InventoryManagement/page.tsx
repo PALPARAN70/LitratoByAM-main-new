@@ -1,6 +1,7 @@
 'use client'
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react'
 import Image from 'next/image'
+import { toast } from 'sonner'
 import {
   Popover,
   PopoverContent,
@@ -84,6 +85,43 @@ type EquipmentRow = {
   last_updated: string
 }
 
+function normalizeTypeName(value: string): string {
+  const trimmed = String(value ?? '').trim()
+  if (!trimmed) return ''
+  return trimmed.charAt(0).toUpperCase() + trimmed.slice(1)
+}
+
+function mergeEquipmentTypes(
+  ...lists: Array<Iterable<string> | undefined>
+): string[] {
+  const seen = new Map<string, string>()
+  for (const list of lists) {
+    if (!list) continue
+    for (const raw of list) {
+      const normalized = normalizeTypeName(String(raw ?? ''))
+      if (!normalized) continue
+      const key = normalized.toLowerCase()
+      if (!seen.has(key)) seen.set(key, normalized)
+    }
+  }
+  return Array.from(seen.values()).sort((a, b) => a.localeCompare(b))
+}
+
+type MaterialTypePersistResult =
+  | { ok: true; normalized: string; state: 'created' | 'exists' }
+  | {
+      ok: false
+      normalized: string
+      state: 'empty' | 'http' | 'network'
+      httpStatus?: number
+      error?: unknown
+    }
+
+type MaterialTypePersistSuccess = Extract<
+  MaterialTypePersistResult,
+  { ok: true }
+>
+
 // Default equipment type options
 const DEFAULT_EQUIPMENT_TYPES = [
   'Camera',
@@ -98,21 +136,29 @@ const DEFAULT_EQUIPMENT_TYPES = [
 ]
 
 //<------------------------ Add Type button component----------[ Part of Add Equipment ]------------------------->
-const AddTypeButton = ({ onAdd }: { onAdd: (type: string) => void }) => {
+const AddTypeButton = ({
+  onAdd,
+}: {
+  onAdd: (type: string) => Promise<boolean> | boolean
+}) => {
   const [adding, setAdding] = React.useState(false)
   const [value, setValue] = React.useState('')
+  const [saving, setSaving] = React.useState(false)
 
-  const normalize = (v: string) => {
-    const trimmed = v.trim()
-    if (!trimmed) return ''
-    return trimmed.charAt(0).toUpperCase() + trimmed.slice(1)
-  }
-  const commit = () => {
-    const v = normalize(value)
-    if (!v) return
-    onAdd(v)
-    setValue('')
-    setAdding(false)
+  const commit = async () => {
+    if (saving) return
+    const normalized = normalizeTypeName(value)
+    if (!normalized) return
+    setSaving(true)
+    try {
+      const result = await onAdd(normalized)
+      if (result) {
+        setValue('')
+        setAdding(false)
+      }
+    } finally {
+      setSaving(false)
+    }
   }
   return (
     <div className="flex items-center">
@@ -123,10 +169,11 @@ const AddTypeButton = ({ onAdd }: { onAdd: (type: string) => void }) => {
             placeholder="New type"
             value={value}
             onChange={(e) => setValue(e.target.value)}
+            disabled={saving}
             onKeyDown={(e) => {
               if (e.key === 'Enter') {
                 e.preventDefault()
-                commit()
+                void commit()
               } else if (e.key === 'Escape') {
                 setAdding(false)
                 setValue('')
@@ -135,10 +182,11 @@ const AddTypeButton = ({ onAdd }: { onAdd: (type: string) => void }) => {
           />
           <button
             type="button"
-            className="rounded bg-primary px-2 py-1 text-[10px] font-medium text-primary-foreground hover:opacity-90"
-            onClick={commit}
+            className="rounded bg-primary px-2 py-1 text-[10px] font-medium text-primary-foreground hover:opacity-90 disabled:opacity-60"
+            onClick={() => void commit()}
+            disabled={saving}
           >
-            Add
+            {saving ? 'Saving…' : 'Add'}
           </button>
           <button
             type="button"
@@ -147,6 +195,7 @@ const AddTypeButton = ({ onAdd }: { onAdd: (type: string) => void }) => {
               setAdding(false)
               setValue('')
             }}
+            disabled={saving}
           >
             Cancel
           </button>
@@ -250,7 +299,7 @@ export default function InventoryManagementPage() {
             >
               <input
                 type="text"
-                placeholder="Search items by ID, Name, Type, Condition..."
+                placeholder="Search by Name"
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
                 className="bg-transparent outline-none w-full px-2 h-8"
@@ -273,8 +322,8 @@ export default function InventoryManagementPage() {
   function CreateEquipmentPanel({ searchTerm }: { searchTerm?: string }) {
     const [active, setActive] = useState<EquipmentViewTabKey>('available')
     const [items, setItems] = useState<EquipmentRow[]>([])
-    const [equipmentTypes, setEquipmentTypes] = useState<string[]>(
-      DEFAULT_EQUIPMENT_TYPES
+    const [equipmentTypes, setEquipmentTypes] = useState<string[]>(() =>
+      mergeEquipmentTypes(DEFAULT_EQUIPMENT_TYPES)
     )
     // API base (override via .env.local NEXT_PUBLIC_API_ORIGIN=http://localhost:5000)
     const API_ORIGIN =
@@ -304,6 +353,120 @@ export default function InventoryManagementPage() {
       const auth = getAuthHeaderString()
       return auth ? { Authorization: auth } : {}
     }, [getAuthHeaderString])
+
+    useEffect(() => {
+      let ignore = false
+      ;(async () => {
+        try {
+          const res = await fetch(`${API_BASE}/material-types`, {
+            headers: {
+              ...getAuthHeaders(),
+            },
+          })
+          if (!res.ok) {
+            if (res.status === 401 || res.status === 403) return
+            console.error(`GET /material-types ${res.status}`)
+            return
+          }
+          const payload = await res.json().catch(() => ({} as any))
+          const fetched = Array.isArray(payload?.materialTypes)
+            ? payload.materialTypes
+                .map((t: { name?: string }) =>
+                  normalizeTypeName(String(t?.name ?? ''))
+                )
+                .filter(Boolean)
+            : []
+          if (!ignore && fetched.length) {
+            setEquipmentTypes((prev) =>
+              mergeEquipmentTypes(DEFAULT_EQUIPMENT_TYPES, prev, fetched)
+            )
+          }
+        } catch (error) {
+          console.error('Load material types failed:', error)
+        }
+      })()
+      return () => {
+        ignore = true
+      }
+    }, [API_BASE, getAuthHeaders])
+
+    const persistMaterialType = useCallback(
+      async (typeName: string): Promise<MaterialTypePersistResult> => {
+        const normalized = normalizeTypeName(typeName)
+        if (!normalized) {
+          return { ok: false, normalized: '', state: 'empty' }
+        }
+        try {
+          const res = await fetch(`${API_BASE}/material-types`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...getAuthHeaders(),
+            },
+            body: JSON.stringify({ name: normalized }),
+          })
+          if (res.status === 409) {
+            return { ok: true, normalized, state: 'exists' }
+          }
+          if (!res.ok) {
+            return {
+              ok: false,
+              normalized,
+              state: 'http',
+              httpStatus: res.status,
+            }
+          }
+          return { ok: true, normalized, state: 'created' }
+        } catch (error) {
+          return { ok: false, normalized, state: 'network', error }
+        }
+      },
+      [API_BASE, getAuthHeaders]
+    )
+
+    const ensureEquipmentType = useCallback(
+      async (
+        candidate: string,
+        {
+          notifyOnCreate = true,
+          notifyOnExists = true,
+        }: { notifyOnCreate?: boolean; notifyOnExists?: boolean } = {}
+      ): Promise<MaterialTypePersistSuccess | null> => {
+        const result = await persistMaterialType(candidate)
+        if (!result.ok) {
+          switch (result.state) {
+            case 'empty':
+              toast.error('Please enter a type name.')
+              break
+            case 'http':
+              if (result.httpStatus === 401) {
+                toast.error('Unauthorized. Please log in again.')
+              } else if (result.httpStatus === 403) {
+                toast.error('Only admins can add equipment types.')
+              } else {
+                toast.error('Failed to save equipment type.')
+              }
+              break
+            default:
+              toast.error('Network error while saving equipment type.')
+          }
+          return null
+        }
+        setEquipmentTypes((prev) =>
+          mergeEquipmentTypes(DEFAULT_EQUIPMENT_TYPES, prev, [
+            result.normalized,
+          ])
+        )
+        if (result.state === 'created' && notifyOnCreate) {
+          toast.success('Equipment type added.')
+        } else if (result.state === 'exists' && notifyOnExists) {
+          toast.info('Equipment type already exists.')
+        }
+        return result
+      },
+      [persistMaterialType]
+    )
+
     const mapItem = (it: Record<string, unknown>): EquipmentRow => ({
       id: String(it.id ?? ''),
       name: String((it as { material_name?: unknown }).material_name ?? ''),
@@ -370,13 +533,22 @@ export default function InventoryManagementPage() {
     const handleCreate = async () => {
       try {
         // Basic validation: require name and type selection
-        if (!form.name.trim() || !form.type.trim()) {
-          console.warn('Name and Type are required to create equipment')
+        const name = form.name.trim()
+        const type = form.type.trim()
+        if (!name || !type) {
+          toast.error('Name and type are required.')
+          return
+        }
+        const ensured = await ensureEquipmentType(type, {
+          notifyOnCreate: false,
+          notifyOnExists: false,
+        })
+        if (!ensured) {
           return
         }
         const body = {
-          materialName: form.name.trim(),
-          materialType: form.type.trim(),
+          materialName: name,
+          materialType: ensured.normalized,
           condition: form.condition.trim() || 'Good',
           status: form.status === 'available',
           lastDateChecked: new Date().toISOString(),
@@ -394,8 +566,10 @@ export default function InventoryManagementPage() {
         if (!res.ok) throw new Error(`POST /inventory ${res.status}`)
         const data = await res.json()
         if (data.item) setItems((prev) => [...prev, mapItem(data.item)])
+        toast.success('Equipment added.')
       } catch (e) {
         console.error('Create inventory failed:', e)
+        toast.error('Unable to add equipment.')
       }
       // reset form
       setForm({
@@ -664,16 +838,16 @@ export default function InventoryManagementPage() {
                   Add Equipment
                 </Button>
               </DialogTrigger>
-              <DialogContent className="sm:max-w-[640px] max-h-[70vh] overflow-hidden flex flex-col">
+              <DialogContent className="sm:max-w-[560px]">
                 <DialogHeader>
                   <DialogTitle>Add Equipment</DialogTitle>
                   <DialogDescription>
                     Provide the details for the new equipment.
                   </DialogDescription>
                 </DialogHeader>
-                <div className="flex-1 min-h-0 overflow-y-auto p-2">
+                <div className="px-2 pb-2">
                   <form
-                    className="grid grid-cols-1 sm:grid-cols-2 gap-3"
+                    className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-x-5"
                     onSubmit={(e) => e.preventDefault()}
                   >
                     <div className="flex flex-col gap-1">
@@ -687,29 +861,37 @@ export default function InventoryManagementPage() {
                     </div>
                     <div className="flex flex-col gap-1">
                       <label className="text-sm font-medium">Type</label>
-                      <div className="flex gap-2">
-                        <Select
-                          value={form.type}
-                          onValueChange={(value) => updateForm('type', value)}
-                        >
-                          <SelectTrigger className="h-9 text-sm rounded w-full">
-                            <SelectValue placeholder="Select type" />
-                          </SelectTrigger>
-                          <SelectContent className="max-h-56 overflow-auto">
-                            {equipmentTypes.map((t) => (
-                              <SelectItem key={t} value={t}>
-                                {t}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                      <div className="flex flex-wrap gap-2 sm:flex-nowrap">
+                        <div className="flex-1 min-w-[180px]">
+                          <Select
+                            value={form.type}
+                            onValueChange={(value) => updateForm('type', value)}
+                          >
+                            <SelectTrigger className="h-9 text-sm rounded w-full">
+                              <SelectValue placeholder="Select type" />
+                            </SelectTrigger>
+                            <SelectContent className="max-h-56">
+                              {equipmentTypes.map((t) => (
+                                <SelectItem key={t} value={t}>
+                                  {t}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
                         <AddTypeButton
-                          onAdd={(newType) => {
-                            setEquipmentTypes((prev) => {
-                              if (prev.includes(newType)) return prev
-                              return [...prev, newType]
+                          onAdd={async (newType) => {
+                            const result = await ensureEquipmentType(newType, {
+                              notifyOnExists: false,
                             })
-                            updateForm('type', newType)
+                            if (!result) return false
+                            updateForm('type', result.normalized)
+                            if (result.state === 'exists') {
+                              toast.info(
+                                'Type already exists; selected it for you.'
+                              )
+                            }
+                            return true
                           }}
                         />
                       </div>
@@ -764,7 +946,7 @@ export default function InventoryManagementPage() {
                     </div>
                   </form>
                 </div>
-                <DialogFooter className="mt-2">
+                <DialogFooter className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
                   <DialogClose asChild>
                     <Button
                       type="button"
@@ -1216,12 +1398,18 @@ export default function InventoryManagementPage() {
                       </SelectContent>
                     </Select>
                     <AddTypeButton
-                      onAdd={(newType) => {
-                        setEquipmentTypes((prev) => {
-                          if (prev.includes(newType)) return prev
-                          return [...prev, newType]
+                      onAdd={async (newType) => {
+                        const result = await ensureEquipmentType(newType, {
+                          notifyOnExists: false,
                         })
-                        setForm((p) => ({ ...p, type: newType }))
+                        if (!result) return false
+                        setForm((p) => ({ ...p, type: result.normalized }))
+                        if (result.state === 'exists') {
+                          toast.info(
+                            'Type already exists; selected it for you.'
+                          )
+                        }
+                        return true
                       }}
                     />
                   </div>
@@ -3030,6 +3218,34 @@ export default function InventoryManagementPage() {
       }
     }, [API_BASE, getAuthHeaders])
 
+    // Map of grid id -> grid name
+    const [gridNames, setGridNames] = useState<Record<string, string>>({})
+    useEffect(() => {
+      let ignore = false
+      ;(async () => {
+        try {
+          const [active, archived] = await Promise.all([
+            loadActiveGrids().catch(() => []),
+            loadArchivedGrids().catch(() => []),
+          ])
+          if (ignore) return
+          const map: Record<string, string> = {}
+          for (const row of [...active, ...archived]) {
+            const id = String(row?.id ?? '')
+            if (!id) continue
+            const name = String(row?.grid_name ?? '').trim()
+            map[id] = name || `Grid #${id}`
+          }
+          setGridNames(map)
+        } catch (e) {
+          console.error('Load grid names failed:', e)
+        }
+      })()
+      return () => {
+        ignore = true
+      }
+    }, [loadActiveGrids, loadArchivedGrids])
+
     // Fetch archived packages too so names are available even when hidden
     useEffect(() => {
       let ignore = false
@@ -3107,16 +3323,16 @@ export default function InventoryManagementPage() {
 
     // NEW: filters (entity, status) — search is unified via top search bar
     const [filterEntity, setFilterEntity] = useState<
-      'all' | 'Inventory' | 'Package'
+      'all' | 'Equipment' | 'Package' | 'Grid'
     >('all')
     const [filterStatus, setFilterStatus] = useState<
       | 'all'
       | 'available'
       | 'unavailable'
-      | 'maintenance'
+      | 'good'
       | 'damaged'
-      | 'hidden'
-      | 'unhidden'
+      | 'archived'
+      | 'unarchived'
     >('all')
     // removed local filterSearch; using unified top search
 
@@ -3125,10 +3341,10 @@ export default function InventoryManagementPage() {
         { label: 'All statuses', value: 'all' as const },
         { label: 'Available', value: 'available' as const },
         { label: 'Unavailable', value: 'unavailable' as const },
-        { label: 'Maintenance', value: 'maintenance' as const },
+        { label: 'Archived', value: 'archived' as const },
+        { label: 'Unarchived', value: 'unarchived' as const },
+        { label: 'Good', value: 'good' as const },
         { label: 'Damaged', value: 'damaged' as const },
-        { label: 'Unhidden', value: 'unhidden' as const },
-        { label: 'Hidden', value: 'hidden' as const },
       ],
       []
     )
@@ -3139,8 +3355,10 @@ export default function InventoryManagementPage() {
             'all',
             'available',
             'unavailable',
-            'maintenance',
+            'good',
             'damaged',
+            'archived',
+            'unarchived',
           ].includes(o.value)
         ),
       [STATUS_OPTIONS_ALL]
@@ -3148,18 +3366,27 @@ export default function InventoryManagementPage() {
     const STATUS_OPTIONS_PKG = useMemo(
       () =>
         STATUS_OPTIONS_ALL.filter((o) =>
-          ['all', 'hidden', 'unhidden'].includes(o.value)
+          ['all', 'archived', 'unarchived'].includes(o.value)
+        ),
+      [STATUS_OPTIONS_ALL]
+    )
+    const STATUS_OPTIONS_GRID = useMemo(
+      () =>
+        STATUS_OPTIONS_ALL.filter((o) =>
+          ['all', 'archived', 'unarchived'].includes(o.value)
         ),
       [STATUS_OPTIONS_ALL]
     )
     const currentStatusOptions = useMemo(() => {
-      if (filterEntity === 'Inventory') return STATUS_OPTIONS_INV
+      if (filterEntity === 'Equipment') return STATUS_OPTIONS_INV
       if (filterEntity === 'Package') return STATUS_OPTIONS_PKG
+      if (filterEntity === 'Grid') return STATUS_OPTIONS_GRID
       return STATUS_OPTIONS_ALL
     }, [
       filterEntity,
       STATUS_OPTIONS_INV,
       STATUS_OPTIONS_PKG,
+      STATUS_OPTIONS_GRID,
       STATUS_OPTIONS_ALL,
     ])
 
@@ -3195,35 +3422,72 @@ export default function InventoryManagementPage() {
           else if (l.status === 'archived') logType = 'Archived'
           let statusDisplay = ''
           let conditionDisplay: string | null = null
+          const toKey = (value: unknown) =>
+            String(value ?? '')
+              .trim()
+              .toLowerCase()
+          const normalizeAvailability = (value: unknown) => {
+            const key = toKey(value)
+            if (['available', 'true', '1'].includes(key)) return 'available'
+            if (['unavailable', 'false', '0'].includes(key))
+              return 'unavailable'
+            if (key === 'archived' || key === 'unarchived') return key
+            return key
+          }
           if (l.entity_type === 'Inventory') {
             if (changes?.status) {
-              statusDisplay = String(changes.status[1]) // already 'available'|'unavailable'
+              statusDisplay = normalizeAvailability(changes.status[1])
             } else if (changes?.condition) {
-              // Derive status from condition changes when status not explicitly logged
-              const fromCond = String(changes.condition[0])
-              const toCond = String(changes.condition[1])
-              // Archived condition implies unavailable; unarchiving (Archived -> Good/Damaged) should remain unavailable per requirements
-              if (toCond === 'Archived' || fromCond === 'Archived') {
-                statusDisplay = 'unavailable'
-              } else {
-                // default when condition change unrelated to archive
-                statusDisplay = 'available'
-              }
-              conditionDisplay = toCond
+              const fromCond = toKey(changes.condition[0])
+              const toCondKey = toKey(changes.condition[1])
+              if (toCondKey === 'archived') statusDisplay = 'archived'
+              else if (fromCond === 'archived' && toCondKey !== 'archived')
+                statusDisplay = 'unarchived'
+              else if (toCondKey === 'good') statusDisplay = 'good'
+              else if (toCondKey === 'damaged') statusDisplay = 'damaged'
+              else statusDisplay = toCondKey || 'available'
+              conditionDisplay = String(changes.condition[1] ?? '')
+            } else if (l.status === 'archived' || l.status === 'unarchived') {
+              statusDisplay = l.status
             } else {
-              // fallback: if initial log (created) assume available unless explicitly different
               statusDisplay = 'available'
             }
           } else if (l.entity_type === 'Package') {
             if (changes?.display) {
-              statusDisplay =
-                changes.display[1] === 'visible' ? 'unhidden' : 'hidden'
+              const target = toKey(changes.display[1])
+              if (['visible', 'true', '1', 'unarchived'].includes(target))
+                statusDisplay = 'unarchived'
+              else if (['hidden', 'false', '0', 'archived'].includes(target))
+                statusDisplay = 'archived'
+              else statusDisplay = target || 'unarchived'
+            } else if (l.status === 'archived' || l.status === 'unarchived') {
+              statusDisplay = l.status
             } else {
-              statusDisplay = 'unhidden'
+              statusDisplay = 'unarchived'
             }
             conditionDisplay = null
+          } else if (l.entity_type === 'Grid') {
+            if (changes?.display) {
+              const target = toKey(changes.display[1])
+              if (['visible', 'true', '1', 'unarchived'].includes(target))
+                statusDisplay = 'unarchived'
+              else if (['hidden', 'false', '0', 'archived'].includes(target))
+                statusDisplay = 'archived'
+              else statusDisplay = target || 'unarchived'
+            } else if (changes?.status) {
+              statusDisplay = normalizeAvailability(changes.status[1])
+            } else if (l.status === 'archived' || l.status === 'unarchived') {
+              statusDisplay = l.status
+            } else {
+              statusDisplay = 'unarchived'
+            }
           } else {
-            statusDisplay = l.status
+            statusDisplay = toKey(l.status)
+          }
+
+          if (!statusDisplay) {
+            const fallback = toKey(l.status)
+            if (fallback) statusDisplay = fallback
           }
           return {
             ...l,
@@ -3241,11 +3505,56 @@ export default function InventoryManagementPage() {
         })
     }, [logs])
 
+    const resolvedInventoryNames = useMemo(() => {
+      const map: Record<string, string> = { ...inventoryNames }
+      for (const log of enrichedLogs) {
+        if (log.entity_type !== 'Inventory') continue
+        const entry = log._changes?.material_name as
+          | [unknown, unknown]
+          | undefined
+        if (!entry) continue
+        const [, to] = entry
+        const name = String(to ?? '').trim()
+        if (name) map[String(log.entity_id)] = name
+      }
+      return map
+    }, [inventoryNames, enrichedLogs])
+
+    const resolvedPackageNames = useMemo(() => {
+      const map: Record<string, string> = { ...packageNames }
+      for (const log of enrichedLogs) {
+        if (log.entity_type !== 'Package') continue
+        const entry = log._changes?.package_name as
+          | [unknown, unknown]
+          | undefined
+        if (!entry) continue
+        const [, to] = entry
+        const name = String(to ?? '').trim()
+        if (name) map[String(log.entity_id)] = name
+      }
+      return map
+    }, [packageNames, enrichedLogs])
+
+    const resolvedGridNames = useMemo(() => {
+      const map: Record<string, string> = { ...gridNames }
+      for (const log of enrichedLogs) {
+        if (log.entity_type !== 'Grid') continue
+        const entry = log._changes?.grid_name as [unknown, unknown] | undefined
+        if (!entry) continue
+        const [, to] = entry
+        const name = String(to ?? '').trim()
+        if (name) map[String(log.entity_id)] = name
+      }
+      return map
+    }, [gridNames, enrichedLogs])
+
     // NEW: apply filters and unified search (by resolved entity name)
     const filteredLogs = useMemo(() => {
       const q = (searchTerm || '').trim().toLowerCase()
       return enrichedLogs.filter((l) => {
-        if (filterEntity !== 'all' && l.entity_type !== filterEntity)
+        const entityTypeNormalized =
+          l.entity_type === 'Inventory' ? 'Equipment' : l.entity_type
+        if (filterEntity !== 'all' && entityTypeNormalized !== filterEntity)
           return false
         if (
           filterStatus !== 'all' &&
@@ -3256,11 +3565,17 @@ export default function InventoryManagementPage() {
         if (q) {
           const name =
             l.entity_type === 'Inventory'
-              ? inventoryNames[String(l.entity_id)] ?? ''
+              ? resolvedInventoryNames[String(l.entity_id)] ?? ''
               : l.entity_type === 'Package'
-              ? packageNames[String(l.entity_id)] ?? ''
+              ? resolvedPackageNames[String(l.entity_id)] ?? ''
+              : l.entity_type === 'Grid'
+              ? resolvedGridNames[String(l.entity_id)] ?? ''
               : ''
-          const hay = (name || `#${l.entity_id}`).toLowerCase()
+          const fallbackLabel =
+            l.entity_type === 'Grid'
+              ? `Grid #${l.entity_id}`
+              : `#${l.entity_id}`
+          const hay = (name || fallbackLabel).toLowerCase()
           if (!hay.includes(q)) return false
         }
         return true
@@ -3271,7 +3586,9 @@ export default function InventoryManagementPage() {
       filterStatus,
       searchTerm, // <-- use unified search term
       inventoryNames,
-      packageNames,
+      resolvedInventoryNames,
+      resolvedPackageNames,
+      resolvedGridNames,
     ])
 
     // UPDATED: pagination for filtered logs (5 per page)
@@ -3301,9 +3618,13 @@ export default function InventoryManagementPage() {
             <div className="flex flex-col gap-1">
               <label className="text-sm font-medium">Filter: Entity</label>
               <Select
-                value={filterEntity}
+                value={
+                  filterEntity === 'Equipment' ? 'Equipment' : filterEntity
+                }
                 onValueChange={(v) => {
-                  setFilterEntity(v as 'all' | 'Inventory' | 'Package')
+                  setFilterEntity(
+                    (v as 'all' | 'Equipment' | 'Package' | 'Grid') ?? 'all'
+                  )
                   setFilterStatus('all')
                 }}
               >
@@ -3312,8 +3633,9 @@ export default function InventoryManagementPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All</SelectItem>
-                  <SelectItem value="Inventory">Inventory</SelectItem>
+                  <SelectItem value="Equipment">Equipment</SelectItem>
                   <SelectItem value="Package">Package</SelectItem>
+                  <SelectItem value="Grid">Grid</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -3328,10 +3650,10 @@ export default function InventoryManagementPage() {
                       | 'all'
                       | 'available'
                       | 'unavailable'
-                      | 'maintenance'
+                      | 'good'
                       | 'damaged'
-                      | 'hidden'
-                      | 'unhidden'
+                      | 'archived'
+                      | 'unarchived'
                   )
                 }
               >
@@ -3384,15 +3706,20 @@ export default function InventoryManagementPage() {
                   paginatedLogs.map((l) => (
                     <TableRow key={l.log_id} className="even:bg-gray-50">
                       <TableCell className="px-4 py-2">
-                        {l.entity_type}
+                        {l.entity_type === 'Inventory'
+                          ? 'Equipment'
+                          : l.entity_type}
                       </TableCell>
                       <TableCell className="px-4 py-2">
                         {l.entity_type === 'Inventory'
-                          ? inventoryNames[String(l.entity_id)] ??
+                          ? resolvedInventoryNames[String(l.entity_id)] ??
                             `#${l.entity_id}`
                           : l.entity_type === 'Package'
-                          ? packageNames[String(l.entity_id)] ??
+                          ? resolvedPackageNames[String(l.entity_id)] ??
                             `#${l.entity_id}`
+                          : l.entity_type === 'Grid'
+                          ? resolvedGridNames[String(l.entity_id)] ??
+                            `Grid #${l.entity_id}`
                           : `#${l.entity_id}`}
                       </TableCell>
                       <TableCell className="px-4 py-2">{l._logType}</TableCell>

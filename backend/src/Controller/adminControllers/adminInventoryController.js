@@ -595,7 +595,7 @@ exports.deletePackageInventoryItem = async (req, res) => {
 // -------- Inventory Status Logs -------- //
 exports.createInventoryStatusLog = async (req, res) => {
   try {
-    const { entity_type, entity_id, status, notes } = req.body
+    const { entity_type, entity_id, status, notes, additional_notes } = req.body
     if (!entity_type || entity_id == null || !status) {
       return res
         .status(400)
@@ -674,7 +674,7 @@ exports.listInventoryStatusLogsByEntity = async (req, res) => {
 exports.updateInventoryStatusLog = async (req, res) => {
   try {
     const { log_id } = req.params
-    const { entity_type, entity_id, status, notes } = req.body
+    const { entity_type, entity_id, status, notes, additional_notes } = req.body
     if (!log_id) {
       return res
         .status(400)
@@ -695,6 +695,7 @@ exports.updateInventoryStatusLog = async (req, res) => {
       Number(entity_id),
       String(status),
       notes ?? null,
+      additional_notes ?? null,
       updater
     )
     res.json({
