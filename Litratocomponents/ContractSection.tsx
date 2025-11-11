@@ -102,8 +102,26 @@ export default function ContractSection({
         <div className="flex items-center gap-3">
           <input
             type="file"
-            accept="application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/png,image/jpeg"
-            onChange={(e) => setFile(e.target.files?.[0] || null)}
+            accept=".pdf,application/pdf"
+            onChange={(e) => {
+              const f = e.target.files?.[0] || null
+              if (!f) {
+                setFile(null)
+                return
+              }
+              const isPdf =
+                f.type === 'application/pdf' || /\.pdf$/i.test(f.name || '')
+              if (!isPdf) {
+                // reset the input so user can reselect
+                try {
+                  ;(e.target as HTMLInputElement).value = ''
+                } catch {}
+                setFile(null)
+                toast.error('Only PDF files are allowed for contracts.')
+                return
+              }
+              setFile(f)
+            }}
             disabled={!ctr || !ctr.original_url}
           />
           <button

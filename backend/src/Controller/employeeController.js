@@ -165,6 +165,12 @@ exports.updateInventoryItemLimited = async (req, res) => {
     if (Object.prototype.hasOwnProperty.call(body, 'status')) {
       updates.status = Boolean(body.status)
     }
+    // Allow staff to attach notes describing damage/missing context
+    if (Object.prototype.hasOwnProperty.call(body, 'notes')) {
+      const n = String(body.notes || '').trim()
+      // Accept empty string to clear notes explicitly
+      updates.notes = n.length ? n : ''
+    }
     if (!Object.keys(updates).length) {
       return res.status(400).json({ message: 'No updatable fields provided' })
     }

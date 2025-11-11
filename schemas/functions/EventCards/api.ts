@@ -16,6 +16,7 @@ export type InventoryItem = {
   material_name?: string
   condition?: string
   status?: boolean
+  notes?: string | null
 }
 
 function getApiBase(): string {

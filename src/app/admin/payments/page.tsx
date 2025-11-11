@@ -1435,14 +1435,16 @@ export default function AdminPaymentsPage() {
                 Close
               </button>
             </DialogClose>
-            <button
-              type="button"
-              className="px-4 py-2 rounded bg-litratoblack text-white text-sm disabled:opacity-60"
-              disabled={!proofPaymentId || verifySubmitting}
-              onClick={() => setConfirmVerifyOpen(true)}
-            >
-              Verify
-            </button>
+            {proofPaymentId && !paymentCache[proofPaymentId]?.verified_at ? (
+              <button
+                type="button"
+                className="px-4 py-2 rounded bg-litratoblack text-white text-sm disabled:opacity-60"
+                disabled={verifySubmitting}
+                onClick={() => setConfirmVerifyOpen(true)}
+              >
+                Verify
+              </button>
+            ) : null}
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1474,14 +1476,16 @@ export default function AdminPaymentsPage() {
                 Cancel
               </button>
             </DialogClose>
-            <button
-              type="button"
-              className="px-4 py-2 rounded bg-litratoblack text-white text-sm disabled:opacity-60"
-              disabled={!proofPaymentId || verifySubmitting}
-              onClick={verifyCurrentPayment}
-            >
-              {verifySubmitting ? 'Verifying…' : 'Confirm Verify'}
-            </button>
+            {proofPaymentId && !paymentCache[proofPaymentId]?.verified_at ? (
+              <button
+                type="button"
+                className="px-4 py-2 rounded bg-litratoblack text-white text-sm disabled:opacity-60"
+                disabled={verifySubmitting}
+                onClick={verifyCurrentPayment}
+              >
+                {verifySubmitting ? 'Verifying…' : 'Confirm Verify'}
+              </button>
+            ) : null}
           </DialogFooter>
         </DialogContent>
       </Dialog>

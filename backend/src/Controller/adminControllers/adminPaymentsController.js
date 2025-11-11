@@ -14,6 +14,7 @@ const {
   getConfirmedBookingById,
   updatePaymentStatus: updateBookingPaymentStatus,
   recalcAndPersistPaymentStatus,
+  listConfirmedBookings,
   getPaymentSummary,
 } = require('../../Model/confirmedBookingRequestModel')
 const {
@@ -260,6 +261,70 @@ async function generateSalesReportHandler(req, res) {
       return true
     })
 
+    // Only include verified payments in the report
+    const reportRows = filteredRows.filter((p) => Boolean(p.verified_at))
+
+    // Fetch confirmed bookings to compute total due for the selected period
+    const confirmedBookings = await listConfirmedBookings()
+    const parseDateOnly = (value) => {
+      if (!value) return null
+      if (value instanceof Date) return value
+      if (typeof value === 'string') {
+        const isoMatch = value.match(/^(\d{4})-(\d{2})-(\d{2})/)
+        if (isoMatch) {
+          const [, y, m, d] = isoMatch
+          return new Date(Number(y), Number(m) - 1, Number(d))
+        }
+        const parsed = new Date(value)
+        if (!Number.isNaN(parsed.getTime())) return parsed
+      }
+      return null
+    }
+    const bookingsInRange = confirmedBookings.filter((booking) => {
+      if (!startDate && !endDate) return true
+      const eventDateRaw =
+        booking.event_date ||
+        booking.eventDate ||
+        booking.eventdate ||
+        booking.event_date_time ||
+        booking.eventDateTime
+      const eventDate = parseDateOnly(eventDateRaw)
+      if (!eventDate) return false
+      if (startDate && eventDate < startDate) return false
+      if (endDate && eventDate > endDate) return false
+      return true
+    })
+
+    const dueResults = await Promise.allSettled(
+      bookingsInRange.map(async (booking) => {
+        const bookingId = Number(booking.id)
+        if (!Number.isFinite(bookingId)) return 0
+        try {
+          const summary = await getPaymentSummary(bookingId)
+          const amt = Number(summary?.amountDue)
+          if (Number.isFinite(amt)) return amt
+        } catch (err) {
+          // ignore and fall back to derived amount
+        }
+        const base = Number(
+          booking.total_booking_price ?? booking.package_price ?? 0
+        )
+        const extHours = Number(booking.extension_duration ?? 0)
+        const hourlyRate = 2000
+        const fallback =
+          (Number.isFinite(base) ? base : 0) +
+          (Number.isFinite(extHours) ? extHours : 0) * hourlyRate
+        return fallback
+      })
+    )
+    const bookingsTotalDue = dueResults.reduce((sum, result) => {
+      if (result.status === 'fulfilled') {
+        const val = Number(result.value)
+        if (Number.isFinite(val)) return sum + val
+      }
+      return sum
+    }, 0)
+
     const fs = require('fs')
     const path = require('path')
     const doc = new PDFDocument({ size: 'A4', margin: 36 })
@@ -346,8 +411,6 @@ async function generateSalesReportHandler(req, res) {
         minimumFractionDigits: 2,
         maximumFractionDigits: 2,
       })}`
-    const cap = (s) =>
-      (s ? String(s) : '').replace(/^[a-z]/, (m) => m.toUpperCase()).trim()
     const getName = (r) => {
       const f = (r.user_firstname || '').toString().trim()
       const l = (r.user_lastname || '').toString().trim()
@@ -359,23 +422,21 @@ async function generateSalesReportHandler(req, res) {
     const startX = doc.page.margins.left
     const usableWidth =
       doc.page.width - doc.page.margins.left - doc.page.margins.right
-    // Columns per spec: Event Name, User Name, Due Amount, Paid, Status, Created
+    // Columns per spec: Event Name, User Name, Due Amount, Paid, Created
     // Adjust widths to keep amounts on one line and fit within page margins.
-    const EVENT_W = 83
-    const USER_W = 80
+    const EVENT_W = 100
+    const USER_W = 90
     const DUE_W = 110
     const PAID_W = 110
-    const STATUS_W = 60
     const CREATED_W = Math.max(
-      115,
-      usableWidth - (EVENT_W + USER_W + DUE_W + PAID_W + STATUS_W)
+      120,
+      usableWidth - (EVENT_W + USER_W + DUE_W + PAID_W)
     )
     const columns = [
       { key: 'event', label: 'Event Name', width: EVENT_W, align: 'left' },
       { key: 'user', label: 'User Name', width: USER_W, align: 'left' },
       { key: 'amount', label: 'Due Amount', width: DUE_W, align: 'left' },
       { key: 'paid', label: 'Paid', width: PAID_W, align: 'left' },
-      { key: 'status', label: 'Status', width: STATUS_W, align: 'left' },
       { key: 'created', label: 'Created', width: CREATED_W, align: 'left' },
     ]
     const totalWidth = columns.reduce((s, c) => s + c.width, 0)
@@ -413,7 +474,7 @@ async function generateSalesReportHandler(req, res) {
 
     drawHeader()
 
-    filteredRows.forEach((p, idx) => {
+    reportRows.forEach((p, idx) => {
       // Body rows slightly smaller to avoid wrapping in amount columns
       doc.font(bodyFont).fontSize(9)
       maybeNewPage()
@@ -424,7 +485,6 @@ async function generateSalesReportHandler(req, res) {
         getName(p),
         `${currencyPrefix}${fmtMoney(p.booking_amount_due ?? p.amount)}`,
         `${currencyPrefix}${fmtMoney(p.amount_paid)}`,
-        cap(p.payment_status || ''),
         formatDateTime(p.created_at),
       ]
       let x = startX
@@ -448,10 +508,11 @@ async function generateSalesReportHandler(req, res) {
     })
 
     // Summary
-    const totalPaid = filteredRows.reduce(
+    const totalPaid = reportRows.reduce(
       (sum, r) => sum + Number(r.amount_paid || 0),
       0
     )
+    const totalDue = bookingsTotalDue
     // Period label
     const periodLabel = (() => {
       if (!startDate && !endDate) return 'All Time'
@@ -476,9 +537,24 @@ async function generateSalesReportHandler(req, res) {
       .font(bodyBold)
       .fontSize(10)
       .text(
-        `Total Amount: ${usePesoSymbol ? '₱' : 'PHP'} ${fmtMoney(totalPaid)}`,
+        `Total Paid (Verified): ${usePesoSymbol ? '₱' : 'PHP'} ${fmtMoney(
+          totalPaid
+        )}`,
         startX,
         y + 6,
+        { width: totalWidth, align: 'right' }
+      )
+
+    doc.moveDown(0.4)
+    doc
+      .font(bodyFont)
+      .fontSize(9)
+      .text(
+        `Bookings Total Due: ${usePesoSymbol ? '₱' : 'PHP'} ${fmtMoney(
+          totalDue
+        )}`,
+        startX,
+        doc.y,
         { width: totalWidth, align: 'right' }
       )
 
@@ -577,9 +653,6 @@ async function createPaymentHandler(req, res) {
     })
 
     try {
-      const method = String(payment_method || '').toLowerCase()
-      const customerAction =
-        method === 'gcash' ? 'customer-gcash-payment' : 'customer-cash-payment'
       await createPaymentLog({
         payment_id: row.payment_id,
         previous_status: 'n/a',
@@ -588,15 +661,6 @@ async function createPaymentHandler(req, res) {
         user_id: req.user?.id,
         notes: row.notes || null,
         action: 'admin-create',
-      })
-      await createPaymentLog({
-        payment_id: row.payment_id,
-        previous_status: 'n/a',
-        new_status: row.payment_status,
-        performed_by: 'customer',
-        user_id: userId,
-        notes: row.notes || null,
-        action: customerAction,
       })
     } catch (e) {
       console.error('admin create payment log failed:', e)
