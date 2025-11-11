@@ -181,7 +181,7 @@ export default function PackageCarousel({
         }}
       >
         {/* padding to center first/last on small screens */}
-        <div className="shrink-0 basis-[8px]" aria-hidden />
+        <div className="shrink-0 basis-[8px] rounded-md" aria-hidden />
         {packages.map((pkg, index) => (
           <div
             key={pkg.id}

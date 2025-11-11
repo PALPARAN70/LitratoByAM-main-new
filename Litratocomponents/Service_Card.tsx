@@ -41,7 +41,7 @@ function PromoCard({
       : descriptions
 
   return (
-    <div className="flex flex-row gap-14 mb-12 justify-center">
+    <div className="flex flex-row gap-14 mb-12 rounded-md justify-center">
       <button
         type="button"
         onClick={onSelect}

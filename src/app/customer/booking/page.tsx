@@ -73,7 +73,7 @@ export default function BookingPage() {
     eventLocation: '',
     extensionHours: 0,
     boothPlacement: 'Indoor',
-    signal: '',
+    signal: '' as unknown as BookingForm['signal'],
     package: 'The Hanz',
     selectedGrids: [],
     eventDate: new Date(),
@@ -84,6 +84,7 @@ export default function BookingPage() {
   const [errors, setErrors] = useState<
     Partial<Record<keyof BookingForm, string>>
   >({})
+  const [hasSubmitted, setHasSubmitted] = useState(false)
 
   // Auto-calc end time: start + package duration + extension hours
   const getSelectedPackage = () =>
@@ -127,6 +128,21 @@ export default function BookingPage() {
         ? []
         : parsed.error.issues.filter((i) => i.path[0] === key)
       setErrors((e) => ({ ...e, [key]: fieldIssues[0]?.message }))
+    }
+    // After a submit attempt, keep all errors fresh by validating entire form
+    if (hasSubmitted) {
+      const parsedAll = bookingFormSchema.safeParse({ ...form, [key]: value })
+      if (!parsedAll.success) {
+        const newErrors: Partial<Record<keyof BookingForm, string>> = {}
+        for (const issue of parsedAll.error.issues) {
+          const f = issue.path[0] as keyof BookingForm
+          if (!newErrors[f]) newErrors[f] = issue.message
+        }
+        setErrors((prev) => ({ ...prev, ...newErrors }))
+      } else {
+        // Clear error for this field if now valid
+        setErrors((prev) => ({ ...prev, [key]: undefined }))
+      }
     }
   }
 
@@ -310,6 +326,7 @@ export default function BookingPage() {
   const handleSubmit = async () => {
     if (submitting) return
     setErrors({})
+    setHasSubmitted(true)
     const result = bookingFormSchema.safeParse(form)
     if (!result.success) {
       const fieldErrors: Partial<Record<keyof BookingForm, string>> = {}
@@ -392,6 +409,7 @@ export default function BookingPage() {
       contactNumber: prev.contactNumber,
     }))
     setErrors({})
+    setHasSubmitted(false)
     toast.message('Form cleared. Email and name kept from your profile.')
   }
 
@@ -610,7 +628,9 @@ export default function BookingPage() {
                 <select
                   className="w-full bg-gray-50 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-litratored border border-gray-200"
                   value={form.signal}
-                  onChange={(e) => setField('signal', e.target.value)}
+                  onChange={(e) =>
+                    setField('signal', e.target.value as BookingForm['signal'])
+                  }
                 >
                   <option value="">Select Signal</option>
                   <option value="SMART">SMART</option>
@@ -832,7 +852,7 @@ export default function BookingPage() {
             <button
               onClick={handleClear}
               type="button"
-              className="bg-gray-100 text-litratoblack px-5 py-2 hover:bg-gray-200 rounded-md border border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed transition"
+              className="bg-gray-100 text-litratoblack px-5 py-2 hover:bg-gray-200 rounded border border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed transition"
               disabled={submitting}
             >
               Clear
@@ -840,7 +860,7 @@ export default function BookingPage() {
             <button
               onClick={handleSubmit}
               type="button"
-              className="bg-litratoblack text-white px-6 py-2 hover:bg-black rounded-md disabled:opacity-50 disabled:cursor-not-allowed transition"
+              className="bg-litratoblack text-white px-6 py-2 hover:bg-black rounded disabled:opacity-50 disabled:cursor-not-allowed transition"
               disabled={submitting}
               aria-busy={submitting}
             >
