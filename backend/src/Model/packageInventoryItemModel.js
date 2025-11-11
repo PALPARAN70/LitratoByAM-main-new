@@ -34,10 +34,11 @@ async function createPackageInventoryItem({
 async function getAllPackageInventoryItems() {
   const result = await pool.query(`
     SELECT pii.*,
-           p.package_name,
-           i.material_name,
-           i.condition,
-           i.status
+      p.package_name,
+      i.material_name,
+      i.condition,
+      i.status,
+      i.notes AS inventory_notes
     FROM package_inventory_items pii
     JOIN packages p ON p.id = pii.package_id
     JOIN inventory i ON i.id = pii.inventory_id
@@ -80,7 +81,12 @@ async function updatePackageInventoryItem(id, updates) {
 async function getPackageInventoryItemsByPackage(package_id) {
   const result = await pool.query(
     `
-      SELECT pii.*, i.material_name, i.condition, i.status
+      SELECT
+        pii.*,
+        i.material_name,
+        i.condition,
+        i.status,
+        i.notes AS inventory_notes
       FROM package_inventory_items pii
       JOIN inventory i ON i.id = pii.inventory_id
       WHERE pii.package_id = $1 AND pii.display = TRUE

@@ -72,15 +72,30 @@ async function updateLog(
   entity_id,
   status,
   notes,
+  additional_notes,
   updated_by
 ) {
   await pool.query(
     `
     UPDATE status_log
-    SET entity_type = $1, entity_id = $2, status = $3, notes = $4, updated_by = $5, updated_at = NOW()
-    WHERE log_id = $6
+    SET entity_type = $1,
+        entity_id = $2,
+        status = $3,
+        notes = $4,
+        additional_notes = $5,
+        updated_by = $6,
+        updated_at = NOW()
+    WHERE log_id = $7
   `,
-    [entity_type, entity_id, status, notes, updated_by, log_id]
+    [
+      entity_type,
+      entity_id,
+      status,
+      notes,
+      additional_notes,
+      updated_by,
+      log_id,
+    ]
   )
 }
 
