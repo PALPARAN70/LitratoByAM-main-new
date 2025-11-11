@@ -1016,8 +1016,8 @@ export default function DashboardPage() {
                 </table>
               </div>
 
-              {/* Add: pagination like inventory tables */}
-              <div className="mt-3">
+              {/* Pagination centered below the table */}
+              <div className="mt-3 w-full flex justify-center">
                 <Pagination>
                   <PaginationContent>
                     <PaginationItem>

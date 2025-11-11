@@ -6,7 +6,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import MotionDiv from '../../../Litratocomponents/MotionDiv'
-import { makeRegistrationSchema } from '../../../schemas/schema/registrations'
+import { makeRegistrationSchema } from '../../../schemas/schema/uservalidation'
 
 export default function RegistrationPage() {
   const router = useRouter()
@@ -213,7 +213,7 @@ export default function RegistrationPage() {
     name: 'contact',
     label: 'Contact Number:',
     placeholder: '09******123',
-    type: 'text',
+    type: 'tel',
     className: 'w-150 px-2 text-xl border-none outline-none bg-transparent',
     containerClass: 'bg-[#D9D9D9] p-2 rounded-lg shadow-md w-200',
   }
@@ -241,14 +241,34 @@ export default function RegistrationPage() {
                 <div key={field.name} className={field.containerClass}>
                   <label>
                     {field.label}
-                    <input
-                      name={field.name}
-                      value={form[field.name as keyof typeof form]}
-                      onChange={handleChange}
-                      placeholder={field.placeholder}
-                      type={field.type}
-                      className={field.className}
-                    />
+                    {field.name === 'sex' ? (
+                      <select
+                        name="sex"
+                        value={form.sex}
+                        onChange={(e) =>
+                          setForm((prev) => ({ ...prev, sex: e.target.value }))
+                        }
+                        className={field.className}
+                      >
+                        <option value="" disabled>
+                          Select sex
+                        </option>
+                        <option value="Male">Male</option>
+                        <option value="Female">Female</option>
+                        <option value="Prefer not to say">
+                          Prefer not to say
+                        </option>
+                      </select>
+                    ) : (
+                      <input
+                        name={field.name}
+                        value={form[field.name as keyof typeof form]}
+                        onChange={handleChange}
+                        placeholder={field.placeholder}
+                        type={field.type}
+                        className={field.className}
+                      />
+                    )}
                   </label>
                 </div>
               ))}
