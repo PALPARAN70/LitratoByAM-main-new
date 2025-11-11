@@ -1,27 +1,19 @@
 'use client'
+
 import React, { useEffect, useMemo, useState } from 'react'
-import { formatDisplayDateTime } from '@/lib/datetime'
 import Image from 'next/image'
+import { Pencil } from 'lucide-react'
+import { toast } from 'sonner'
+
 import {
-  getLatestPaymentQR,
-  getAuthHeadersInit,
-} from '../../../../schemas/functions/Payment/createPayment'
-import {
-  fetchAdminSalesReport,
-  openBlobInNewTabAndPrint,
-  type SalesReportRange,
-} from '../../../../schemas/functions/Payment/printSalesReport'
-import {
-  uploadAdminPaymentQR,
-  listAdminPaymentLogs,
-  updateAdminPaymentLog,
-  createAdminPayment,
-  type PaymentLog,
-  getAdminBookingBalance,
-  type BookingBalance,
-  createAdminRefund,
-  updateAdminPayment,
-} from '../../../../schemas/functions/Payment/adminPayments'
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import {
   Pagination,
   PaginationContent,
@@ -35,16 +27,28 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover'
+import { formatDisplayDateTime } from '@/lib/datetime'
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogClose,
-} from '@/components/ui/dialog'
-import { Pencil } from 'lucide-react'
+  BookingBalance,
+  PaymentLog,
+  createAdminPayment,
+  createAdminRefund,
+  getAdminBookingBalance,
+  listAdminPaymentLogs,
+  listAdminPayments,
+  updateAdminPayment,
+  updateAdminPaymentLog,
+  uploadAdminPaymentQR,
+} from '../../../../schemas/functions/Payment/adminPayments'
+import {
+  getAuthHeadersInit,
+  getLatestPaymentQR,
+} from '../../../../schemas/functions/Payment/createPayment'
+import {
+  SalesReportRange,
+  fetchAdminSalesReport,
+  openBlobInNewTabAndPrint,
+} from '../../../../schemas/functions/Payment/printSalesReport'
 
 type Payment = {
   payment_id: number
@@ -66,6 +70,20 @@ type Payment = {
   created_at: string
 }
 
+type LogRow =
+  | {
+      kind: 'log'
+      payment_id: number
+      created_at: string
+      log: PaymentLog
+    }
+  | {
+      kind: 'payment'
+      payment_id: number
+      created_at: string
+      payment: Payment
+    }
+
 // Add: pagination window helper (like ManageBooking)
 function pageWindow(current: number, total: number, size = 3): number[] {
   if (total <= 0) return []
@@ -78,9 +96,18 @@ export default function AdminPaymentsPage() {
   // Logs state (this page now shows Payment Logs by default)
   const [logs, setLogs] = useState<PaymentLog[]>([])
   const [logsLoading, setLogsLoading] = useState(false)
+  // Payments state
+  const [payments, setPayments] = useState<Payment[]>([])
+  const [paymentsLoading, setPaymentsLoading] = useState(false)
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
   const PER_PAGE = 5
+
+  const coerceAmount = React.useCallback((value: unknown) => {
+    if (value === null || value === undefined) return undefined
+    const num = Number(value)
+    return Number.isFinite(num) ? num : undefined
+  }, [])
 
   // QR state
   const [qrUrl, setQrUrl] = useState<string | null>(null)
@@ -107,10 +134,6 @@ export default function AdminPaymentsPage() {
   >([])
   const [balance, setBalance] = useState<BookingBalance | null>(null)
   const [balanceLoading, setBalanceLoading] = useState(false)
-
-  // Notes edit dialog state (like Inventory Logs)
-  // Removed previously unused notes edit states (notes are view-only here)
-
   const API_ORIGIN =
     process.env.NEXT_PUBLIC_API_ORIGIN ?? 'http://localhost:5000'
   const API_BASE = `${API_ORIGIN}/api`
@@ -140,6 +163,18 @@ export default function AdminPaymentsPage() {
       console.error('Load payment logs failed:', e)
     } finally {
       setLogsLoading(false)
+    }
+  }
+
+  const loadPayments = async () => {
+    setPaymentsLoading(true)
+    try {
+      const rows = await listAdminPayments()
+      setPayments(rows)
+    } catch (e) {
+      console.error('Load payments failed:', e)
+    } finally {
+      setPaymentsLoading(false)
     }
   }
 
@@ -186,7 +221,8 @@ export default function AdminPaymentsPage() {
       setConfirmVerifyOpen(false)
       setProofOpen(false)
       setProofPaymentId(null)
-      await loadLogs()
+      // Refresh both payments and logs to keep tallies accurate
+      await Promise.all([loadPayments(), loadLogs()])
     } catch (e) {
       console.error('Verify payment failed:', e)
       alert('Failed to verify payment')
@@ -259,7 +295,8 @@ export default function AdminPaymentsPage() {
           | {
               booking_id: number
               user_id: number
-              amount_paid?: number
+              amount_paid?: unknown
+              amount?: unknown
               proof_image_url?: string | null
               verified_at?: string | null
             }
@@ -268,8 +305,9 @@ export default function AdminPaymentsPage() {
           const lite: PaymentLite = {
             booking_id: Number(p.booking_id),
             user_id: Number(p.user_id),
-            amount_paid:
-              p.amount_paid != null ? Number(p.amount_paid) : undefined,
+            amount_paid: coerceAmount(
+              p.amount_paid ?? (p as { amount?: unknown }).amount
+            ),
             proof_image_url: p.proof_image_url ?? null,
             verified_at: p.verified_at ?? null,
           }
@@ -281,7 +319,7 @@ export default function AdminPaymentsPage() {
       }
       return null
     },
-    [API_BASE, paymentCache]
+    [API_BASE, paymentCache, coerceAmount]
   )
 
   const ensureBooking = React.useCallback(
@@ -316,6 +354,7 @@ export default function AdminPaymentsPage() {
 
   useEffect(() => {
     loadLogs()
+    loadPayments()
     const loadQR = async () => {
       try {
         const url = await getLatestPaymentQR()
@@ -412,22 +451,99 @@ export default function AdminPaymentsPage() {
   }, [createOpen, createForm.booking_id])
 
   const normalized = (search || '').trim().toLowerCase()
-  const filtered = useMemo(() => {
-    if (!normalized) return logs
-    return logs.filter((lg) => {
-      const p = paymentCache[lg.payment_id]
-      const b = p ? bookingCache[p.booking_id] : undefined
+  // Logs + customer payments filtered
+  const logRowsFiltered = useMemo(() => {
+    const rows: LogRow[] = [
+      ...logs.map((lg) => ({
+        kind: 'log' as const,
+        payment_id: lg.payment_id,
+        created_at: lg.created_at,
+        log: lg,
+      })),
+      ...payments.map((pmt) => ({
+        kind: 'payment' as const,
+        payment_id: pmt.payment_id,
+        created_at: pmt.created_at,
+        payment: pmt,
+      })),
+    ].sort(
+      (a, b) =>
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    )
+
+    if (!normalized) return rows
+
+    return rows.filter((row) => {
+      const paymentForRow =
+        row.kind === 'payment' ? row.payment : paymentCache[row.payment_id]
+      const bookingId =
+        row.kind === 'payment'
+          ? row.payment.booking_id
+          : paymentForRow?.booking_id
+      const booking = bookingId ? bookingCache[bookingId] : undefined
+      const customerName =
+        [booking?.firstname, booking?.lastname]
+          .filter(Boolean)
+          .join(' ')
+          .trim() ||
+        booking?.username ||
+        ''
+      const eventName = booking?.event_name || ''
+      const amountValue = coerceAmount(
+        row.kind === 'payment'
+          ? row.payment.amount_paid ??
+              (row.payment as { amount?: unknown }).amount
+          : paymentForRow?.amount_paid
+      )
+
+      const hayParts = [
+        row.payment_id,
+        formatDisplayDateTime(row.created_at),
+        eventName,
+        customerName,
+      ]
+
+      if (row.kind === 'log') {
+        hayParts.push(
+          row.log.action,
+          row.log.previous_status,
+          row.log.new_status,
+          String(row.log.performed_by || ''),
+          (row.log as { additional_notes?: string }).additional_notes || '',
+          (row.log as { notes?: string }).notes || ''
+        )
+      } else {
+        hayParts.push(
+          row.payment.payment_status,
+          row.payment.payment_method,
+          row.payment.reference_no || '',
+          row.payment.notes || ''
+        )
+      }
+
+      if (typeof amountValue === 'number') {
+        hayParts.push(String(amountValue))
+      }
+
+      return hayParts.join('\n').toLowerCase().includes(normalized)
+    })
+  }, [logs, payments, normalized, paymentCache, bookingCache, coerceAmount])
+
+  // Payments filtered
+  const paymentsFiltered = useMemo(() => {
+    if (!normalized) return payments
+    return payments.filter((pmt) => {
+      const b = bookingCache[pmt.booking_id]
       const customerName =
         [b?.firstname, b?.lastname].filter(Boolean).join(' ').trim() ||
         b?.username ||
         ''
       const hay = [
-        lg.payment_id,
-        lg.action,
-        lg.previous_status,
-        lg.new_status,
-        String(lg.performed_by || ''),
-        formatDisplayDateTime(lg.created_at),
+        pmt.payment_id,
+        pmt.payment_method,
+        pmt.payment_status,
+        pmt.reference_no || '',
+        formatDisplayDateTime(pmt.created_at),
         b?.event_name || '',
         customerName,
       ]
@@ -435,33 +551,79 @@ export default function AdminPaymentsPage() {
         .toLowerCase()
       return hay.includes(normalized)
     })
-  }, [logs, normalized, paymentCache, bookingCache])
+  }, [payments, normalized, bookingCache])
 
   // Tabs
-  type TabKey = 'payments' | 'qr'
+  type TabKey = 'payments' | 'logs' | 'qr'
   const [active, setActive] = useState<TabKey>('payments')
 
-  // Pagination
-  useEffect(() => setPage(1), [search])
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PER_PAGE))
-  const startIdx = (page - 1) * PER_PAGE
-  const paginated = filtered.slice(startIdx, startIdx + PER_PAGE)
-  const windowPages = useMemo(
-    () => pageWindow(page, totalPages, 3),
-    [page, totalPages]
+  // Pagination for logs (payments list will show all for now)
+  useEffect(() => setPage(1), [search, active])
+  const totalPagesLogs = Math.max(
+    1,
+    Math.ceil(logRowsFiltered.length / PER_PAGE)
+  )
+  const startIdxLogs = (page - 1) * PER_PAGE
+  const paginatedLogRows = logRowsFiltered.slice(
+    startIdxLogs,
+    startIdxLogs + PER_PAGE
+  )
+  const windowPagesLogs = useMemo(
+    () => pageWindow(page, totalPagesLogs, 3),
+    [page, totalPagesLogs]
   )
 
   // Ensure enrichment for currently visible logs
   useEffect(() => {
+    if (!paginatedLogRows.length) return
+
+    setPaymentCache((cache) => {
+      let changed = false
+      const next = { ...cache }
+      for (const row of paginatedLogRows) {
+        if (row.kind === 'payment') {
+          const p = row.payment
+          const lite: PaymentLite = {
+            booking_id: Number(p.booking_id),
+            user_id: Number(p.user_id),
+            amount_paid: coerceAmount(
+              p.amount_paid ?? (p as { amount?: unknown }).amount
+            ),
+            proof_image_url: p.proof_image_url ?? null,
+            verified_at: p.verified_at ?? null,
+          }
+          const existing = next[p.payment_id]
+          if (
+            !existing ||
+            existing.booking_id !== lite.booking_id ||
+            existing.user_id !== lite.user_id ||
+            existing.amount_paid !== lite.amount_paid ||
+            existing.proof_image_url !== lite.proof_image_url ||
+            existing.verified_at !== lite.verified_at
+          ) {
+            next[p.payment_id] = lite
+            changed = true
+          }
+        }
+      }
+      return changed ? next : cache
+    })
+
     const run = async () => {
-      const ids = Array.from(new Set(paginated.map((lg) => lg.payment_id)))
-      for (const pid of ids) {
-        const p = await ensurePayment(pid)
-        if (p?.booking_id) await ensureBooking(p.booking_id)
+      for (const row of paginatedLogRows) {
+        if (row.kind === 'payment') {
+          if (row.payment.booking_id) {
+            await ensureBooking(row.payment.booking_id)
+          }
+        } else {
+          const p = await ensurePayment(row.log.payment_id)
+          if (p?.booking_id) await ensureBooking(p.booking_id)
+        }
       }
     }
-    if (paginated.length) run()
-  }, [paginated, ensurePayment, ensureBooking])
+
+    void run()
+  }, [paginatedLogRows, ensurePayment, ensureBooking, coerceAmount])
 
   // Ensure we have payment/booking data for the selected refund when dialog opens
   useEffect(() => {
@@ -511,7 +673,13 @@ export default function AdminPaymentsPage() {
   return (
     <div className="h-screen flex flex-col p-4 min-h-0">
       <header className="flex items-center justify-between mb-4">
-        <h1 className="text-2xl font-bold">Payment Logs</h1>
+        <h1 className="text-2xl font-bold">
+          {active === 'payments'
+            ? 'Payments'
+            : active === 'logs'
+            ? 'Payment Logs'
+            : 'Payment QR'}
+        </h1>
         {active === 'payments' && (
           <div className="flex items-center gap-2">
             <div className="flex items-center gap-2">
@@ -557,6 +725,9 @@ export default function AdminPaymentsPage() {
           onClick={() => setActive('payments')}
         >
           Payments
+        </TabButton>
+        <TabButton active={active === 'logs'} onClick={() => setActive('logs')}>
+          Logs
         </TabButton>
         <TabButton active={active === 'qr'} onClick={() => setActive('qr')}>
           QR Control
@@ -626,27 +797,56 @@ export default function AdminPaymentsPage() {
               >
                 <input
                   type="text"
-                  placeholder="Search logs (status, action, event, customer, user)"
+                  placeholder="Search payments (method, status, event, customer, ref#)"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   className="bg-transparent outline-none w-full px-2 h-8"
                 />
               </form>
             </div>
+            {(() => {
+              // Aggregate totals for transparency: All vs Verified (filtered set)
+              const totalAll = paymentsFiltered.reduce(
+                (sum, p) => sum + Number(p.amount_paid || 0),
+                0
+              )
+              const totalVerified = paymentsFiltered.reduce(
+                (sum, p) =>
+                  sum + (p.verified_at ? Number(p.amount_paid || 0) : 0),
+                0
+              )
+              return (
+                <div className="hidden md:flex items-center gap-3 mr-2 text-sm">
+                  <span className="px-2 py-1 rounded bg-gray-200">
+                    Total (filtered): ₱
+                    {totalAll.toLocaleString('en-PH', {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}
+                  </span>
+                  <span className="px-2 py-1 rounded bg-gray-200">
+                    Verified: ₱
+                    {totalVerified.toLocaleString('en-PH', {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}
+                  </span>
+                </div>
+              )
+            })()}
             <button
               className="px-3 py-2 rounded border text-sm"
-              onClick={loadLogs}
-              disabled={logsLoading}
-              title="Refresh logs"
+              onClick={loadPayments}
+              disabled={paymentsLoading}
+              title="Refresh payments"
             >
-              {logsLoading ? 'Loading…' : 'Refresh'}
+              {paymentsLoading ? 'Loading…' : 'Refresh'}
             </button>
           </nav>
-
-          {logsLoading && !logs.length ? (
-            <div className="text-sm text-gray-600">Loading logs…</div>
-          ) : !filtered.length ? (
-            <div className="text-sm text-gray-600">No logs found.</div>
+          {paymentsLoading && !payments.length ? (
+            <div className="text-sm text-gray-600">Loading payments…</div>
+          ) : !paymentsFiltered.length ? (
+            <div className="text-sm text-gray-600">No payments found.</div>
           ) : (
             <>
               <div className="overflow-x-auto rounded-t-xl border border-gray-200">
@@ -657,14 +857,13 @@ export default function AdminPaymentsPage() {
                         {[
                           'Date/Time',
                           'Event',
-                          'Verified',
                           'Customer',
-                          'Proof',
-                          'Action',
+                          'Method',
+                          'Paid',
                           'Status',
-                          'Additional Notes',
-                          'By',
-                          'Actions',
+                          'Verified',
+                          'Ref#',
+                          'Proof',
                         ].map((h, i, arr) => (
                           <th
                             key={h}
@@ -678,9 +877,8 @@ export default function AdminPaymentsPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {paginated.map((lg) => {
-                        const p = paymentCache[lg.payment_id]
-                        const b = p ? bookingCache[p.booking_id] : undefined
+                      {paymentsFiltered.map((pmt) => {
+                        const b = bookingCache[pmt.booking_id]
                         const eventName = b?.event_name || ''
                         const customerName =
                           [b?.firstname, b?.lastname]
@@ -689,39 +887,20 @@ export default function AdminPaymentsPage() {
                             .trim() ||
                           b?.username ||
                           ''
-                        const proofUrl = p?.proof_image_url || ''
+                        const verified = !!pmt.verified_at
                         return (
                           <tr
-                            key={lg.log_id}
+                            key={pmt.payment_id}
                             className="text-left bg-gray-100 even:bg-gray-50 align-top"
                           >
                             <td className="px-3 py-2 whitespace-nowrap">
-                              {formatDisplayDateTime(lg.created_at)}
+                              {formatDisplayDateTime(pmt.created_at)}
                             </td>
                             <td
                               className="px-3 py-2 whitespace-nowrap max-w-[14rem] truncate"
                               title={eventName}
                             >
                               {eventName || '—'}
-                            </td>
-                            <td className="px-3 py-2 whitespace-nowrap">
-                              {(() => {
-                                if (!p) return '—'
-                                const verified = !!p.verified_at
-                                const cls = verified
-                                  ? 'bg-green-700 text-white'
-                                  : 'bg-gray-700 text-white'
-                                const label = verified
-                                  ? 'Verified'
-                                  : 'Unverified'
-                                return (
-                                  <span
-                                    className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${cls}`}
-                                  >
-                                    {label}
-                                  </span>
-                                )
-                              })()}
                             </td>
                             <td
                               className="px-3 py-2 whitespace-nowrap max-w-[12rem] truncate"
@@ -730,14 +909,45 @@ export default function AdminPaymentsPage() {
                               {customerName || '—'}
                             </td>
                             <td className="px-3 py-2 whitespace-nowrap">
+                              {pmt.payment_method || '—'}
+                            </td>
+                            <td className="px-3 py-2 whitespace-nowrap text-right">
+                              ₱
+                              {Number(pmt.amount_paid || 0).toLocaleString(
+                                'en-PH',
+                                {
+                                  minimumFractionDigits: 2,
+                                  maximumFractionDigits: 2,
+                                }
+                              )}
+                            </td>
+                            <td className="px-3 py-2 whitespace-nowrap">
+                              {pmt.payment_status || '—'}
+                            </td>
+                            <td className="px-3 py-2 whitespace-nowrap">
+                              <span
+                                className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${
+                                  verified
+                                    ? 'bg-green-700 text-white'
+                                    : 'bg-gray-700 text-white'
+                                }`}
+                              >
+                                {verified ? 'Verified' : 'Unverified'}
+                              </span>
+                            </td>
+                            <td className="px-3 py-2 whitespace-nowrap">
+                              {pmt.reference_no || '—'}
+                            </td>
+                            <td className="px-3 py-2 whitespace-nowrap">
                               <button
                                 type="button"
-                                className="px-2 py-1 rounded border text-xs disabled:opacity-50"
-                                disabled={!proofUrl}
+                                className={`px-2 py-1 rounded border text-xs ${
+                                  pmt.proof_image_url ? '' : 'opacity-70'
+                                }`}
                                 onClick={async () => {
-                                  setProofPaymentId(lg.payment_id)
+                                  setProofPaymentId(pmt.payment_id)
                                   const pLite = await ensurePayment(
-                                    lg.payment_id
+                                    pmt.payment_id
                                   )
                                   if (pLite?.booking_id)
                                     await ensureBooking(pLite.booking_id)
@@ -747,49 +957,315 @@ export default function AdminPaymentsPage() {
                                 View
                               </button>
                             </td>
-                            <td className="px-3 py-2 whitespace-nowrap">
-                              {lg.action}
-                            </td>
-                            <td className="px-3 py-2">
-                              <div className="whitespace-nowrap">
-                                <span className="font-medium">
-                                  {lg.previous_status}
-                                </span>{' '}
-                                →{' '}
-                                <span className="font-medium">
-                                  {lg.new_status}
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </>
+          )}
+        </section>
+      )}
+
+      {active === 'logs' && (
+        <section className="bg-white flex-1 rounded-xl shadow p-4 flex flex-col min-h-0 gap-4">
+          <nav className="flex gap-2 items-center mb-2">
+            <div className="flex-grow flex">
+              <form
+                className="w-1/3 bg-gray-400 rounded-full items-center flex px-1 py-1"
+                onSubmit={(e) => {
+                  e.preventDefault()
+                  setSearch(search.trim())
+                }}
+              >
+                <input
+                  type="text"
+                  placeholder="Search logs (status, action, event, customer, amount, user)"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="bg-transparent outline-none w-full px-2 h-8"
+                />
+              </form>
+            </div>
+            <button
+              className="px-3 py-2 rounded border text-sm"
+              onClick={async () => {
+                await Promise.all([loadLogs(), loadPayments()])
+              }}
+              disabled={logsLoading || paymentsLoading}
+              title="Refresh logs and latest payments"
+            >
+              {logsLoading || paymentsLoading ? 'Loading…' : 'Refresh'}
+            </button>
+          </nav>
+          {logsLoading && !logs.length ? (
+            <div className="text-sm text-gray-600">Loading logs…</div>
+          ) : !logRowsFiltered.length ? (
+            <div className="text-sm text-gray-600">No logs found.</div>
+          ) : (
+            <>
+              <div className="rounded-t-xl border border-gray-200 bg-white/80">
+                <div className="overflow-y-auto max-h-[65vh]">
+                  <table className="w-full text-xs md:text-sm table-fixed">
+                    <thead>
+                      <tr className="bg-gray-200 text-left text-xs tracking-wide uppercase">
+                        {[
+                          { label: 'Date/Time', className: 'w-[7rem]' },
+                          { label: 'Event', className: 'w-[8rem]' },
+                          { label: 'Verified', className: 'w-[5rem]' },
+                          { label: 'Customer', className: 'w-[8rem]' },
+                          {
+                            label: 'Amount',
+                            className: 'w-[6rem] text-right',
+                          },
+                          { label: 'Action', className: 'w-[8rem]' },
+                          { label: 'Status', className: 'w-[8rem]' },
+                          { label: 'Additional Notes', className: 'w-[6rem]' },
+                          { label: 'Proof', className: 'w-[4.5rem]' },
+                          { label: 'By', className: 'w-[6rem]' },
+                          { label: 'Actions', className: 'w-[5.5rem]' },
+                        ].map((h, i, arr) => (
+                          <th
+                            key={h.label}
+                            className={`px-3 py-2 ${h.className ?? ''} ${
+                              i === 0 ? 'rounded-tl-xl' : ''
+                            } ${i === arr.length - 1 ? 'rounded-tr-xl' : ''}`}
+                          >
+                            {h.label}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {paginatedLogRows.map((row) => {
+                        const isPaymentRow = row.kind === 'payment'
+                        const cached = paymentCache[row.payment_id]
+                        const paymentLite: PaymentLite | undefined =
+                          isPaymentRow
+                            ? cached ?? {
+                                booking_id: row.payment.booking_id,
+                                user_id: row.payment.user_id,
+                                amount_paid: coerceAmount(
+                                  row.payment.amount_paid ??
+                                    (row.payment as { amount?: unknown }).amount
+                                ),
+                                proof_image_url:
+                                  row.payment.proof_image_url ?? null,
+                                verified_at: row.payment.verified_at ?? null,
+                              }
+                            : cached
+                        const booking = paymentLite?.booking_id
+                          ? bookingCache[paymentLite.booking_id]
+                          : undefined
+                        const eventName = booking?.event_name || ''
+                        const customerName =
+                          [booking?.firstname, booking?.lastname]
+                            .filter(Boolean)
+                            .join(' ')
+                            .trim() ||
+                          booking?.username ||
+                          ''
+                        const proofUrl = isPaymentRow
+                          ? row.payment.proof_image_url || ''
+                          : paymentLite?.proof_image_url || ''
+                        const verified = isPaymentRow
+                          ? !!row.payment.verified_at
+                          : !!paymentLite?.verified_at
+                        const amountValue = isPaymentRow
+                          ? coerceAmount(
+                              row.payment.amount_paid ??
+                                (row.payment as { amount?: unknown }).amount ??
+                                paymentLite?.amount_paid
+                            )
+                          : paymentLite?.amount_paid
+                        const key =
+                          row.kind === 'log'
+                            ? `log-${row.log.log_id}`
+                            : `payment-${row.payment.payment_id}`
+                        const actionLabel = isPaymentRow
+                          ? `Payment${
+                              row.payment.payment_method
+                                ? ` (${row.payment.payment_method})`
+                                : ''
+                            }`
+                          : row.log.action
+                        const additionalNotes = isPaymentRow
+                          ? row.payment.notes || ''
+                          : (row.log as { additional_notes?: string })
+                              .additional_notes || ''
+                        const byValue = isPaymentRow
+                          ? 'Customer'
+                          : (row.log.action || '')
+                              .toLowerCase()
+                              .includes('refund')
+                          ? 'Admin'
+                          : 'Employee'
+                        const statusContent: React.ReactNode = isPaymentRow ? (
+                          row.payment.payment_status || '—'
+                        ) : (
+                          <div className="space-y-0.5">
+                            <div className="text-[0.65rem] text-gray-500">
+                              From: {row.log.previous_status}
+                            </div>
+                            <div className="text-[0.75rem] font-semibold text-gray-900">
+                              To: {row.log.new_status}
+                            </div>
+                          </div>
+                        )
+
+                        return (
+                          <tr
+                            key={key}
+                            className="text-left bg-white odd:bg-gray-50 border-b border-gray-200 align-top"
+                          >
+                            <td
+                              className="px-3 py-2 align-middle"
+                              title={formatDisplayDateTime(row.created_at)}
+                            >
+                              <div className="flex flex-col leading-tight">
+                                <span>
+                                  {formatDisplayDateTime(row.created_at)}
                                 </span>
                               </div>
                             </td>
-                            <td className="px-3 py-2">
-                              {(lg as { additional_notes?: string })
-                                .additional_notes || '—'}
-                            </td>
-                            <td className="px-3 py-2 whitespace-nowrap">
-                              {String(lg.performed_by || '')}
-                            </td>
-                            <td className="px-3 py-2 whitespace-nowrap">
-                              <button
-                                type="button"
-                                title="Edit additional notes"
-                                className="inline-flex items-center justify-center rounded-full hover:text-black text-litratoblack"
-                                onClick={() => openEdit(lg)}
+                            <td className="px-3 py-2 align-middle">
+                              <span
+                                className="block truncate"
+                                title={eventName}
                               >
-                                <Pencil className="w-4 h-4" />
-                              </button>
+                                {eventName || '—'}
+                              </span>
+                              {isPaymentRow && row.payment.payment_method ? (
+                                <span className="text-[0.65rem] text-gray-500 uppercase tracking-wide">
+                                  {row.payment.payment_method}
+                                </span>
+                              ) : null}
+                            </td>
+                            <td className="px-3 py-2 text-center align-middle">
+                              {verified ? (
+                                <span className="inline-flex items-center justify-center rounded-full bg-green-600/90 text-white text-[0.65rem] font-semibold px-2 py-1">
+                                  Verified
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center justify-center rounded-full bg-gray-600/80 text-white text-[0.65rem] font-semibold px-2 py-1">
+                                  Unverified
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-3 py-2 align-middle">
+                              <span
+                                className="block truncate"
+                                title={customerName}
+                              >
+                                {customerName || '—'}
+                              </span>
+                            </td>
+                            <td className="px-3 py-2 text-right align-middle">
+                              {typeof amountValue === 'number'
+                                ? `₱${Number(amountValue).toLocaleString(
+                                    'en-PH',
+                                    {
+                                      minimumFractionDigits: 2,
+                                      maximumFractionDigits: 2,
+                                    }
+                                  )}`
+                                : '—'}
+                            </td>
+                            <td className="px-3 py-2 align-middle">
+                              <span
+                                className="block truncate"
+                                title={actionLabel}
+                              >
+                                {actionLabel}
+                              </span>
+                            </td>
+                            <td className="px-3 py-2 align-middle">
+                              <div className="space-y-1">{statusContent}</div>
+                            </td>
+                            <td className="px-3 py-2 text-center align-middle">
+                              {additionalNotes ? (
+                                <Popover>
+                                  <PopoverTrigger asChild>
+                                    <button className="text-[0.65rem] underline text-litratoblack">
+                                      View
+                                    </button>
+                                  </PopoverTrigger>
+                                  <PopoverContent className="max-w-xs text-sm leading-snug">
+                                    {additionalNotes}
+                                  </PopoverContent>
+                                </Popover>
+                              ) : (
+                                <span className="text-[0.65rem] text-gray-400">
+                                  —
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-3 py-2 text-center align-middle">
                               <button
                                 type="button"
-                                title="Create refund"
-                                className="ml-2 inline-flex items-center justify-center rounded-full hover:text-black text-litratoblack"
-                                onClick={() => {
-                                  setRefundPaymentId(lg.payment_id)
-                                  setRefundAmount('')
-                                  setRefundReason('')
-                                  setRefundOpen(true)
+                                className={`px-2 py-1 rounded border text-[0.65rem] font-medium transition ${
+                                  proofUrl
+                                    ? 'hover:bg-gray-100'
+                                    : 'opacity-60 cursor-default'
+                                }`}
+                                onClick={async () => {
+                                  setProofPaymentId(row.payment_id)
+                                  if (isPaymentRow) {
+                                    await ensurePayment(row.payment_id)
+                                    if (row.payment.booking_id)
+                                      await ensureBooking(
+                                        row.payment.booking_id
+                                      )
+                                  } else {
+                                    const pLite = await ensurePayment(
+                                      row.log.payment_id
+                                    )
+                                    if (pLite?.booking_id)
+                                      await ensureBooking(pLite.booking_id)
+                                  }
+                                  setProofOpen(true)
                                 }}
                               >
-                                Refund
+                                View
                               </button>
+                            </td>
+                            <td className="px-3 py-2 text-center align-middle">
+                              <span className="inline-flex items-center rounded-full bg-gray-500/20 text-gray-700 text-[0.65rem] font-medium px-2 py-1 uppercase">
+                                {byValue || '—'}
+                              </span>
+                            </td>
+                            <td className="px-3 py-2 align-middle">
+                              {isPaymentRow ? (
+                                <span className="text-[0.65rem] text-gray-400">
+                                  —
+                                </span>
+                              ) : (
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    type="button"
+                                    title="Edit additional notes"
+                                    className="inline-flex h-7 w-7 items-center justify-center rounded-full border hover:bg-gray-100"
+                                    onClick={() => openEdit(row.log)}
+                                  >
+                                    <Pencil className="w-4 h-4" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    title="Create refund"
+                                    className="inline-flex h-7 w-7 items-center justify-center rounded-full border hover:bg-gray-100"
+                                    onClick={() => {
+                                      setRefundPaymentId(row.log.payment_id)
+                                      setRefundAmount('')
+                                      setRefundReason('')
+                                      setRefundOpen(true)
+                                    }}
+                                  >
+                                    Refund
+                                  </button>
+                                </div>
+                              )}
                             </td>
                           </tr>
                         )
@@ -798,7 +1274,6 @@ export default function AdminPaymentsPage() {
                   </table>
                 </div>
               </div>
-
               <div className="px-3 py-2">
                 <Pagination>
                   <PaginationContent>
@@ -813,7 +1288,7 @@ export default function AdminPaymentsPage() {
                         }}
                       />
                     </PaginationItem>
-                    {windowPages.map((n) => (
+                    {windowPagesLogs.map((n) => (
                       <PaginationItem key={n}>
                         <PaginationLink
                           href="#"
@@ -836,7 +1311,7 @@ export default function AdminPaymentsPage() {
                         style={{ textDecoration: 'none' }}
                         onClick={(e) => {
                           e.preventDefault()
-                          setPage((p) => Math.min(totalPages, p + 1))
+                          setPage((p) => Math.min(totalPagesLogs, p + 1))
                         }}
                       />
                     </PaginationItem>
@@ -1192,7 +1667,7 @@ export default function AdminPaymentsPage() {
                   return
                 }
                 if (balance && amount_paid > balance.balance) {
-                  alert(
+                  toast.error(
                     `Amount exceeds remaining balance (${balance.balance.toFixed(
                       2
                     )}).`
@@ -1200,6 +1675,18 @@ export default function AdminPaymentsPage() {
                   return
                 }
                 try {
+                  // If marking as verified and status left as Pending, auto-derive status from remaining balance
+                  let statusToSend = createForm.payment_status
+                  if (
+                    createForm.verified &&
+                    statusToSend === 'Pending' &&
+                    balance
+                  ) {
+                    statusToSend =
+                      amount_paid >= balance.balance
+                        ? 'Fully Paid'
+                        : 'Partially Paid'
+                  }
                   await createAdminPayment({
                     booking_id,
                     amount_paid,
@@ -1208,7 +1695,7 @@ export default function AdminPaymentsPage() {
                       createForm.reference_no.trim() || 'CASH-ON-EVENT',
                     notes: createForm.notes.trim() || undefined,
                     verified: createForm.verified,
-                    payment_status: createForm.payment_status,
+                    payment_status: statusToSend,
                   })
                   setCreateForm({
                     booking_id: '',
@@ -1221,7 +1708,8 @@ export default function AdminPaymentsPage() {
                   })
                   setBalance(null)
                   setCreateOpen(false)
-                  await loadLogs()
+                  // Refresh both logs and payments so tallies/rows update immediately
+                  await Promise.all([loadLogs(), loadPayments()])
                 } catch (e) {
                   console.error('Create admin payment failed:', e)
                   alert('Failed to create payment')

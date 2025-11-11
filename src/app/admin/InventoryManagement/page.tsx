@@ -55,6 +55,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
+import { formatDisplayDateTime } from '@/lib/datetime'
 // Removed unused PromoCard-based rendering; using internal SimplePackageCard instead
 import {
   Pagination,
@@ -868,29 +869,8 @@ export default function InventoryManagementPage() {
     }
 
     function MoreDetailsCell({ row }: { row: EquipmentRow }) {
-      // Readable format for Date and Time values - More details popover
-      const formatDateTime = (value: unknown): string => {
-        if (!value) return '—'
-        // handle number timestamps and ISO strings
-        let d =
-          typeof value === 'number' ? new Date(value) : new Date(String(value))
-        if (isNaN(d.getTime())) {
-          const n = Number(value)
-          if (Number.isFinite(n)) {
-            const d2 = new Date(n)
-            if (!isNaN(d2.getTime())) d = d2
-          }
-        }
-        if (isNaN(d.getTime())) return String(value)
-        try {
-          return new Intl.DateTimeFormat(undefined, {
-            dateStyle: 'medium',
-            timeStyle: 'short',
-          }).format(d)
-        } catch {
-          return d.toLocaleString()
-        }
-      }
+      const formatDateTime = (value: unknown): string =>
+        formatDisplayDateTime(value)
       return (
         <Popover>
           <PopoverTrigger asChild>
@@ -3515,7 +3495,7 @@ export default function InventoryManagementPage() {
                         })()}
                       </TableCell>
                       <TableCell className="px-4 py-2">
-                        {new Date(l.updated_at).toLocaleString()}
+                        {formatDisplayDateTime(l.updated_at)}
                       </TableCell>
                       <TableCell className="px-4 py-2">
                         <button
