@@ -1978,16 +1978,16 @@ function MasterListPanel({
           }
         }}
       >
-        <DialogContent className="sm:max-w-3xl">
+        <DialogContent className="w-[95vw] sm:max-w-4xl max-h-[90vh] overflow-y-auto p-6">
           <DialogHeader>
             <DialogTitle>Event report</DialogTitle>
             <DialogDescription>
               Summary of event, payment, equipment, and staff.
             </DialogDescription>
           </DialogHeader>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+          <div className="grid grid-cols-1 gap-4 text-sm lg:grid-cols-2">
             {/* Event details */}
-            <div className="rounded border p-3 bg-gray-50">
+            <div className="rounded border p-4 bg-gray-50 shadow-sm">
               <div className="text-[11px] uppercase text-gray-600 font-semibold mb-2">
                 Event details
               </div>
@@ -2027,7 +2027,7 @@ function MasterListPanel({
             </div>
 
             {/* Payment details */}
-            <div className="rounded border p-3 bg-gray-50">
+            <div className="rounded border p-4 bg-gray-50 shadow-sm">
               <div className="text-[11px] uppercase text-gray-600 font-semibold mb-2">
                 Payment details
               </div>
@@ -2068,7 +2068,7 @@ function MasterListPanel({
             </div>
 
             {/* Equipment details */}
-            <div className="rounded border p-3 bg-gray-50">
+            <div className="rounded border p-4 bg-gray-50 shadow-sm">
               <div className="text-[11px] uppercase text-gray-600 font-semibold mb-2">
                 Equipment details
               </div>
@@ -2094,8 +2094,8 @@ function MasterListPanel({
                       {reportItems.missing}
                     </div>
                   </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                    <div className="max-h-44 overflow-y-auto pr-1">
                       <div className="font-semibold mb-1">Damaged items</div>
                       {reportItemLists && reportItemLists.damaged.length ? (
                         <ul className="list-disc list-inside space-y-0.5">
@@ -2109,7 +2109,7 @@ function MasterListPanel({
                         <div className="text-gray-700">None</div>
                       )}
                     </div>
-                    <div>
+                    <div className="max-h-44 overflow-y-auto pr-1">
                       <div className="font-semibold mb-1">Missing items</div>
                       {reportItemLists && reportItemLists.missing.length ? (
                         <ul className="list-disc list-inside space-y-0.5">
@@ -2130,52 +2130,62 @@ function MasterListPanel({
               )}
             </div>
 
-            {/* Staff entry logs (aggregated timeline) */}
-            <div className="rounded border p-3 bg-gray-50">
+            {/* Staff entry logs */}
+            <div className="rounded border p-4 bg-gray-50 shadow-sm lg:col-span-2">
               <div className="text-[11px] uppercase text-gray-600 font-semibold mb-2">
                 Staff entry logs
               </div>
               {reportLoading ? (
                 <div className="text-gray-700">Loading…</div>
-              ) : reportStaffTimeline ? (
-                <div className="space-y-2">
-                  <div className="border rounded p-2 bg-white text-gray-900">
-                    <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
-                      {(() => {
-                        const fmt = (v?: string | null) =>
-                          v ? new Date(v).toLocaleString() : '—'
-                        return (
-                          <>
-                            <div>
-                              <span className="text-gray-600">Arrived:</span>{' '}
-                              {fmt(reportStaffTimeline.arrived_at)}
-                            </div>
-                            <div>
-                              <span className="text-gray-600">
-                                Setup finished:
-                              </span>{' '}
-                              {fmt(reportStaffTimeline.setup_finished_at)}
-                            </div>
-                            <div>
-                              <span className="text-gray-600">Started:</span>{' '}
-                              {fmt(reportStaffTimeline.started_at)}
-                            </div>
-                            <div>
-                              <span className="text-gray-600">Ended:</span>{' '}
-                              {fmt(reportStaffTimeline.ended_at)}
-                            </div>
-                            <div>
-                              <span className="text-gray-600">Picked up:</span>{' '}
-                              {fmt(reportStaffTimeline.picked_up_at)}
-                            </div>
-                          </>
-                        )
-                      })()}
-                    </div>
-                  </div>
+              ) : reportStaffLogs.length ? (
+                <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                  {reportStaffLogs.map((log, idx) => {
+                    const fmt = (v?: string | null) =>
+                      v ? new Date(v).toLocaleString() : '—'
+                    const name =
+                      `${log.firstname || ''} ${log.lastname || ''}`.trim() ||
+                      log.username ||
+                      'Staff'
+                    const key =
+                      log.id != null
+                        ? `staff-log-${log.id}`
+                        : `staff-log-${log.staff_userid}-${idx}`
+                    return (
+                      <div
+                        key={key}
+                        className="border rounded p-3 bg-white text-gray-900 shadow-sm"
+                      >
+                        <div className="font-medium text-sm">{name}</div>
+                        <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs mt-2 sm:text-sm">
+                          <div>
+                            <span className="text-gray-600">Arrived:</span>{' '}
+                            {fmt(log.arrived_at)}
+                          </div>
+                          <div>
+                            <span className="text-gray-600">
+                              Setup finished:
+                            </span>{' '}
+                            {fmt(log.setup_finished_at)}
+                          </div>
+                          <div>
+                            <span className="text-gray-600">Started:</span>{' '}
+                            {fmt(log.started_at)}
+                          </div>
+                          <div>
+                            <span className="text-gray-600">Ended:</span>{' '}
+                            {fmt(log.ended_at)}
+                          </div>
+                          <div>
+                            <span className="text-gray-600">Picked up:</span>{' '}
+                            {fmt(log.picked_up_at)}
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
                 </div>
               ) : (
-                <div className="text-gray-700">—</div>
+                <div className="text-gray-700">No staff logs recorded.</div>
               )}
             </div>
           </div>

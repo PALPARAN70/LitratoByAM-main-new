@@ -1,5 +1,6 @@
 'use client'
 import React, { useEffect, useMemo, useState } from 'react'
+import { formatDisplayDateTime } from '@/lib/datetime'
 import Image from 'next/image'
 import {
   getLatestPaymentQR,
@@ -426,7 +427,7 @@ export default function AdminPaymentsPage() {
         lg.previous_status,
         lg.new_status,
         String(lg.performed_by || ''),
-        new Date(lg.created_at).toLocaleString(),
+        formatDisplayDateTime(lg.created_at),
         b?.event_name || '',
         customerName,
       ]
@@ -695,7 +696,7 @@ export default function AdminPaymentsPage() {
                             className="text-left bg-gray-100 even:bg-gray-50 align-top"
                           >
                             <td className="px-3 py-2 whitespace-nowrap">
-                              {new Date(lg.created_at).toLocaleString()}
+                              {formatDisplayDateTime(lg.created_at)}
                             </td>
                             <td
                               className="px-3 py-2 whitespace-nowrap max-w-[14rem] truncate"

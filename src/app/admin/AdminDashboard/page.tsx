@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useMemo, useState } from 'react'
+import { formatDisplayDateTime, formatDisplayDate } from '@/lib/datetime'
 
 type PaymentRow = {
   payment_id: number
@@ -273,7 +274,7 @@ export default function AdminAnalyticsPage() {
                 </colgroup>
                 <thead className="bg-gray-100">
                   <tr>
-                    <Th>Date</Th>
+                    <Th>Date/Time</Th>
                     <Th>Event</Th>
                     <Th className="text-left">Amount</Th>
                     <Th>Status</Th>
@@ -290,7 +291,7 @@ export default function AdminAnalyticsPage() {
                       <tr key={p.payment_id} className="border-t">
                         <Td>
                           {p.created_at && isClient
-                            ? new Date(p.created_at).toLocaleString()
+                            ? formatDisplayDateTime(p.created_at)
                             : '—'}
                         </Td>
                         <Td className="truncate whitespace-nowrap">

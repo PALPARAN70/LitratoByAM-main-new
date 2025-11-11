@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { HiOutlineLocationMarker } from 'react-icons/hi'
 import { User, Phone, Signal, Grid2x2 } from 'lucide-react'
 import { toast } from 'sonner'
+import { formatDisplayDateTime } from '@/lib/datetime'
 import {
   Dialog,
   DialogContent,
@@ -48,7 +49,6 @@ type Item = { name: string; qty?: number }
 interface EventCardProps {
   bookingId?: number | string
   summaryRole?: 'admin' | 'employee'
-  allowPaymentEdit?: boolean
   title?: string
   // NEW: account name to show in Overview instead of Booking ID
   accountName?: string
@@ -76,7 +76,6 @@ interface EventCardProps {
   onItemsChange?: (
     items: Array<{ type: 'damaged' | 'missing'; name: string; qty?: number }>
   ) => void
-  onPaymentChange?: (status: Payment, amountPaid?: number) => void
   // NEW: allow changing event status from Details dialog
   onStatusChange?: (status: Status) => void
   itemsCatalog?: string[]
@@ -89,7 +88,6 @@ interface EventCardProps {
 export default function EventCard({
   bookingId,
   summaryRole = 'admin',
-  allowPaymentEdit = false,
   title,
   accountName,
   packageName,
@@ -111,7 +109,6 @@ export default function EventCard({
   contactPerson,
   contactPersonNumber,
   onItemsChange,
-  onPaymentChange,
   onStatusChange,
   itemsCatalog,
   // NEW: payment proof
@@ -126,7 +123,6 @@ export default function EventCard({
   const [editItems, setEditItems] = useState<ItemEntry[]>([])
 
   const [paymentStatus, setPaymentStatus] = useState<Payment>(payment)
-  const [partialAmount, setPartialAmount] = useState<number | ''>('')
   const [paidTotal, setPaidTotal] = useState<number | null>(null)
   const [amountDue, setAmountDue] = useState<number | null>(null)
   const [summaryLoading, setSummaryLoading] = useState(false)
@@ -183,10 +179,6 @@ export default function EventCard({
   useEffect(() => {
     setCardStatus(status)
   }, [status])
-
-  // NEW: allow staff or admin to edit, or if explicitly enabled by prop
-  const canEditPayment =
-    summaryRole === 'admin' || summaryRole === 'employee' || allowPaymentEdit
 
   const setItemStatus = (id: string, type: 'ok' | 'damaged' | 'missing') => {
     setEditItems((prev) =>
@@ -482,7 +474,9 @@ export default function EventCard({
           </div>
         </div>
         <div className="flex flex-col gap-1 items-start">
-          <p className="text-xs m-0 leading-tight">{dateTime || '—'}</p>
+          <p className="text-xs m-0 leading-tight">
+            {dateTime ? formatDisplayDateTime(dateTime) : '—'}
+          </p>
           <p className="font-bold m-0 leading-tight flex items-center gap-1">
             {title || '—'}
           </p>
@@ -549,7 +543,8 @@ export default function EventCard({
                     {title || '—'}
                   </div>
                   <div className="text-xs text-gray-500 truncate">
-                    {dateTime || '—'} • {location || '—'}
+                    {dateTime ? formatDisplayDateTime(dateTime) : '—'} •{' '}
+                    {location || '—'}
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
@@ -603,7 +598,9 @@ export default function EventCard({
                         <span className="font-medium text-gray-600">
                           Date & Time:
                         </span>{' '}
-                        <span className="text-gray-900">{dateTime}</span>
+                        <span className="text-gray-900">
+                          {dateTime ? formatDisplayDateTime(dateTime) : '—'}
+                        </span>
                       </div>
                       <div>
                         <span className="font-medium text-gray-600">
@@ -848,55 +845,21 @@ export default function EventCard({
                         </div>
                       </div>
                     ) : null}
-                    {canEditPayment ? (
-                      <div className="flex flex-col gap-2">
-                        <label className="inline-flex items-center gap-2">
-                          <input
-                            type="radio"
-                            name="payment-status"
-                            checked={paymentStatus === 'unpaid'}
-                            onChange={() => setPaymentStatus('unpaid')}
-                          />
-                          Unpaid
-                        </label>
-
-                        {/* Partially Paid row with View Payment beside it */}
-                        <div className="flex items-center gap-3">
-                          <label className="inline-flex items-center gap-2">
-                            <input
-                              type="radio"
-                              name="payment-status"
-                              checked={paymentStatus === 'partially-paid'}
-                              onChange={() =>
-                                setPaymentStatus('partially-paid')
-                              }
-                            />
-                            Partially Paid
-                          </label>
-                          <button
-                            type="button"
-                            className="px-2 py-1 rounded border text-xs"
-                            onClick={() => setPaymentsOpen(true)}
-                          >
-                            View Payments
-                          </button>
-                        </div>
-
-                        <label className="inline-flex items-center gap-2">
-                          <input
-                            type="radio"
-                            name="payment-status"
-                            checked={paymentStatus === 'paid'}
-                            onChange={() => setPaymentStatus('paid')}
-                          />
-                          Paid
-                        </label>
+                    <div className="flex flex-col gap-2 text-xs text-gray-600">
+                      <span>
+                        Payment status is computed automatically based on the
+                        recorded payments.
+                      </span>
+                      <div>
+                        <button
+                          type="button"
+                          className="px-2 py-1 rounded border text-xs"
+                          onClick={() => setPaymentsOpen(true)}
+                        >
+                          View Payments
+                        </button>
                       </div>
-                    ) : (
-                      <div className="text-xs text-gray-600">
-                        Payment status is computed automatically.
-                      </div>
-                    )}
+                    </div>
 
                     {/* Payments manager modal */}
                     <Dialog
@@ -978,7 +941,7 @@ export default function EventCard({
                                 <thead className="bg-gray-100">
                                   <tr>
                                     <th className="text-left px-2 py-1">
-                                      Date
+                                      Date/Time
                                     </th>
                                     <th className="text-left px-2 py-1">
                                       Method
@@ -1002,9 +965,7 @@ export default function EventCard({
                                     <tr key={p.payment_id} className="border-t">
                                       <td className="px-2 py-1">
                                         {p.created_at
-                                          ? new Date(
-                                              p.created_at
-                                            ).toLocaleString()
+                                          ? formatDisplayDateTime(p.created_at)
                                           : '—'}
                                       </td>
                                       <td className="px-2 py-1">
@@ -1400,11 +1361,9 @@ export default function EventCard({
                     </Dialog>
                   </div>
 
-                  {/* Damaged / Missing items controls */}
+                  {/* Equipment controls */}
                   <div className="rounded-lg border p-4">
-                    <div className="font-semibold mb-2">
-                      Damaged / Missing Items
-                    </div>
+                    <div className="font-semibold mb-2">Equipment</div>
                     <div className="space-y-3">
                       {editItems.length === 0 ? (
                         <div className="text-gray-600">No items available.</div>
@@ -1548,15 +1507,6 @@ export default function EventCard({
                             type: type as 'damaged' | 'missing',
                           }))
                       )
-                      if (canEditPayment) {
-                        onPaymentChange?.(
-                          paymentStatus,
-                          paymentStatus === 'partially-paid' &&
-                            partialAmount !== ''
-                            ? Number(partialAmount)
-                            : undefined
-                        )
-                      }
                       // NEW: propagate selected event status to parent
                       onStatusChange?.(eventStatus)
                     }}

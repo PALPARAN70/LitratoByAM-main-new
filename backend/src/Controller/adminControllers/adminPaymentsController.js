@@ -268,6 +268,31 @@ async function generateSalesReportHandler(req, res) {
 
     doc.pipe(res)
 
+    const formatDate = (value) => {
+      const d = value ? new Date(value) : null
+      if (!d || Number.isNaN(d.getTime())) return ''
+      try {
+        return new Intl.DateTimeFormat('en-PH', {
+          dateStyle: 'medium',
+        }).format(d)
+      } catch {
+        return d.toISOString().slice(0, 10)
+      }
+    }
+
+    const formatDateTime = (value) => {
+      const d = value ? new Date(value) : null
+      if (!d || Number.isNaN(d.getTime())) return ''
+      try {
+        return new Intl.DateTimeFormat('en-PH', {
+          dateStyle: 'medium',
+          timeStyle: 'short',
+        }).format(d)
+      } catch {
+        return d.toISOString().replace('T', ' ').slice(0, 16)
+      }
+    }
+
     // Attempt to use a font that supports the Peso sign. If not found, fall back to built-in Helvetica and "PHP" prefix.
     let usePesoSymbol = false
     let bodyFont = 'Helvetica'
@@ -312,7 +337,7 @@ async function generateSalesReportHandler(req, res) {
     doc
       .fontSize(10)
       .font(bodyFont)
-      .text(`Generated at: ${new Date().toLocaleString()}`)
+      .text(`Generated at: ${formatDateTime(new Date())}`)
     doc.moveDown(0.5)
 
     // Helpers
@@ -330,13 +355,6 @@ async function generateSalesReportHandler(req, res) {
       const email = (r.user_username || '').toString()
       return email ? email.split('@')[0] : String(r.user_id)
     }
-    const getDateMMDDYYYY = (d) => {
-      const dt = new Date(d)
-      const mm = String(dt.getMonth() + 1).padStart(2, '0')
-      const dd = String(dt.getDate()).padStart(2, '0')
-      const yyyy = dt.getFullYear()
-      return `${mm}/${dd}/${yyyy}`
-    }
 
     const startX = doc.page.margins.left
     const usableWidth =
@@ -349,7 +367,7 @@ async function generateSalesReportHandler(req, res) {
     const PAID_W = 110
     const STATUS_W = 60
     const CREATED_W = Math.max(
-      80,
+      115,
       usableWidth - (EVENT_W + USER_W + DUE_W + PAID_W + STATUS_W)
     )
     const columns = [
@@ -407,7 +425,7 @@ async function generateSalesReportHandler(req, res) {
         `${currencyPrefix}${fmtMoney(p.booking_amount_due ?? p.amount)}`,
         `${currencyPrefix}${fmtMoney(p.amount_paid)}`,
         cap(p.payment_status || ''),
-        getDateMMDDYYYY(p.created_at),
+        formatDateTime(p.created_at),
       ]
       let x = startX
       // Optional zebra striping
@@ -437,16 +455,10 @@ async function generateSalesReportHandler(req, res) {
     // Period label
     const periodLabel = (() => {
       if (!startDate && !endDate) return 'All Time'
-      const fmt = (d) => {
-        const dt = new Date(d)
-        const mm = String(dt.getMonth() + 1).padStart(2, '0')
-        const dd = String(dt.getDate()).padStart(2, '0')
-        const yyyy = dt.getFullYear()
-        return `${mm}/${dd}/${yyyy}`
-      }
-      if (startDate && endDate) return `${fmt(startDate)} - ${fmt(endDate)}`
-      if (startDate) return `From ${fmt(startDate)}`
-      return `Until ${fmt(endDate)}`
+      if (startDate && endDate)
+        return `${formatDate(startDate)} - ${formatDate(endDate)}`
+      if (startDate) return `From ${formatDate(startDate)}`
+      return `Until ${formatDate(endDate)}`
     })()
     y += 6
     maybeNewPage()
