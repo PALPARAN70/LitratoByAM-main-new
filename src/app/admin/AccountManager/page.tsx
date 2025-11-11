@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useState } from 'react'
+import { formatDisplayDateTime } from '@/lib/datetime'
 import { toast } from 'sonner'
 import { type createUserData } from '../../../../schemas/schema/requestvalidation'
 import { Ellipsis } from 'lucide-react'
@@ -436,12 +437,10 @@ function UserListPanel({
                   </div>
                 </Td>
                 <Td>
-                  {u.last_login ? new Date(u.last_login).toLocaleString() : '—'}
+                  {u.last_login ? formatDisplayDateTime(u.last_login) : '—'}
                 </Td>
                 <Td>
-                  {u.last_updated
-                    ? new Date(u.last_updated).toLocaleString()
-                    : '—'}
+                  {u.last_updated ? formatDisplayDateTime(u.last_updated) : '—'}
                 </Td>
                 <Td>
                   {/* ...existing actions popover... */}

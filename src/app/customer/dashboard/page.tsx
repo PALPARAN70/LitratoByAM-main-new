@@ -37,6 +37,7 @@ import {
 } from '@/components/ui/dialog'
 import ContractSection from '../../../../Litratocomponents/ContractSection'
 import { getMyContract } from '../../../../schemas/functions/Contracts/api'
+import { formatDisplayDate } from '@/lib/datetime'
 
 const API_BASE =
   (process.env.NEXT_PUBLIC_API_BASE?.replace(/\/$/, '') ||
@@ -722,7 +723,9 @@ export default function DashboardPage() {
                                   <div className="grid grid-cols-2 gap-x-2">
                                     <div className="font-semibold">Date</div>
                                     <div className="text-gray-700">
-                                      {data.date || '—'}
+                                      {data.date
+                                        ? formatDisplayDate(data.date)
+                                        : '—'}
                                     </div>
                                     <div className="font-semibold">Time</div>
                                     <div className="text-gray-700">
@@ -1087,7 +1090,7 @@ export default function DashboardPage() {
             </div>
             <div>
               <span className="font-medium">Date:</span>{' '}
-              {cancelTarget?.date || '—'}
+              {cancelTarget?.date ? formatDisplayDate(cancelTarget.date) : '—'}
             </div>
             <div>
               <span className="font-medium">Time:</span>{' '}
@@ -1145,7 +1148,9 @@ export default function DashboardPage() {
             </div>
             <div>
               <span className="font-medium">Date:</span>{' '}
-              {reschedTarget?.date || '—'}
+              {reschedTarget?.date
+                ? formatDisplayDate(reschedTarget.date)
+                : '—'}
             </div>
             <div>
               <span className="font-medium">Time:</span>{' '}

@@ -1,5 +1,6 @@
 'use client'
 import { useMemo, useState, useEffect } from 'react'
+import { formatDisplayDate, formatDisplayTime } from '@/lib/datetime'
 import {
   Pagination,
   PaginationContent,
@@ -425,12 +426,16 @@ export default function StaffEventLogsPage() {
                               <div className="grid grid-cols-2 gap-x-2">
                                 <div className="font-semibold">Date</div>
                                 <div className="text-gray-700">
-                                  {row.date || '—'}
+                                  {row.date ? formatDisplayDate(row.date) : '—'}
                                 </div>
                                 <div className="font-semibold">Time</div>
                                 <div className="text-gray-700">
-                                  {row.startTime || '—'}
-                                  {row.endTime ? ` - ${row.endTime}` : ''}
+                                  {row.startTime
+                                    ? formatDisplayTime(row.startTime)
+                                    : '—'}
+                                  {row.endTime
+                                    ? ` - ${formatDisplayTime(row.endTime)}`
+                                    : ''}
                                 </div>
                                 <div className="font-semibold">Package</div>
                                 <div className="text-gray-700">

@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useState } from 'react'
+import { formatDisplayDateTime } from '@/lib/datetime'
 import {
   listStaffLogsForBooking,
   patchMyStaffLog,
@@ -93,8 +94,7 @@ export default function StaffTimelineLogger({
     }
   }
 
-  const renderTime = (v?: string | null) =>
-    v ? new Date(v).toLocaleString() : '—'
+  const renderTime = (v?: string | null) => (v ? formatDisplayDateTime(v) : '—')
 
   return (
     <div className="rounded-lg border p-4">

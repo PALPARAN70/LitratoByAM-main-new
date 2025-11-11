@@ -1,6 +1,7 @@
 'use client'
 import { useMemo, useState, useEffect } from 'react'
 import EventCard from '../../../../Litratocomponents/EventCard'
+import { formatDisplayDateTime } from '@/lib/datetime'
 import {
   Pagination,
   PaginationContent,
@@ -29,6 +30,7 @@ type StaffEvent = {
   id: string | number
   title: string
   dateTime: string
+  dateDisplay?: string
   location: string
   status: Status
   payment: Payment
@@ -125,7 +127,18 @@ export default function DashboardPage() {
             const title = (r.event_name || r.package_name || 'Event') as string
             const date = String(r.event_date || '')
             const time = String(r.event_time || '')
-            const dateTime = [date, time].filter(Boolean).join(' - ')
+            const normalizedTime = (() => {
+              if (!time) return ''
+              const match = time.trim().match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?/)
+              if (!match) return ''
+              const hh = match[1].padStart(2, '0')
+              const mm = match[2].padStart(2, '0')
+              const ss = (match[3] ?? '00').padStart(2, '0')
+              return `${hh}:${mm}:${ss}`
+            })()
+            const isoDateTime =
+              date && normalizedTime ? `${date}T${normalizedTime}` : date || ''
+            const dateTime = isoDateTime
             const location = String(r.event_address || '')
             const idRaw = (r.id as unknown) ?? (r.confirmed_id as unknown) ?? ''
             const id: string | number =
@@ -173,6 +186,10 @@ export default function DashboardPage() {
               contactPerson: String(r['contact_person'] || ''),
               contactPersonNumber: String(r['contact_person_number'] || ''),
               grid: String(r['grid'] || ''),
+              // expose formatted date string for search convenience
+              dateDisplay: isoDateTime
+                ? formatDisplayDateTime(isoDateTime)
+                : '',
               imageUrl: undefined,
               damagedItems: [],
               missingItems: [],
@@ -222,7 +239,9 @@ export default function DashboardPage() {
           : issues === 0
       const paymentOk =
         paymentFilter === 'all' ? true : e.payment === paymentFilter
-      const hay = `${e.title} ${e.location} ${e.dateTime}`.toLowerCase()
+      const hay = `${e.title} ${e.location} ${
+        e.dateDisplay || e.dateTime
+      }`.toLowerCase()
       const searchOk = tokens.length
         ? tokens.every((t) => hay.includes(t))
         : true
