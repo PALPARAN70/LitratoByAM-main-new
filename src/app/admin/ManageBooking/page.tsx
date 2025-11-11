@@ -369,148 +369,551 @@ function BookingsPanel({
     return Number.isNaN(d.getTime()) ? null : d
   }, [selected?.date])
 
+  // Load approved bookings and build markers for the calendar
+  const [calendarMarkers, setCalendarMarkers] = useState<
+    Record<string, 'yellow' | 'red'>
+  >({})
+  const [pendingOutline, setPendingOutline] = useState<Record<string, true>>({})
+  const [allBookings, setAllBookings] = useState<BookingRequestRow[]>([])
+  const [selectedISODate, setSelectedISODate] = useState<string | null>(null)
+  const [actionBusy, setActionBusy] = useState<
+    Record<number, 'approve' | 'reject' | null>
+  >({})
+  const [confirmApproveOpen, setConfirmApproveOpen] = useState(false)
+  const [confirmRejectOpen, setConfirmRejectOpen] = useState(false)
+  const [evaluateTarget, setEvaluateTarget] =
+    useState<BookingRequestRow | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const list = await readBookings()
+        if (cancelled) return
+        setAllBookings(list)
+        // Count approved bookings by date (confirmed and not cancelled)
+        const counts = new Map<string, number>()
+        const pending = new Set<string>()
+        for (const r of list) {
+          if (r.kind === 'confirmed' && r.booking_status !== 'cancelled') {
+            const iso = toISODateString(r.event_date)
+            if (!iso || iso === '—') continue
+            counts.set(iso, (counts.get(iso) || 0) + 1)
+          } else if (r.kind !== 'confirmed') {
+            // For booking requests, mark dates with pending status
+            const status = String((r as any).status || '').toLowerCase()
+            if (status === 'pending') {
+              const iso = toISODateString((r as any).event_date)
+              if (!iso || iso === '—') continue
+              pending.add(iso)
+            }
+          }
+        }
+        const markers: Record<string, 'yellow' | 'red'> = {}
+        counts.forEach((cnt, iso) => {
+          if (cnt >= 2) markers[iso] = 'red'
+          else if (cnt === 1) markers[iso] = 'yellow'
+        })
+        setCalendarMarkers(markers)
+        const pendingMap: Record<string, true> = {}
+        pending.forEach((iso) => {
+          pendingMap[iso] = true
+        })
+        setPendingOutline(pendingMap)
+
+        // Auto-select a helpful date on first open: today if it has bookings,
+        // otherwise the nearest upcoming date with any pending/approved, else most recent past
+        const allIsos = Array.from(
+          new Set<string>([
+            ...Array.from(counts.keys()),
+            ...Array.from(pending.values()),
+          ])
+        ).sort()
+        const todayIso = toISODateString(new Date())
+        let pick: string | null = null
+        if (allIsos.includes(todayIso)) {
+          pick = todayIso
+        } else if (allIsos.length) {
+          const future = allIsos.filter((d) => d >= todayIso)
+          pick = future.length ? future[0] : allIsos[allIsos.length - 1]
+        }
+        if (pick) setSelectedISODate((prev) => prev ?? pick)
+      } catch {
+        setCalendarMarkers({})
+        setPendingOutline({})
+        setAllBookings([])
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  // Compute the list of bookings (pending and approved) for the selected date
+  const bookingsForDate = useMemo(() => {
+    if (!selectedISODate) return [] as BookingRequestRow[]
+    return allBookings.filter((r) => {
+      const iso = toISODateString((r as any).event_date)
+      if (iso !== selectedISODate) return false
+      if (r.kind === 'confirmed') {
+        return r.booking_status !== 'cancelled'
+      }
+      const status = String((r as any).status || '').toLowerCase()
+      return status === 'pending'
+    })
+  }, [selectedISODate, allBookings])
+
+  // Helper to refresh bookings and calendar markers after an action
+  const refreshCalendarData = useCallback(async () => {
+    try {
+      const list = await readBookings()
+      setAllBookings(list)
+      const counts = new Map<string, number>()
+      const pending = new Set<string>()
+      for (const r of list) {
+        if (r.kind === 'confirmed' && r.booking_status !== 'cancelled') {
+          const iso = toISODateString(r.event_date)
+          if (!iso || iso === '—') continue
+          counts.set(iso, (counts.get(iso) || 0) + 1)
+        } else if (r.kind !== 'confirmed') {
+          const status = String((r as any).status || '').toLowerCase()
+          if (status === 'pending') {
+            const iso = toISODateString((r as any).event_date)
+            if (!iso || iso === '—') continue
+            pending.add(iso)
+          }
+        }
+      }
+      const markers: Record<string, 'yellow' | 'red'> = {}
+      counts.forEach((cnt, iso) => {
+        if (cnt >= 2) markers[iso] = 'red'
+        else if (cnt === 1) markers[iso] = 'yellow'
+      })
+      setCalendarMarkers(markers)
+      const pendingMap: Record<string, true> = {}
+      pending.forEach((iso) => {
+        pendingMap[iso] = true
+      })
+      setPendingOutline(pendingMap)
+    } catch {
+      // leave previous state if refresh fails
+    }
+  }, [])
+
+  const approveOne = useCallback(
+    async (requestid: number) => {
+      setActionBusy((p) => ({ ...p, [requestid]: 'approve' }))
+      try {
+        await approveBookingRequest(requestid)
+        toast.success('Booking approved')
+        await refreshCalendarData()
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : 'Failed to approve booking'
+        toast.error(msg)
+      } finally {
+        setActionBusy((p) => ({ ...p, [requestid]: null }))
+      }
+    },
+    [refreshCalendarData]
+  )
+
+  const rejectOne = useCallback(
+    async (requestid: number) => {
+      setActionBusy((p) => ({ ...p, [requestid]: 'reject' }))
+      try {
+        await rejectBookingRequest(requestid)
+        toast.success('Booking declined')
+        await refreshCalendarData()
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : 'Failed to decline booking'
+        toast.error(msg)
+      } finally {
+        setActionBusy((p) => ({ ...p, [requestid]: null }))
+      }
+    },
+    [refreshCalendarData]
+  )
+
   return (
     <div className=" flex gap-2 p-2 ">
-      <Calendar
-        markedDate={markedDate ?? undefined}
-        initialMonth={markedDate ?? undefined}
-      />
+      <div className="flex flex-col gap-2 w-[640px] max-w-full shrink-0">
+        <Calendar
+          markedDate={markedDate ?? undefined}
+          initialMonth={markedDate ?? undefined}
+          markers={calendarMarkers}
+          pendingOutline={pendingOutline}
+          value={
+            selectedISODate
+              ? (() => {
+                  const m = selectedISODate.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+                  if (m)
+                    return new Date(
+                      Number(m[1]),
+                      Number(m[2]) - 1,
+                      Number(m[3])
+                    )
+                  return new Date(selectedISODate)
+                })()
+              : undefined
+          }
+          onDateChangeAction={(d) => {
+            const iso = toISODateString(d)
+            setSelectedISODate(iso)
+          }}
+        />
+        {/* Legend for calendar markers */}
+        <div className="flex items-center justify-center gap-6 px-1 text-center">
+          <div className="flex items-center gap-1">
+            <span className="inline-block w-3 h-3 rounded-full bg-black border border-black-500" />
+            <span className="text-xs text-gray-700">Current Date</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <span className="inline-block w-3 h-3 rounded-full bg-yellow-400 border border-yellow-500" />
+            <span className="text-xs text-gray-700">1 approved booking</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <span className="inline-block w-3 h-3 rounded-full bg-red-500 border border-red-600" />
+            <span className="text-xs text-gray-700">2 approved bookings</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <span className="inline-block w-3 h-3 rounded-full bg-white border-2 border-blue-500" />
+            <span className="text-xs text-gray-700">Pending request(s)</span>
+          </div>
+        </div>
+      </div>
       <div className=" flex flex-col p-2 bg-gray-300 w-full rounded ">
         <div className="flex justify-between">
           {/* (api name fetching here) */}
-          <p className="text-xl font-semibold">User&apos;s Booking</p>
+          <p className="text-xl font-semibold">
+            {selectedISODate
+              ? `Bookings on ${formatDisplayDate(selectedISODate)}`
+              : "User's Booking"}
+          </p>
         </div>
 
         <div className=" bg-gray-300 rounded h-full">
-          <div className="overflow-y-auto max-h-[42vh] space-y-3 pr-1">
-            {fields.map(renderField)}
-          </div>
+          {selectedISODate ? (
+            <div className="overflow-y-auto max-h-[42vh] space-y-3 pr-1">
+              {bookingsForDate.length === 0 ? (
+                <div className="text-sm text-gray-700 p-2">
+                  No pending or approved bookings on this date.
+                </div>
+              ) : (
+                bookingsForDate.map((r, idx) => {
+                  const fullName = [r.firstname, r.lastname]
+                    .filter(Boolean)
+                    .join(' ')
+                  const contactPersonCombo = [
+                    r.contact_person,
+                    r.contact_person_number,
+                  ]
+                    .filter(Boolean)
+                    .join(' | ')
+                  const timeStart = (r.event_time || '').toString().slice(0, 5)
+                  const timeEnd = (r.event_end_time || '')
+                    .toString()
+                    .slice(0, 5)
+                  const isApproved =
+                    r.kind === 'confirmed' && r.booking_status !== 'cancelled'
+                  const badgeClass = isApproved
+                    ? 'bg-green-700 text-white'
+                    : 'bg-gray-700 text-white'
+                  const reqId = Number((r as any).requestid || 0)
+                  const busy = reqId ? actionBusy[reqId] : null
+                  return (
+                    <div
+                      key={
+                        (r as any).requestid || (r as any).confirmed_id || idx
+                      }
+                      className="bg-white rounded p-3 shadow"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="font-semibold">
+                          {r.event_name || '—'}
+                        </div>
+                        <span
+                          className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${badgeClass}`}
+                        >
+                          {isApproved ? 'Approved' : 'Pending'}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 text-sm mt-2">
+                        <div>
+                          <div className="font-medium">Email</div>
+                          <div className="text-gray-700">
+                            {r.username || '—'}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="font-medium">Complete name</div>
+                          <div className="text-gray-700">{fullName || '—'}</div>
+                        </div>
+                        <div>
+                          <div className="font-medium">Contact #</div>
+                          <div className="text-gray-700">
+                            {r.contact_info || '—'}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="font-medium">
+                            Contact Person & Number
+                          </div>
+                          <div className="text-gray-700">
+                            {contactPersonCombo || '—'}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="font-medium">Location</div>
+                          <div className="text-gray-700">
+                            {r.event_address || '—'}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="font-medium">Package</div>
+                          <div className="text-gray-700">
+                            {r.package_name || '—'}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="font-medium">Event date</div>
+                          <div className="text-gray-700">
+                            {formatDisplayDate(r.event_date)}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="font-medium">Event time</div>
+                          <div className="text-gray-700">
+                            {timeStart
+                              ? timeEnd
+                                ? `${formatDisplayTime(
+                                    timeStart
+                                  )} - ${formatDisplayTime(timeEnd)}`
+                                : formatDisplayTime(timeStart)
+                              : '—'}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="font-medium">Extension (hrs)</div>
+                          <div className="text-gray-700">
+                            {(r.extension_duration as any) ?? '—'}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="font-medium">Signal</div>
+                          <div className="text-gray-700">
+                            {r.strongest_signal || '—'}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="font-medium">Booth placement</div>
+                          <div className="text-gray-700">
+                            {(r as any).booth_placement ||
+                              (r as any).boothPlacement ||
+                              '—'}
+                          </div>
+                        </div>
+                        {/* Actions for pending requests on selected date */}
+                        {!isApproved && reqId ? (
+                          <div className="mt-3 flex justify-end gap-2">
+                            <button
+                              type="button"
+                              className="px-3 py-1.5 rounded bg-litratored text-white text-xs disabled:opacity-50"
+                              disabled={busy === 'reject'}
+                              onClick={() => {
+                                setEvaluateTarget(r)
+                                setConfirmRejectOpen(true)
+                              }}
+                            >
+                              {busy === 'reject' ? 'Declining…' : 'Decline'}
+                            </button>
+                            <button
+                              type="button"
+                              className="px-3 py-1.5 rounded bg-litratoblack text-white text-xs disabled:opacity-50"
+                              disabled={busy === 'approve'}
+                              onClick={() => {
+                                setEvaluateTarget(r)
+                                setConfirmApproveOpen(true)
+                              }}
+                            >
+                              {busy === 'approve' ? 'Approving…' : 'Approve'}
+                            </button>
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
+                  )
+                })
+              )}
+            </div>
+          ) : (
+            <div className="overflow-y-auto max-h-[42vh] space-y-3 pr-1">
+              {fields.map(renderField)}
+            </div>
+          )}
 
-          <span className="flex justify-end gap-2 mt-4">
-            <button
-              className="bg-red-500 text-white px-4 py-2 rounded disabled:opacity-50"
-              disabled={submitting !== null}
-              onClick={() => {
-                if (!selected?.requestid) {
-                  toast.error('No booking selected to decline')
-                  return
-                }
-                setRejectOpen(true)
-              }}
-            >
-              {submitting === 'reject' ? 'Rejecting…' : 'Decline'}
-            </button>
-            <button
-              className="bg-green-500 text-white px-4 py-2 rounded disabled:opacity-50"
-              disabled={submitting !== null}
-              onClick={() => setApproveOpen(true)}
-            >
-              {submitting === 'approve' ? 'Approving…' : 'Approve'}
-            </button>
-          </span>
+          {/* Approve/Decline controls removed per requirement */}
         </div>
       </div>
 
-      {/* Approve confirmation modal */}
-      <Dialog open={approveOpen} onOpenChange={setApproveOpen}>
-        <DialogContent>
+      {/* Approve/Decline confirmation dialogs for date-selected pending requests */}
+      <Dialog
+        open={confirmApproveOpen}
+        onOpenChange={(o) => {
+          if (!o) {
+            setConfirmApproveOpen(false)
+            setEvaluateTarget(null)
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Approve this booking?</DialogTitle>
+            <DialogTitle>Approve this booking request?</DialogTitle>
             <DialogDescription>
-              This will accept the booking and automatically reject other
-              pending requests with the same date, time, and package. Continue?
+              This will convert the request into an approved booking.
             </DialogDescription>
           </DialogHeader>
+          <div className="text-sm space-y-1">
+            <div>
+              <span className="font-medium">Event:</span>{' '}
+              {evaluateTarget?.event_name || '—'}
+            </div>
+            <div>
+              <span className="font-medium">Date:</span>{' '}
+              {evaluateTarget?.event_date
+                ? formatDisplayDate(evaluateTarget.event_date as any)
+                : '—'}
+            </div>
+            <div>
+              <span className="font-medium">Time:</span>{' '}
+              {(() => {
+                const s = (evaluateTarget?.event_time || '')
+                  .toString()
+                  .slice(0, 5)
+                const e = (evaluateTarget?.event_end_time || '')
+                  .toString()
+                  .slice(0, 5)
+                return s
+                  ? e
+                    ? `${formatDisplayTime(s)} - ${formatDisplayTime(e)}`
+                    : formatDisplayTime(s)
+                  : '—'
+              })()}
+            </div>
+          </div>
           <DialogFooter>
             <DialogClose asChild>
               <button
                 type="button"
-                className="px-4 py-2 rounded border border-gray-300 hover:bg-gray-100"
-                disabled={submitting === 'approve'}
+                className="px-4 py-2 rounded border text-sm"
               >
                 Cancel
               </button>
             </DialogClose>
             <button
               type="button"
-              className="px-4 py-2 rounded bg-green-600 text-white hover:bg-green-700 disabled:opacity-50"
-              disabled={submitting === 'approve'}
+              className="px-4 py-2 rounded bg-litratoblack text-white text-sm disabled:opacity-50"
+              disabled={(() => {
+                const id = Number((evaluateTarget as any)?.requestid || 0)
+                return id ? actionBusy[id] === 'approve' : true
+              })()}
               onClick={async () => {
-                if (!selected?.date) return
+                const id = Number((evaluateTarget as any)?.requestid || 0)
+                if (!id) return
                 try {
-                  setSubmitting('approve')
-                  const requestid = selected?.requestid ?? null
-                  if (!requestid) throw new Error('Missing request id')
-                  await approveBookingRequest(requestid)
-                  toast.success('Booking approved and confirmed')
-                  setApproveOpen(false)
-                  window.location.reload()
-                } catch (e: unknown) {
-                  const msg =
-                    e instanceof Error ? e.message : 'Failed to approve'
-                  toast.error(msg)
+                  await approveOne(id)
                 } finally {
-                  setSubmitting(null)
+                  setConfirmApproveOpen(false)
+                  setEvaluateTarget(null)
                 }
               }}
             >
-              {submitting === 'approve' ? 'Approving…' : 'Approve'}
+              {(() => {
+                const id = Number((evaluateTarget as any)?.requestid || 0)
+                return id && actionBusy[id] === 'approve'
+                  ? 'Approving…'
+                  : 'Approve'
+              })()}
             </button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Reject confirmation modal */}
       <Dialog
-        open={rejectOpen}
-        onOpenChange={(open) => {
-          if (!open && submitting !== 'reject') {
-            setRejectOpen(false)
+        open={confirmRejectOpen}
+        onOpenChange={(o) => {
+          if (!o) {
+            setConfirmRejectOpen(false)
+            setEvaluateTarget(null)
           }
         }}
       >
-        <DialogContent>
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Decline this booking?</DialogTitle>
+            <DialogTitle>Decline this booking request?</DialogTitle>
             <DialogDescription>
-              This action will decline the pending booking request. Continue?
+              This will mark the booking request as declined.
             </DialogDescription>
           </DialogHeader>
+          <div className="text-sm space-y-1">
+            <div>
+              <span className="font-medium">Event:</span>{' '}
+              {evaluateTarget?.event_name || '—'}
+            </div>
+            <div>
+              <span className="font-medium">Date:</span>{' '}
+              {evaluateTarget?.event_date
+                ? formatDisplayDate(evaluateTarget.event_date as any)
+                : '—'}
+            </div>
+            <div>
+              <span className="font-medium">Time:</span>{' '}
+              {(() => {
+                const s = (evaluateTarget?.event_time || '')
+                  .toString()
+                  .slice(0, 5)
+                const e = (evaluateTarget?.event_end_time || '')
+                  .toString()
+                  .slice(0, 5)
+                return s
+                  ? e
+                    ? `${formatDisplayTime(s)} - ${formatDisplayTime(e)}`
+                    : formatDisplayTime(s)
+                  : '—'
+              })()}
+            </div>
+          </div>
           <DialogFooter>
             <DialogClose asChild>
               <button
                 type="button"
-                className="px-4 py-2 rounded border border-gray-300 hover:bg-gray-100"
-                disabled={submitting === 'reject'}
+                className="px-4 py-2 rounded border text-sm"
               >
                 Cancel
               </button>
             </DialogClose>
             <button
               type="button"
-              className="px-4 py-2 rounded bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
-              disabled={submitting === 'reject'}
+              className="px-4 py-2 rounded bg-litratored text-white text-sm disabled:opacity-50"
+              disabled={(() => {
+                const id = Number((evaluateTarget as any)?.requestid || 0)
+                return id ? actionBusy[id] === 'reject' : true
+              })()}
               onClick={async () => {
-                if (!selected?.requestid) {
-                  toast.error('Missing request id')
-                  return
-                }
+                const id = Number((evaluateTarget as any)?.requestid || 0)
+                if (!id) return
                 try {
-                  setSubmitting('reject')
-                  await rejectBookingRequest(selected.requestid)
-                  toast.error('Booking rejected')
-                  setRejectOpen(false)
-                  window.location.reload()
-                } catch (e: unknown) {
-                  const msg =
-                    e instanceof Error ? e.message : 'Failed to reject'
-                  toast.error(msg)
+                  await rejectOne(id)
                 } finally {
-                  setSubmitting(null)
+                  setConfirmRejectOpen(false)
+                  setEvaluateTarget(null)
                 }
               }}
             >
-              {submitting === 'reject' ? 'Rejecting…' : 'Decline'}
+              {(() => {
+                const id = Number((evaluateTarget as any)?.requestid || 0)
+                return id && actionBusy[id] === 'reject'
+                  ? 'Declining…'
+                  : 'Decline'
+              })()}
             </button>
           </DialogFooter>
         </DialogContent>
