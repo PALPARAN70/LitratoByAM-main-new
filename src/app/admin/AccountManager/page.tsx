@@ -1,14 +1,17 @@
-'use client'
-import { useEffect, useState } from 'react'
-import { formatDisplayDateTime } from '@/lib/datetime'
-import { toast } from 'sonner'
-import { type createUserData } from '../../../../schemas/schema/requestvalidation'
-import { Ellipsis } from 'lucide-react'
+"use client";
+import { useEffect, useState } from "react";
+import { formatDisplayDateTime } from "@/lib/datetime";
+import { toast } from "sonner";
+import {
+  type createUserData,
+  createUserSchema,
+} from "../../../../schemas/schema/requestvalidation";
+import { Ellipsis } from "lucide-react";
 import {
   Popover,
   PopoverTrigger,
   PopoverContent,
-} from '@/components/ui/popover'
+} from "@/components/ui/popover";
 
 // ADD: pagination components
 import {
@@ -18,45 +21,45 @@ import {
   PaginationItem,
   PaginationPrevious,
   PaginationNext,
-} from '@/components/ui/pagination'
+} from "@/components/ui/pagination";
 type User = {
-  id: string
-  firstname: string
-  lastname: string
-  email: string
-  contact: string
-  isactive: boolean
-  last_updated: string | null
-  last_login?: string | null
-  role?: string
-}
-type TabKey = 'createusers' | 'customers' | 'staff' | 'admin'
+  id: string;
+  firstname: string;
+  lastname: string;
+  email: string;
+  contact: string;
+  isactive: boolean;
+  last_updated: string | null;
+  last_login?: string | null;
+  role?: string;
+};
+type TabKey = "createusers" | "customers" | "staff" | "admin";
 
 // ADD: shared 3-page window helper (same as other tables)
 function pageWindow(current: number, total: number, size = 3): number[] {
-  if (total <= 0) return []
-  const start = Math.floor((Math.max(1, current) - 1) / size) * size + 1
-  const end = Math.min(total, start + size - 1)
-  return Array.from({ length: end - start + 1 }, (_, i) => start + i)
+  if (total <= 0) return [];
+  const start = Math.floor((Math.max(1, current) - 1) / size) * size + 1;
+  const end = Math.min(total, start + size - 1);
+  return Array.from({ length: end - start + 1 }, (_, i) => start + i);
 }
 
 export default function AdminAccountManagementPage() {
-  const [active, setActive] = useState<TabKey>('customers')
+  const [active, setActive] = useState<TabKey>("customers");
   // controlled search input and applied search term
-  const [searchInput, setSearchInput] = useState('')
-  const [searchTerm, setSearchTerm] = useState('')
+  const [searchInput, setSearchInput] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
 
   // Debounce: when user types, wait 500ms after last keystroke to apply searchTerm
   useEffect(() => {
-    const trimmed = searchInput.trim()
+    const trimmed = searchInput.trim();
     // If input equals applied term, do nothing
-    if (trimmed === searchTerm) return
+    if (trimmed === searchTerm) return;
     const id = setTimeout(() => {
-      setSearchTerm(trimmed)
-    }, 500)
-    return () => clearTimeout(id)
+      setSearchTerm(trimmed);
+    }, 500);
+    return () => clearTimeout(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchInput]) // intentionally only depends on searchInput
+  }, [searchInput]); // intentionally only depends on searchInput
 
   // Note: advanced filter options can be added in future if needed
 
@@ -68,34 +71,34 @@ export default function AdminAccountManagementPage() {
 
       <nav className="flex gap-2 mb-6">
         <TabButton
-          active={active === 'createusers'}
-          onClick={() => setActive('createusers')}
+          active={active === "createusers"}
+          onClick={() => setActive("createusers")}
         >
           Create User
         </TabButton>
         <TabButton
-          active={active === 'customers'}
-          onClick={() => setActive('customers')}
+          active={active === "customers"}
+          onClick={() => setActive("customers")}
         >
           Customers
         </TabButton>
         <TabButton
-          active={active === 'staff'}
-          onClick={() => setActive('staff')}
+          active={active === "staff"}
+          onClick={() => setActive("staff")}
         >
           Staff
         </TabButton>
         <TabButton
-          active={active === 'admin'}
-          onClick={() => setActive('admin')}
+          active={active === "admin"}
+          onClick={() => setActive("admin")}
         >
           Admin
         </TabButton>
         <div className="flex-grow flex">
           <form
             onSubmit={(e) => {
-              e.preventDefault()
-              setSearchTerm(searchInput.trim())
+              e.preventDefault();
+              setSearchTerm(searchInput.trim());
             }}
             className="w-1/4 bg-gray-400 rounded-full items-center flex px-1 py-1"
           >
@@ -110,22 +113,22 @@ export default function AdminAccountManagementPage() {
         </div>
       </nav>
       <section className="bg-white h-125 rounded-xl shadow p-4">
-        {active === 'createusers' && <CreateUserPanel />}
-        {active === 'customers' && (
+        {active === "createusers" && <CreateUserPanel />}
+        {active === "customers" && (
           <UserListPanel
             role="customer"
             title="Customer Accounts"
             searchTerm={searchTerm}
           />
         )}
-        {active === 'staff' && (
+        {active === "staff" && (
           <UserListPanel
             role="employee"
             title="Staff (Employee) Accounts"
             searchTerm={searchTerm}
           />
         )}
-        {active === 'admin' && (
+        {active === "admin" && (
           <UserListPanel
             role="admin"
             title="Admin Accounts"
@@ -134,7 +137,7 @@ export default function AdminAccountManagementPage() {
         )}
       </section>
     </div>
-  )
+  );
 }
 
 function TabButton({
@@ -142,9 +145,9 @@ function TabButton({
   onClick,
   children,
 }: {
-  active: boolean
-  onClick: () => void
-  children: React.ReactNode
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
 }) {
   return (
     <div
@@ -152,13 +155,13 @@ function TabButton({
       className={`px-4 py-2 rounded-full cursor-pointer border font-semibold transition
         ${
           active
-            ? 'bg-litratoblack text-white border-litratoblack'
-            : 'bg-white text-litratoblack border-gray-300 hover:bg-gray-100'
+            ? "bg-litratoblack text-white border-litratoblack"
+            : "bg-white text-litratoblack border-gray-300 hover:bg-gray-100"
         }`}
     >
       {children}
     </div>
-  )
+  );
 }
 
 /* Unified User List Panel */
@@ -168,200 +171,200 @@ function UserListPanel({
   // added: incoming search term to filter by last name (server-side query)
   searchTerm,
 }: {
-  role: 'customer' | 'employee' | 'admin'
-  title: string
-  searchTerm?: string
+  role: "customer" | "employee" | "admin";
+  title: string;
+  searchTerm?: string;
 }) {
-  const [users, setUsers] = useState<User[]>([])
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [users, setUsers] = useState<User[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    let cancelled = false
+    let cancelled = false;
     const fetchUsers = async () => {
-      setLoading(true)
-      setError(null)
+      setLoading(true);
+      setError(null);
       try {
         const raw =
-          typeof window !== 'undefined'
-            ? localStorage.getItem('access_token')
-            : null
+          typeof window !== "undefined"
+            ? localStorage.getItem("access_token")
+            : null;
         const authHeader =
-          raw && raw.startsWith('Bearer ') ? raw : raw ? `Bearer ${raw}` : ''
+          raw && raw.startsWith("Bearer ") ? raw : raw ? `Bearer ${raw}` : "";
         const url =
           `http://localhost:5000/api/admin/list?role=${role}` +
-          (searchTerm ? `&lastname=${encodeURIComponent(searchTerm)}` : '')
+          (searchTerm ? `&lastname=${encodeURIComponent(searchTerm)}` : "");
         const res = await fetch(url, {
           headers: {
-            'Content-Type': 'application/json',
+            "Content-Type": "application/json",
             ...(authHeader ? { Authorization: authHeader } : {}),
           },
-        })
+        });
         if (res.status === 401)
-          throw new Error('Unauthorized. Please log in again.')
+          throw new Error("Unauthorized. Please log in again.");
         if (res.status === 403)
-          throw new Error('Forbidden: Admin role required.')
+          throw new Error("Forbidden: Admin role required.");
         if (!res.ok) {
-          const msg = await res.text()
-          throw new Error(msg || `Failed to load ${role} list (${res.status})`)
+          const msg = await res.text();
+          throw new Error(msg || `Failed to load ${role} list (${res.status})`);
         }
-        const data = await res.json()
+        const data = await res.json();
         if (!cancelled) {
-          setUsers(Array.isArray(data.users) ? data.users : [])
+          setUsers(Array.isArray(data.users) ? data.users : []);
         }
       } catch (e) {
-        const message = e instanceof Error ? e.message : 'Failed to load users'
-        if (!cancelled) setError(message)
+        const message = e instanceof Error ? e.message : "Failed to load users";
+        if (!cancelled) setError(message);
       } finally {
-        if (!cancelled) setLoading(false)
+        if (!cancelled) setLoading(false);
       }
-    }
-    fetchUsers()
+    };
+    fetchUsers();
     return () => {
-      cancelled = true
-    }
-  }, [role, searchTerm]) // re-run when searchTerm changes
+      cancelled = true;
+    };
+  }, [role, searchTerm]); // re-run when searchTerm changes
 
   // Helper to normalize Authorization header
   const getAuthHeader = () => {
     const raw =
-      typeof window !== 'undefined'
-        ? localStorage.getItem('access_token')
-        : null
-    return raw ? (raw.startsWith('Bearer ') ? raw : `Bearer ${raw}`) : ''
-  }
+      typeof window !== "undefined"
+        ? localStorage.getItem("access_token")
+        : null;
+    return raw ? (raw.startsWith("Bearer ") ? raw : `Bearer ${raw}`) : "";
+  };
 
   // Re-fetch list helper can be reintroduced if needed
 
   // Connect to backend block/unblock
-  const callAdminAction = async (id: string, action: 'block' | 'unblock') => {
+  const callAdminAction = async (id: string, action: "block" | "unblock") => {
     try {
-      const authHeader = getAuthHeader()
+      const authHeader = getAuthHeader();
       const res = await fetch(
         `http://localhost:5000/api/admin/user/${id}/${action}`,
         {
-          method: 'PATCH',
+          method: "PATCH",
           headers: {
-            'Content-Type': 'application/json',
+            "Content-Type": "application/json",
             ...(authHeader ? { Authorization: authHeader } : {}),
           },
           body: JSON.stringify({}),
         }
-      )
-      const data = await res.json()
+      );
+      const data = await res.json();
 
       if (!res.ok) {
         // Prefer backend toast message when available
         const msg =
-          data?.toast?.message || data?.message || `Failed to ${action} user`
-        toast.error(msg)
-        throw new Error(msg)
+          data?.toast?.message || data?.message || `Failed to ${action} user`;
+        toast.error(msg);
+        throw new Error(msg);
       }
 
       // Show backend toast (success / error) if present, fallback to generic
       if (data?.toast?.message) {
-        if (data.toast.type === 'success') toast.success(data.toast.message)
-        else toast.error(data.toast.message)
+        if (data.toast.type === "success") toast.success(data.toast.message);
+        else toast.error(data.toast.message);
       } else {
         toast.success(
-          `User ${action === 'block' ? 'blocked' : 'unblocked'} successfully`
-        )
+          `User ${action === "block" ? "blocked" : "unblocked"} successfully`
+        );
       }
 
       // Use the backend response to update the toggled user's status
       setUsers((prev) =>
         prev.map((u) => (u.id === id ? { ...u, isactive: !!data.isactive } : u))
-      )
+      );
       // No need to refresh; the UI already reflects the new state
     } catch (e) {
       // Use sonner toast for errors instead of alert
       const message =
-        e instanceof Error ? e.message : `Failed to ${action} user`
-      toast.error(message)
+        e instanceof Error ? e.message : `Failed to ${action} user`;
+      toast.error(message);
     }
-  }
+  };
 
-  const block = (id: string) => callAdminAction(id, 'block')
-  const unblock = (id: string) => callAdminAction(id, 'unblock')
+  const block = (id: string) => callAdminAction(id, "block");
+  const unblock = (id: string) => callAdminAction(id, "unblock");
 
   // --- NEW: compute available role change choices based on current panel role
   const roleChoices: {
-    label: string
-    value: 'customer' | 'employee' | 'admin'
+    label: string;
+    value: "customer" | "employee" | "admin";
   }[] = (() => {
-    if (role === 'customer')
+    if (role === "customer")
       return [
-        { label: 'Staff', value: 'employee' },
-        { label: 'Admin', value: 'admin' },
-      ]
-    if (role === 'employee')
+        { label: "Staff", value: "employee" },
+        { label: "Admin", value: "admin" },
+      ];
+    if (role === "employee")
       return [
-        { label: 'Customer', value: 'customer' },
-        { label: 'Admin', value: 'admin' },
-      ]
+        { label: "Customer", value: "customer" },
+        { label: "Admin", value: "admin" },
+      ];
     // role === "admin"
     return [
-      { label: 'Customer', value: 'customer' },
-      { label: 'Staff', value: 'employee' },
-    ]
-  })()
+      { label: "Customer", value: "customer" },
+      { label: "Staff", value: "employee" },
+    ];
+  })();
 
   // --- NEW: arrow function to change a user's role
   const changeRole = async (
     id: string,
-    newRole: 'customer' | 'employee' | 'admin'
+    newRole: "customer" | "employee" | "admin"
   ) => {
     try {
-      const authHeader = getAuthHeader()
+      const authHeader = getAuthHeader();
       const res = await fetch(
         `http://localhost:5000/api/admin/user/${id}/role`,
         {
-          method: 'PATCH',
+          method: "PATCH",
           headers: {
-            'Content-Type': 'application/json',
+            "Content-Type": "application/json",
             ...(authHeader ? { Authorization: authHeader } : {}),
           },
           body: JSON.stringify({ role: newRole }),
         }
-      )
-      const data = await res.json()
+      );
+      const data = await res.json();
 
       if (!res.ok) {
         const msg =
-          data?.toast?.message || data?.message || 'Failed to change role'
-        if (data?.toast?.type === 'error') toast.error(msg)
-        else toast.error(msg)
-        throw new Error(msg)
+          data?.toast?.message || data?.message || "Failed to change role";
+        if (data?.toast?.type === "error") toast.error(msg);
+        else toast.error(msg);
+        throw new Error(msg);
       }
 
       // show backend toast if present, fallback to generic
       if (data?.toast?.message) {
-        if (data.toast.type === 'success') {
-          toast.success(data.toast.message)
+        if (data.toast.type === "success") {
+          toast.success(data.toast.message);
         } else {
-          toast.error(data.toast.message)
+          toast.error(data.toast.message);
         }
       } else {
-        toast.success('Role changed successfully')
+        toast.success("Role changed successfully");
       }
 
       // If the user's new role no longer matches the current panel's role, remove them from list.
       if (newRole !== role) {
-        setUsers((prev) => prev.filter((u) => u.id !== id))
+        setUsers((prev) => prev.filter((u) => u.id !== id));
       } else {
         // otherwise update the user's role in-place
         setUsers((prev) =>
           prev.map((u) => (u.id === id ? { ...u, role: newRole } : u))
-        )
+        );
       }
     } catch (e) {
-      const message = e instanceof Error ? e.message : 'Failed to change role'
-      toast.error(message)
+      const message = e instanceof Error ? e.message : "Failed to change role";
+      toast.error(message);
     }
-  }
+  };
 
   // Client-side fallback filter so matched users always display in the table
-  const normalizedSearch = (searchTerm || '').trim().toLowerCase()
+  const normalizedSearch = (searchTerm || "").trim().toLowerCase();
   const displayedUsers = users.filter((u) =>
     normalizedSearch
       ? u.firstname.toLowerCase().includes(normalizedSearch) ||
@@ -369,36 +372,36 @@ function UserListPanel({
         u.email.toLowerCase().includes(normalizedSearch) ||
         u.contact.toLowerCase().includes(normalizedSearch)
       : true
-  )
+  );
 
   // ADD: pagination for the role table
-  const PER_PAGE = 5
-  const [page, setPage] = useState(1)
-  const totalPages = Math.max(1, Math.ceil(displayedUsers.length / PER_PAGE))
-  const windowPages = pageWindow(page, totalPages, 3)
+  const PER_PAGE = 5;
+  const [page, setPage] = useState(1);
+  const totalPages = Math.max(1, Math.ceil(displayedUsers.length / PER_PAGE));
+  const windowPages = pageWindow(page, totalPages, 3);
   useEffect(() => {
     // clamp page when data changes
-    setPage((p) => Math.min(Math.max(1, p), totalPages))
-  }, [totalPages, displayedUsers.length])
+    setPage((p) => Math.min(Math.max(1, p), totalPages));
+  }, [totalPages, displayedUsers.length]);
   useEffect(() => {
     // reset to page 1 when role or search changes
-    setPage(1)
-  }, [role, searchTerm])
+    setPage(1);
+  }, [role, searchTerm]);
   const paginatedUsers = displayedUsers.slice(
     (page - 1) * PER_PAGE,
     (page - 1) * PER_PAGE + PER_PAGE
-  )
+  );
 
   const tabletitles = [
-    { label: 'First Name' },
-    { label: 'Last Name' },
-    { label: 'Email' },
-    { label: 'Contact' },
-    { label: 'Status' },
-    { label: 'Last Logged In' },
-    { label: 'Last Updated' },
-    { label: 'Actions' },
-  ]
+    { label: "First Name" },
+    { label: "Last Name" },
+    { label: "Email" },
+    { label: "Contact" },
+    { label: "Status" },
+    { label: "Last Logged In" },
+    { label: "Last Updated" },
+    { label: "Actions" },
+  ];
   return (
     <div className="flex h-full flex-col">
       <div className="border-b-2 border-black mb-4">
@@ -415,8 +418,8 @@ function UserListPanel({
                 <Th
                   key={item.label}
                   className={`whitespace-nowrap ${
-                    idx === 0 ? 'rounded-tl-xl' : ''
-                  } ${idx === tabletitles.length - 1 ? 'rounded-tr-xl' : ''}`}
+                    idx === 0 ? "rounded-tl-xl" : ""
+                  } ${idx === tabletitles.length - 1 ? "rounded-tr-xl" : ""}`}
                 >
                   {item.label}
                 </Th>
@@ -433,14 +436,14 @@ function UserListPanel({
 
                 <Td>
                   <div className="flex w-20">
-                    {u.isactive ? 'Active' : 'Inactive'}
+                    {u.isactive ? "Active" : "Inactive"}
                   </div>
                 </Td>
                 <Td>
-                  {u.last_login ? formatDisplayDateTime(u.last_login) : '—'}
+                  {u.last_login ? formatDisplayDateTime(u.last_login) : "—"}
                 </Td>
                 <Td>
-                  {u.last_updated ? formatDisplayDateTime(u.last_updated) : '—'}
+                  {u.last_updated ? formatDisplayDateTime(u.last_updated) : "—"}
                 </Td>
                 <Td>
                   {/* ...existing actions popover... */}
@@ -510,7 +513,7 @@ function UserListPanel({
             {displayedUsers.length === 0 && !loading && (
               <tr>
                 <td colSpan={8} className="text-center py-6 text-gray-500">
-                  {searchTerm ? 'No available users' : `No ${role}s found`}
+                  {searchTerm ? "No available users" : `No ${role}s found`}
                 </td>
               </tr>
             )}
@@ -526,10 +529,10 @@ function UserListPanel({
               <PaginationPrevious
                 href="#"
                 className="text-black no-underline hover:no-underline hover:text-black"
-                style={{ textDecoration: 'none' }}
+                style={{ textDecoration: "none" }}
                 onClick={(e) => {
-                  e.preventDefault()
-                  setPage((p) => Math.max(1, p - 1))
+                  e.preventDefault();
+                  setPage((p) => Math.max(1, p - 1));
                 }}
               />
             </PaginationItem>
@@ -540,10 +543,10 @@ function UserListPanel({
                   href="#"
                   isActive={n === page}
                   className="text-black no-underline hover:no-underline hover:text-black"
-                  style={{ textDecoration: 'none' }}
+                  style={{ textDecoration: "none" }}
                   onClick={(e) => {
-                    e.preventDefault()
-                    setPage(n)
+                    e.preventDefault();
+                    setPage(n);
                   }}
                 >
                   {n}
@@ -555,10 +558,10 @@ function UserListPanel({
               <PaginationNext
                 href="#"
                 className="text-black no-underline hover:no-underline hover:text-black"
-                style={{ textDecoration: 'none' }}
+                style={{ textDecoration: "none" }}
                 onClick={(e) => {
-                  e.preventDefault()
-                  setPage((p) => Math.min(totalPages, p + 1))
+                  e.preventDefault();
+                  setPage((p) => Math.min(totalPages, p + 1));
                 }}
               />
             </PaginationItem>
@@ -566,63 +569,88 @@ function UserListPanel({
         </Pagination>
       </div>
     </div>
-  )
+  );
 }
 
 // Create User Panel (local state only)
 function CreateUserPanel() {
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null);
 
   // Local form type including role (customer | employee)
   type AdminCreateUserForm = createUserData & {
-    role: 'customer' | 'employee'
-  }
+    role: "customer" | "employee";
+  };
 
   const [formData, setFormData] = useState<AdminCreateUserForm>({
-    firstname: '',
-    lastname: '',
-    email: '',
-    password: '',
-    contact: '',
+    firstname: "",
+    lastname: "",
+    email: "",
+    password: "",
+    contact: "",
     // NEW: include role in form state (UI constraint: customer or employee)
     // We'll send this only to the admin endpoint. Public register ignores roles.
-    role: 'customer' as 'customer' | 'employee',
-  })
+    role: "customer" as "customer" | "employee",
+  });
 
   const reset = () => {
     setFormData({
-      firstname: '',
-      lastname: '',
-      email: '',
-      password: '',
-      contact: '',
-      role: 'customer',
-    })
-  }
+      firstname: "",
+      lastname: "",
+      email: "",
+      password: "",
+      contact: "",
+      role: "customer",
+    });
+    // clear field errors on reset
+    setFormErrors({});
+  };
 
-  const [formErrors] = useState<Partial<Record<keyof createUserData, string>>>(
-    {}
-  )
+  // replace read-only errors with setter-backed errors
+  const [formErrors, setFormErrors] = useState<
+    Partial<Record<keyof createUserData, string>>
+  >({});
 
   const save = async () => {
-    if (!formData.firstname || !formData.lastname || !formData.email) return
+    setError(null);
+
+    // Validate with Zod and show field errors below inputs
+    const parsed = createUserSchema.safeParse({
+      firstname: formData.firstname,
+      lastname: formData.lastname,
+      email: formData.email,
+      password: formData.password,
+      contact: formData.contact,
+    });
+
+    if (!parsed.success) {
+      const fieldErrors: Partial<Record<keyof createUserData, string>> = {};
+      for (const issue of parsed.error.issues) {
+        const key = issue.path[0] as keyof createUserData;
+        if (key) fieldErrors[key] = issue.message;
+      }
+      setFormErrors(fieldErrors);
+      return;
+    } else {
+      setFormErrors({});
+    }
+
     try {
       // Prefer admin endpoint (requires Authorization) to allow setting role (customer/employee)
       const raw =
-        typeof window !== 'undefined'
-          ? localStorage.getItem('access_token')
-          : null
+        typeof window !== "undefined"
+          ? localStorage.getItem("access_token")
+          : null;
       const authHeader = raw
-        ? raw.startsWith('Bearer ')
+        ? raw.startsWith("Bearer ")
           ? raw
           : `Bearer ${raw}`
-        : ''
+        : "";
 
-      const useAdminEndpoint = !!authHeader // we can call admin endpoint only if logged in and token present
+      const useAdminEndpoint = !!authHeader; // we can call admin endpoint only if logged in and token present
 
       const url = useAdminEndpoint
-        ? 'http://localhost:5000/api/admin/user'
-        : 'http://localhost:5000/api/auth/register'
+        ? "http://localhost:5000/api/admin/user"
+        : "http://localhost:5000/api/auth/register";
 
       const payload = useAdminEndpoint
         ? {
@@ -653,143 +681,148 @@ function CreateUserPanel() {
             barangay: null,
             postal_code: null,
             contact: formData.contact,
-          }
+          };
 
       const res = await fetch(url, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-type': 'application/json',
+          "Content-type": "application/json",
           ...(useAdminEndpoint && authHeader
             ? { Authorization: authHeader }
             : {}),
         },
         body: JSON.stringify(payload),
-      })
-      const data = await res.json()
+      });
+      const data = await res.json();
       if (res.ok) {
         // if admin endpoint, no email verification required
         const msg = useAdminEndpoint
-          ? data?.toast?.message || 'User created successfully'
-          : 'User Creation successful! Please verify your email.'
-        toast.success(msg)
+          ? data?.toast?.message || "User created successfully"
+          : "User Creation successful! Please verify your email.";
+        toast.success(msg);
         // Optimistically add to the right-side Users table when admin created
         if (useAdminEndpoint && data?.user) {
           setUsers((prev) => {
-            const exists = prev.some((u) => u.id === String(data.user.id))
-            if (exists) return prev
+            const exists = prev.some((u) => u.id === String(data.user.id));
+            if (exists) return prev;
             // normalize shape — backend already returns id, firstname, lastname, email, contact, role
             const next: User = {
               id: String(data.user.id),
-              firstname: data.user.firstname || '',
-              lastname: data.user.lastname || '',
+              firstname: data.user.firstname || "",
+              lastname: data.user.lastname || "",
               email: data.user.email,
-              contact: data.user.contact || '',
+              contact: data.user.contact || "",
               role: data.user.role,
               isactive: true,
               last_updated: null,
               last_login: null,
-            }
-            return [next, ...prev]
-          })
+            };
+            return [next, ...prev];
+          });
         }
       } else {
-        setError(data?.toast?.message || data.message || 'User creation failed')
+        setError(
+          data?.toast?.message || data.message || "User creation failed"
+        );
       }
     } catch {
-      setError('An error occurred')
+      setError("An error occurred");
     }
-    reset()
-  }
+    reset();
+  };
 
   // --- NEW: users list for table in right column ---
-  const [users, setUsers] = useState<User[]>([])
-  const [loadingUsers, setLoadingUsers] = useState(false)
-  const [usersError, setUsersError] = useState<string | null>(null)
+  const [users, setUsers] = useState<User[]>([]);
+  const [loadingUsers, setLoadingUsers] = useState(false);
+  const [usersError, setUsersError] = useState<string | null>(null);
 
   useEffect(() => {
-    let cancelled = false
+    let cancelled = false;
     const fetchAll = async () => {
-      setLoadingUsers(true)
-      setUsersError(null)
+      setLoadingUsers(true);
+      setUsersError(null);
       try {
         const raw =
-          typeof window !== 'undefined'
-            ? localStorage.getItem('access_token')
-            : null
+          typeof window !== "undefined"
+            ? localStorage.getItem("access_token")
+            : null;
         const authHeader =
-          raw && raw.startsWith('Bearer ') ? raw : raw ? `Bearer ${raw}` : ''
-        const roles = ['customer', 'employee', 'admin']
+          raw && raw.startsWith("Bearer ") ? raw : raw ? `Bearer ${raw}` : "";
+        const roles = ["customer", "employee", "admin"];
         const promises = roles.map((r) =>
           fetch(`http://localhost:5000/api/admin/list?role=${r}`, {
             headers: {
-              'Content-Type': 'application/json',
+              "Content-Type": "application/json",
               ...(authHeader ? { Authorization: authHeader } : {}),
             },
           })
             .then(async (res) => {
-              if (!res.ok) return { users: [] }
-              return res.json()
+              if (!res.ok) return { users: [] };
+              return res.json();
             })
             .catch(() => ({ users: [] }))
-        )
-        const results = await Promise.all(promises)
-        if (cancelled) return
+        );
+        const results = await Promise.all(promises);
+        if (cancelled) return;
         // combine and dedupe by id
-        const combined: User[] = []
-        const seen = new Set<string>()
+        const combined: User[] = [];
+        const seen = new Set<string>();
         for (const r of results) {
-          const list = Array.isArray(r.users) ? r.users : []
+          const list = Array.isArray(r.users) ? r.users : [];
           for (const u of list) {
             if (!seen.has(u.id)) {
-              seen.add(u.id)
-              combined.push(u)
+              seen.add(u.id);
+              combined.push(u);
             }
           }
         }
-        setUsers(combined)
+        setUsers(combined);
       } catch (e) {
-        const message = e instanceof Error ? e.message : 'Failed to load users'
-        if (!cancelled) setUsersError(message)
+        const message = e instanceof Error ? e.message : "Failed to load users";
+        if (!cancelled) setUsersError(message);
       } finally {
-        if (!cancelled) setLoadingUsers(false)
+        if (!cancelled) setLoadingUsers(false);
       }
-    }
-    fetchAll()
+    };
+    fetchAll();
     return () => {
-      cancelled = true
-    }
-  }, [])
+      cancelled = true;
+    };
+  }, []);
 
   // --- NEW: pagination for right-side Users table ---
-  const USERS_PER_PAGE = 5
-  const [usersPage, setUsersPage] = useState(1)
-  const usersTotalPages = Math.max(1, Math.ceil(users.length / USERS_PER_PAGE))
-  const usersWindowPages = pageWindow(usersPage, usersTotalPages, 3)
+  const USERS_PER_PAGE = 5;
+  const [usersPage, setUsersPage] = useState(1);
+  const usersTotalPages = Math.max(1, Math.ceil(users.length / USERS_PER_PAGE));
+  const usersWindowPages = pageWindow(usersPage, usersTotalPages, 3);
   useEffect(() => {
-    setUsersPage((p) => Math.min(Math.max(1, p), usersTotalPages))
-  }, [usersTotalPages, users.length])
+    setUsersPage((p) => Math.min(Math.max(1, p), usersTotalPages));
+  }, [usersTotalPages, users.length]);
 
   const paginatedUsersRight = users.slice(
     (usersPage - 1) * USERS_PER_PAGE,
     (usersPage - 1) * USERS_PER_PAGE + USERS_PER_PAGE
-  )
+  );
 
   return (
-    <div className="grid gap-6 md:grid-cols-2 h-full">
+    <div className="grid gap-6 md:grid-cols-2 items-start">
       <div>
         <h2 className="text-xl font-semibold mb-3">Create User</h2>
         <div className="bg-white overflow-y-auto max-h-96">
           <form
             onSubmit={(e) => {
-              e.preventDefault()
-              save()
+              e.preventDefault();
+              save();
             }}
             className="grid gap-3"
           >
             <Input
               label="First name"
               value={formData.firstname}
-              onChange={(v) => setFormData((s) => ({ ...s, firstname: v }))}
+              onChange={(v) => {
+                setFormData((s) => ({ ...s, firstname: v }));
+                setFormErrors((e) => ({ ...e, firstname: undefined }));
+              }}
             />
             {formErrors.firstname && (
               <p className="text-red-500">{formErrors.firstname}</p>
@@ -797,7 +830,10 @@ function CreateUserPanel() {
             <Input
               label="Last name"
               value={formData.lastname}
-              onChange={(v) => setFormData((s) => ({ ...s, lastname: v }))}
+              onChange={(v) => {
+                setFormData((s) => ({ ...s, lastname: v }));
+                setFormErrors((e) => ({ ...e, lastname: undefined }));
+              }}
             />
             {formErrors.lastname && (
               <p className="text-red-500">{formErrors.lastname}</p>
@@ -806,7 +842,10 @@ function CreateUserPanel() {
               label="Email"
               type="email"
               value={formData.email}
-              onChange={(v) => setFormData((s) => ({ ...s, email: v }))}
+              onChange={(v) => {
+                setFormData((s) => ({ ...s, email: v }));
+                setFormErrors((e) => ({ ...e, email: undefined }));
+              }}
             />
             {formErrors.email && (
               <p className="text-red-500">{formErrors.email}</p>
@@ -815,7 +854,10 @@ function CreateUserPanel() {
               label="Password"
               type="password"
               value={formData.password}
-              onChange={(v) => setFormData((s) => ({ ...s, password: v }))}
+              onChange={(v) => {
+                setFormData((s) => ({ ...s, password: v }));
+                setFormErrors((e) => ({ ...e, password: undefined }));
+              }}
             />
             {formErrors.password && (
               <p className="text-red-500">{formErrors.password}</p>
@@ -823,7 +865,10 @@ function CreateUserPanel() {
             <Input
               label="Contact"
               value={formData.contact}
-              onChange={(v) => setFormData((s) => ({ ...s, contact: v }))}
+              onChange={(v) => {
+                setFormData((s) => ({ ...s, contact: v }));
+                setFormErrors((e) => ({ ...e, contact: undefined }));
+              }}
             />
             {formErrors.contact && (
               <p className="text-red-500">{formErrors.contact}</p>
@@ -836,7 +881,7 @@ function CreateUserPanel() {
                 onChange={(e) =>
                   setFormData((s) => ({
                     ...s,
-                    role: e.target.value as 'customer' | 'employee',
+                    role: e.target.value as "customer" | "employee",
                   }))
                 }
                 className="w-full border rounded-lg px-3 py-2 outline-none bg-white"
@@ -859,9 +904,9 @@ function CreateUserPanel() {
       </div>
 
       {/* --- right column table of users --- */}
-      <div className="flex h-full flex-col">
+      <div className="flex flex-col">
         <h2 className="text-xl font-semibold mb-3">Users</h2>
-        <div className="bg-white rounded-lg border flex-1 overflow-auto">
+        <div className="bg-white rounded-lg border overflow-auto max-h-[26rem]">
           {loadingUsers && <p className="text-gray-500">Loading users…</p>}
           {usersError && <p className="text-red-600">{usersError}</p>}
           {!loadingUsers && !usersError && (
@@ -893,7 +938,7 @@ function CreateUserPanel() {
                           <Td>{u.firstname}</Td>
                           <Td>{u.lastname}</Td>
                           <Td>{u.email}</Td>
-                          <Td>{u.role ?? '—'}</Td>
+                          <Td>{u.role ?? "—"}</Td>
                         </tr>
                       ))}
                       {/* NEW: filler rows to keep table height at 5 rows */}
@@ -925,10 +970,10 @@ function CreateUserPanel() {
                   <PaginationPrevious
                     href="#"
                     className="text-black no-underline hover:no-underline hover:text-black"
-                    style={{ textDecoration: 'none' }}
+                    style={{ textDecoration: "none" }}
                     onClick={(e) => {
-                      e.preventDefault()
-                      setUsersPage((p) => Math.max(1, p - 1))
+                      e.preventDefault();
+                      setUsersPage((p) => Math.max(1, p - 1));
                     }}
                   />
                 </PaginationItem>
@@ -939,10 +984,10 @@ function CreateUserPanel() {
                       href="#"
                       isActive={n === usersPage}
                       className="text-black no-underline hover:no-underline hover:text-black"
-                      style={{ textDecoration: 'none' }}
+                      style={{ textDecoration: "none" }}
                       onClick={(e) => {
-                        e.preventDefault()
-                        setUsersPage(n)
+                        e.preventDefault();
+                        setUsersPage(n);
                       }}
                     >
                       {n}
@@ -954,10 +999,10 @@ function CreateUserPanel() {
                   <PaginationNext
                     href="#"
                     className="text-black no-underline hover:no-underline hover:text-black"
-                    style={{ textDecoration: 'none' }}
+                    style={{ textDecoration: "none" }}
                     onClick={(e) => {
-                      e.preventDefault()
-                      setUsersPage((p) => Math.min(usersTotalPages, p + 1))
+                      e.preventDefault();
+                      setUsersPage((p) => Math.min(usersTotalPages, p + 1));
                     }}
                   />
                 </PaginationItem>
@@ -967,19 +1012,19 @@ function CreateUserPanel() {
         )}
       </div>
     </div>
-  )
+  );
 }
 
 function Input({
   label,
   value,
   onChange,
-  type = 'text',
+  type = "text",
 }: {
-  label: string
-  value: string
-  onChange: (v: string) => void
-  type?: string
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  type?: string;
 }) {
   return (
     <label className="block">
@@ -991,28 +1036,28 @@ function Input({
         className="w-full border rounded-lg px-3 py-2 outline-none"
       />
     </label>
-  )
+  );
 }
 /* UI table helpers (pruned unused components) */
 function Th({
   children,
-  className = '',
+  className = "",
 }: {
-  children: React.ReactNode
-  className?: string
+  children: React.ReactNode;
+  className?: string;
 }) {
   return (
     <th className={`px-3 py-2 text-sm font-semibold ${className}`}>
       {children}
     </th>
-  )
+  );
 }
 function Td({
   children,
-  className = '',
+  className = "",
 }: {
-  children: React.ReactNode
-  className?: string
+  children: React.ReactNode;
+  className?: string;
 }) {
-  return <td className={`px-3 py-2 text-sm ${className}`}>{children}</td>
+  return <td className={`px-3 py-2 text-sm ${className}`}>{children}</td>;
 }
