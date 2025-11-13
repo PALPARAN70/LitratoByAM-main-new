@@ -79,7 +79,6 @@ type EquipmentRow = {
   condition: string
   status: EquipmentTabKey
   moreDetails: string
-  last_date_checked: string
   notes: string
   created_at: string
   last_updated: string
@@ -476,9 +475,6 @@ export default function InventoryManagementPage() {
         ? 'available'
         : 'unavailable') as EquipmentTabKey,
       moreDetails: 'View',
-      last_date_checked: String(
-        (it as { last_date_checked?: unknown }).last_date_checked ?? ''
-      ),
       notes: String((it as { notes?: unknown }).notes ?? ''),
       created_at: String((it as { created_at?: unknown }).created_at ?? ''),
       last_updated: String(
@@ -521,7 +517,6 @@ export default function InventoryManagementPage() {
       type: '',
       condition: '',
       status: 'available' as EquipmentTabKey,
-      last_date_checked: '',
       notes: '',
       created_at: '',
       last_updated: '',
@@ -532,11 +527,14 @@ export default function InventoryManagementPage() {
     ) => setForm((prev) => ({ ...prev, [key]: value }))
     const handleCreate = async () => {
       try {
-        // Basic validation: require name and type selection
+        // Basic validation: require all key details (notes optional)
         const name = form.name.trim()
         const type = form.type.trim()
-        if (!name || !type) {
-          toast.error('Name and type are required.')
+        const condition = form.condition.trim()
+        if (!name || !type || !condition || !form.status) {
+          toast.error(
+            'Please complete all required fields before creating equipment.'
+          )
           return
         }
         const ensured = await ensureEquipmentType(type, {
@@ -551,7 +549,6 @@ export default function InventoryManagementPage() {
           materialType: ensured.normalized,
           condition: form.condition.trim() || 'Good',
           status: form.status === 'available',
-          lastDateChecked: new Date().toISOString(),
           notes: form.notes,
           display: true,
         }
@@ -578,7 +575,6 @@ export default function InventoryManagementPage() {
         type: '',
         condition: '',
         status: 'available',
-        last_date_checked: '',
         notes: '',
         created_at: '',
         last_updated: '',
@@ -592,6 +588,11 @@ export default function InventoryManagementPage() {
           setForm((prev) => ({ ...prev, [key]: e.target.value })),
       [setForm]
     )
+    const isCreateDisabled =
+      !form.name.trim() ||
+      !form.type.trim() ||
+      !form.condition.trim() ||
+      !form.status
     // removed unused handleNumber
 
     // Stable status update
@@ -959,7 +960,8 @@ export default function InventoryManagementPage() {
                   <DialogClose asChild>
                     <Button
                       type="button"
-                      className="px-4 py-2 rounded bg-litratoblack text-white"
+                      className="px-4 py-2 rounded bg-litratoblack text-white disabled:opacity-60 disabled:cursor-not-allowed"
+                      disabled={isCreateDisabled}
                       onClick={handleCreate}
                     >
                       Create
@@ -1066,12 +1068,6 @@ export default function InventoryManagementPage() {
           </PopoverTrigger>
           <PopoverContent align="end" className="w-64 text-sm">
             <div className="space-y-1">
-              <div>
-                <span className="font-medium">Last checked: </span>
-                <time dateTime={String(row.last_date_checked)}>
-                  {formatDateTime(row.last_date_checked)}
-                </time>
-              </div>
               <div>
                 <span className="font-medium">Notes: </span>
                 {row.notes}
@@ -1944,6 +1940,92 @@ export default function InventoryManagementPage() {
     // NEW: edit selection map (inventory_id -> qty)
     const [editSelected, setEditSelected] = useState<Record<string, number>>({})
 
+    type AssignedInfo = {
+      packageId: string
+      packageName?: string
+    }
+    const [assignedInventory, setAssignedInventory] = useState<
+      Record<string, AssignedInfo>
+    >({})
+
+    const refreshAssignedInventory = useCallback(
+      async (shouldSkip?: () => boolean) => {
+        try {
+          const res = await fetch(`${API_BASE}/package-inventory-item`, {
+            headers: {
+              'Content-Type': 'application/json',
+              ...getAuthHeaders(),
+            },
+          })
+          if (!res.ok)
+            throw new Error(`GET /package-inventory-item ${res.status}`)
+          const payload = await res.json().catch(() => ({} as any))
+          const list = Array.isArray(payload?.packageInventoryItems)
+            ? payload.packageInventoryItems
+            : Array.isArray(payload?.items)
+            ? payload.items
+            : Array.isArray(payload)
+            ? payload
+            : []
+          const map: Record<string, AssignedInfo> = {}
+          for (const entry of list) {
+            const rec = entry as Record<string, unknown>
+            const invId = String(rec.inventory_id ?? '')
+            if (!invId) continue
+            const pkgId = String(rec.package_id ?? '')
+            if (!pkgId) continue
+            const pkgName = String(
+              (rec as { package_name?: unknown }).package_name ?? ''
+            ).trim()
+            map[invId] = {
+              packageId: pkgId,
+              packageName: pkgName || undefined,
+            }
+          }
+          if (!shouldSkip || !shouldSkip()) {
+            setAssignedInventory(map)
+          }
+        } catch (error) {
+          console.error('Load assigned inventory failed:', error)
+        }
+      },
+      [API_BASE, getAuthHeaders]
+    )
+
+    useEffect(() => {
+      setSelected((prev) => {
+        if (!prev || !Object.keys(prev).length) return prev
+        const next = { ...prev }
+        let mutated = false
+        for (const key of Object.keys(next)) {
+          if (assignedInventory[key]) {
+            delete next[key]
+            mutated = true
+          }
+        }
+        return mutated ? next : prev
+      })
+    }, [assignedInventory])
+
+    useEffect(() => {
+      if (!editPkgOpen) return
+      setEditSelected((prev) => {
+        if (!prev || !Object.keys(prev).length) return prev
+        const allowedPackage = editPkgForm.id
+        if (!allowedPackage) return prev
+        const next = { ...prev }
+        let mutated = false
+        for (const key of Object.keys(next)) {
+          const assigned = assignedInventory[key]
+          if (assigned && assigned.packageId !== allowedPackage) {
+            delete next[key]
+            mutated = true
+          }
+        }
+        return mutated ? next : prev
+      })
+    }, [assignedInventory, editPkgOpen, editPkgForm])
+
     useEffect(() => {
       let ignore = false
       ;(async () => {
@@ -1975,11 +2057,12 @@ export default function InventoryManagementPage() {
         } catch (e) {
           console.error('Load inventory for packages failed:', e)
         }
+        await refreshAssignedInventory(() => ignore)
       })()
       return () => {
         ignore = true
       }
-    }, [API_BASE, getAuthHeaders])
+    }, [API_BASE, getAuthHeaders, refreshAssignedInventory])
 
     const toggleItem = (id: string, on: boolean) =>
       setSelected((prev) => {
@@ -2045,6 +2128,8 @@ export default function InventoryManagementPage() {
             )
           )
         }
+
+        await refreshAssignedInventory()
 
         // 3) Update local UI list using the same mapper
         const newPkg = mapPackageFromApi({
@@ -2436,6 +2521,7 @@ export default function InventoryManagementPage() {
       })
       setEditSelected({}) // reset
       setEditPkgOpen(true)
+      void refreshAssignedInventory()
       // load package's current items
       ;(async () => {
         try {
@@ -2513,6 +2599,8 @@ export default function InventoryManagementPage() {
           body: JSON.stringify({ items }),
         })
         if (!resItems.ok) throw new Error(await resItems.text())
+
+        await refreshAssignedInventory()
 
         // reflect meta changes locally
         setPackages((prev) =>
@@ -2690,6 +2778,8 @@ export default function InventoryManagementPage() {
                       ) : (
                         inventory.map((it) => {
                           const checked = it.id in selected
+                          const assigned = assignedInventory[it.id]
+                          const disabled = Boolean(assigned)
                           return (
                             <div
                               key={it.id}
@@ -2698,6 +2788,7 @@ export default function InventoryManagementPage() {
                               <input
                                 type="checkbox"
                                 checked={checked}
+                                disabled={disabled}
                                 onChange={(e) =>
                                   toggleItem(it.id, e.target.checked)
                                 }
@@ -2706,6 +2797,12 @@ export default function InventoryManagementPage() {
                                 <div className="text-sm font-medium">
                                   {it.name}
                                 </div>
+                                {assigned ? (
+                                  <div className="text-xs text-gray-500">
+                                    Assigned to{' '}
+                                    {assigned.packageName ?? 'another package'}
+                                  </div>
+                                ) : null}
                               </div>
                             </div>
                           )
@@ -2923,6 +3020,13 @@ export default function InventoryManagementPage() {
                           // select all with qty  1 (or keep existing qty)
                           const map: Record<string, number> = {}
                           for (const it of inventory) {
+                            const assigned = assignedInventory[it.id]
+                            if (
+                              assigned &&
+                              assigned.packageId !== editPkgForm.id
+                            ) {
+                              continue
+                            }
                             map[it.id] = editSelected[it.id] || 1
                           }
                           setEditSelected(map)
@@ -2948,6 +3052,9 @@ export default function InventoryManagementPage() {
                     ) : (
                       inventory.map((it) => {
                         const checked = editSelected[it.id] != null
+                        const assigned = assignedInventory[it.id]
+                        const disabled =
+                          assigned && assigned.packageId !== editPkgForm.id
                         return (
                           <div
                             key={it.id}
@@ -2957,6 +3064,7 @@ export default function InventoryManagementPage() {
                               type="checkbox"
                               className="h-4 w-4"
                               checked={checked}
+                              disabled={Boolean(disabled)}
                               onChange={(e) => {
                                 const on = e.target.checked
                                 setEditSelected((prev) => {
@@ -2970,7 +3078,19 @@ export default function InventoryManagementPage() {
                                 })
                               }}
                             />
-                            <span className="flex-1 text-sm">{it.name}</span>
+                            <div className="flex-1">
+                              <span className="text-sm">{it.name}</span>
+                              {assigned ? (
+                                <div className="text-xs text-gray-500">
+                                  {assigned.packageId === editPkgForm.id
+                                    ? 'Assigned to this package'
+                                    : `Assigned to ${
+                                        assigned.packageName ??
+                                        'another package'
+                                      }`}
+                                </div>
+                              ) : null}
+                            </div>
                           </div>
                         )
                       })

@@ -8,6 +8,7 @@ export default function CustomerPaymentsIndex() {
     booking_id: string
     amount_paid: number
     payment_status: string
+    event_name: string
   }
 
   const [payments, setPayments] = useState<PaymentRow[]>([])
@@ -68,7 +69,14 @@ export default function CustomerPaymentsIndex() {
             const booking_id = String(r.booking_id ?? '')
             const amount_paid = Number(r.amount_paid ?? 0)
             const payment_status = String(r.payment_status ?? '')
-            return { payment_id, booking_id, amount_paid, payment_status }
+            const event_name = String(r.booking_event_name ?? '').trim()
+            return {
+              payment_id,
+              booking_id,
+              amount_paid,
+              payment_status,
+              event_name,
+            }
           })
           setPayments(rows)
         }
@@ -97,8 +105,7 @@ export default function CustomerPaymentsIndex() {
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-gray-100 text-left">
-                <th className="px-3 py-2">Payment ID</th>
-                <th className="px-3 py-2">Booking</th>
+                <th className="px-3 py-2">Event</th>
                 <th className="px-3 py-2">Paid</th>
                 <th className="px-3 py-2">Status</th>
                 <th className="px-3 py-2">Actions</th>
@@ -107,8 +114,9 @@ export default function CustomerPaymentsIndex() {
             <tbody>
               {payments.map((p) => (
                 <tr key={p.payment_id} className="odd:bg-white even:bg-gray-50">
-                  <td className="px-3 py-2">{p.payment_id}</td>
-                  <td className="px-3 py-2">{p.booking_id}</td>
+                  <td className="px-3 py-2">
+                    {p.event_name || `Booking ${p.booking_id}`}
+                  </td>
                   <td className="px-3 py-2">
                     {Number(p.amount_paid ?? 0).toFixed(2)}
                   </td>
@@ -127,14 +135,6 @@ export default function CustomerPaymentsIndex() {
           </table>
         </div>
       )}
-
-      <div className="mt-6 p-3 border rounded">
-        <div className="text-sm font-medium mb-2">Know your booking ID?</div>
-        <div className="text-sm text-gray-600">
-          Navigate directly to <code>/customer/payments/&lt;bookingId&gt;</code>{' '}
-          (e.g. 123), or click Pay from your booking details.
-        </div>
-      </div>
     </div>
   )
 }

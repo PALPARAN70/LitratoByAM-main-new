@@ -7,6 +7,7 @@ const { getAllGrids } = require('../Model/gridModel')
 
 router.post('/register', authController.register)
 router.post('/login', authController.login)
+router.post('/resendVerification', authController.resendVerificationEmail)
 router.post('/logout', authMiddleware, authController.logout)
 // email verification
 router.get('/verify', authController.verifyEmail)

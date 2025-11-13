@@ -1,5 +1,5 @@
-"use client";
-import { useEffect, useMemo, useState } from "react";
+'use client'
+import { useEffect, useMemo, useState } from 'react'
 import {
   ResponsiveContainer,
   BarChart,
@@ -16,153 +16,150 @@ import {
   Cell,
   AreaChart,
   Area,
-} from "recharts";
-import type { TooltipProps } from "recharts";
+} from 'recharts'
+import type { TooltipProps } from 'recharts'
 import type {
   ValueType,
   NameType,
-} from "recharts/types/component/DefaultTooltipContent";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+} from 'recharts/types/component/DefaultTooltipContent'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-} from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+} from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
-import { cn } from "@/lib/utils";
+} from '@/components/ui/select'
+import { Switch } from '@/components/ui/switch'
+import { Label } from '@/components/ui/label'
+import { Badge } from '@/components/ui/badge'
+import { Separator } from '@/components/ui/separator'
+import { cn } from '@/lib/utils'
 import {
   FiArrowDownRight,
   FiArrowUpRight,
   FiDownload,
   FiFileText,
-} from "react-icons/fi";
-import { LuSparkles } from "react-icons/lu";
+} from 'react-icons/fi'
+import { LuSparkles } from 'react-icons/lu'
 
 type BookingAnalyticsRow = {
-  month: string;
-  successful: number;
-  cancelled: number;
-  declined: number;
-  year?: number;
-};
+  month: string
+  successful: number
+  cancelled: number
+  declined: number
+  year?: number
+}
 
 type RevenueAnalyticsRow = {
-  month: string;
-  revenue: number;
-  refunds: number;
-  net: number;
-  year?: number;
-};
+  month: string
+  revenue: number
+  refunds: number
+  net: number
+  year?: number
+}
 
-type MonthRange = { start: number; end: number };
-type TabKey = "bookings" | "revenue";
+type RevenueBreakdownItem = {
+  packageId?: number
+  name: string
+  value: number
+  revenue: number
+  refunds: number
+  net: number
+  color: string
+}
+
+type MonthRange = { start: number; end: number }
+type TabKey = 'bookings' | 'revenue'
 
 const MONTHS = [
-  { value: 1, label: "January", short: "Jan" },
-  { value: 2, label: "February", short: "Feb" },
-  { value: 3, label: "March", short: "Mar" },
-  { value: 4, label: "April", short: "Apr" },
-  { value: 5, label: "May", short: "May" },
-  { value: 6, label: "June", short: "Jun" },
-  { value: 7, label: "July", short: "Jul" },
-  { value: 8, label: "August", short: "Aug" },
-  { value: 9, label: "September", short: "Sep" },
-  { value: 10, label: "October", short: "Oct" },
-  { value: 11, label: "November", short: "Nov" },
-  { value: 12, label: "December", short: "Dec" },
-];
+  { value: 1, label: 'January', short: 'Jan' },
+  { value: 2, label: 'February', short: 'Feb' },
+  { value: 3, label: 'March', short: 'Mar' },
+  { value: 4, label: 'April', short: 'Apr' },
+  { value: 5, label: 'May', short: 'May' },
+  { value: 6, label: 'June', short: 'Jun' },
+  { value: 7, label: 'July', short: 'Jul' },
+  { value: 8, label: 'August', short: 'Aug' },
+  { value: 9, label: 'September', short: 'Sep' },
+  { value: 10, label: 'October', short: 'Oct' },
+  { value: 11, label: 'November', short: 'Nov' },
+  { value: 12, label: 'December', short: 'Dec' },
+]
 
-const MONTH_LOOKUP = new Map(MONTHS.map((item) => [item.label, item.value]));
-const currentYear = new Date().getFullYear();
+const MONTH_LOOKUP = new Map(MONTHS.map((item) => [item.label, item.value]))
+const currentYear = new Date().getFullYear()
 
-const BASE_BOOKING_DATA: BookingAnalyticsRow[] = MONTHS.map((month, index) => ({
-  month: month.label,
-  successful: 24 + index * 3,
-  cancelled: 6 + ((index + 1) % 4) * 2,
-  declined: 5 + (index % 5),
-  year: currentYear,
-}));
-
-const BASE_REVENUE_DATA: RevenueAnalyticsRow[] = BASE_BOOKING_DATA.map(
-  ({ month, successful, year }, index) => {
-    const revenue = successful * 2800 + index * 880;
-    const refunds = Math.round(revenue * 0.07 + index * 50);
-    return {
-      month,
-      year,
-      revenue,
-      refunds,
-      net: revenue - refunds,
-    };
-  }
-);
-
-const REVENUE_BREAKDOWN_TEMPLATE = [
-  { name: "Classic Booth", share: 0.42, color: "#38bdf8" },
-  { name: "Glam Booth", share: 0.28, color: "#22c55e" },
-  { name: "360 Experience", share: 0.18, color: "#a855f7" },
-  { name: "Custom Events", share: 0.12, color: "#f97316" },
-];
+const REVENUE_COLOR_PALETTE = [
+  '#38bdf8',
+  '#22c55e',
+  '#a855f7',
+  '#f97316',
+  '#facc15',
+  '#14b8a6',
+  '#f472b6',
+  '#60a5fa',
+  '#fb7185',
+  '#c084fc',
+]
 
 const BOOKING_COLORS = {
-  successful: "#22c55e",
-  cancelled: "#fb923c",
-  declined: "#ef4444",
-};
+  successful: '#22c55e',
+  cancelled: '#fb923c',
+  declined: '#ef4444',
+}
 
 const REVENUE_COLORS = {
-  revenue: "#38bdf8",
-  refunds: "#f97316",
-  net: "#14b8a6",
-};
+  revenue: '#38bdf8',
+  refunds: '#f97316',
+  net: '#14b8a6',
+}
 
 export default function AdminDashboardPage() {
-  const [activeTab, setActiveTab] = useState<TabKey>("bookings");
-  const [selectedYear, setSelectedYear] = useState(currentYear);
+  const [activeTab, setActiveTab] = useState<TabKey>('bookings')
+  const [selectedYear, setSelectedYear] = useState(currentYear)
   const [monthRange, setMonthRange] = useState<MonthRange>({
     start: 1,
     end: 12,
-  });
-  const [bookingData, setBookingData] = useState(BASE_BOOKING_DATA);
-  const [revenueData, setRevenueData] = useState(BASE_REVENUE_DATA);
-  const [showBookingTrend, setShowBookingTrend] = useState(true);
-  const [showBookingComposition, setShowBookingComposition] = useState(true);
-  const [showRevenueTrend, setShowRevenueTrend] = useState(true);
-  const [showRevenueBreakdown, setShowRevenueBreakdown] = useState(true);
-  const [isFetching, setIsFetching] = useState(false);
+  })
+  const [bookingData, setBookingData] = useState<BookingAnalyticsRow[]>([])
+  const [revenueData, setRevenueData] = useState<RevenueAnalyticsRow[]>([])
+  const [revenueBreakdown, setRevenueBreakdown] = useState<
+    RevenueBreakdownItem[]
+  >([])
+  const [showBookingTrend, setShowBookingTrend] = useState(true)
+  const [showBookingComposition, setShowBookingComposition] = useState(true)
+  const [showRevenueTrend, setShowRevenueTrend] = useState(true)
+  const [showRevenueBreakdown, setShowRevenueBreakdown] = useState(true)
+  const [isFetching, setIsFetching] = useState(false)
 
   useEffect(() => {
-    const controller = new AbortController();
+    const controller = new AbortController()
     const token =
-      typeof window !== "undefined"
-        ? localStorage.getItem("access_token")
-        : null;
+      typeof window !== 'undefined'
+        ? localStorage.getItem('access_token')
+        : null
 
-    if (!token) return;
+    if (!token) return
 
     const searchParams = new URLSearchParams({
       year: String(selectedYear),
       startMonth: String(monthRange.start),
       endMonth: String(monthRange.end),
-    }).toString();
+    }).toString()
 
-    const baseUrl = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:5000";
+    const baseUrl = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:5000'
 
     const fetchAnalytics = async () => {
-      setIsFetching(true);
+      setIsFetching(true)
       try {
         const [bookingRes, revenueRes] = await Promise.all([
           fetch(`${baseUrl}/api/admin/analytics/bookings?${searchParams}`, {
@@ -173,84 +170,115 @@ export default function AdminDashboardPage() {
             signal: controller.signal,
             headers: { Authorization: `Bearer ${token}` },
           }),
-        ]);
+        ])
 
         if (bookingRes.ok) {
-          const payload = await bookingRes.json().catch(() => null);
-          if (Array.isArray(payload?.data) && payload.data.length) {
+          const payload = await bookingRes.json().catch(() => null)
+          if (Array.isArray(payload?.data)) {
             const mapped: BookingAnalyticsRow[] = (payload.data as any[])
               .map((row: any) => ({
-                month: String(row.month ?? ""),
+                month: String(row.month ?? ''),
                 successful: Number(row.successful ?? 0),
                 cancelled: Number(row.cancelled ?? 0),
                 declined: Number(row.declined ?? 0),
                 year: Number(row.year ?? selectedYear),
               }))
-              .filter((row: BookingAnalyticsRow) => row.month);
-            if (mapped.length) setBookingData(mapped);
+              .filter((row: BookingAnalyticsRow) => row.month)
+            setBookingData(mapped)
+          } else {
+            setBookingData([])
           }
         }
 
         if (revenueRes.ok) {
-          const payload = await revenueRes.json().catch(() => null);
-          if (Array.isArray(payload?.data) && payload.data.length) {
+          const payload = await revenueRes.json().catch(() => null)
+          if (Array.isArray(payload?.data)) {
             const mapped: RevenueAnalyticsRow[] = (payload.data as any[])
               .map((row: any) => {
-                const revenue = Number(row.revenue ?? 0);
-                const refunds = Number(row.refunds ?? 0);
-                const net = Number(row.net ?? revenue - refunds);
+                const revenue = Number(row.revenue ?? 0)
+                const refunds = Number(row.refunds ?? 0)
+                const net = Number(row.net ?? revenue - refunds)
                 return {
-                  month: String(row.month ?? ""),
+                  month: String(row.month ?? ''),
                   revenue,
                   refunds,
                   net,
                   year: Number(row.year ?? selectedYear),
-                };
+                }
               })
-              .filter((row: RevenueAnalyticsRow) => row.month);
-            if (mapped.length) setRevenueData(mapped);
+              .filter((row: RevenueAnalyticsRow) => row.month)
+            setRevenueData(mapped)
+          } else {
+            setRevenueData([])
+          }
+
+          if (Array.isArray(payload?.breakdown)) {
+            const mappedBreakdown: RevenueBreakdownItem[] = (
+              payload.breakdown as any[]
+            )
+              .map((row: any, index: number) => {
+                const revenue = Number(row.revenue ?? 0)
+                const refunds = Number(row.refunds ?? 0)
+                const net = Number(row.net ?? revenue - refunds)
+                return {
+                  packageId: row.packageId ?? row.package_id ?? undefined,
+                  name: String(
+                    row.packageName ?? row.package_name ?? 'Unknown'
+                  ),
+                  revenue,
+                  refunds,
+                  net,
+                  value: Math.max(revenue, 0),
+                  color:
+                    REVENUE_COLOR_PALETTE[index % REVENUE_COLOR_PALETTE.length],
+                }
+              })
+              .filter((entry: RevenueBreakdownItem) => entry.name)
+            setRevenueBreakdown(mappedBreakdown)
+          } else {
+            setRevenueBreakdown([])
           }
         }
       } catch (error) {
-        if (!(error instanceof DOMException && error.name === "AbortError")) {
-          console.error("Analytics fetch failed", error);
+        if (!(error instanceof DOMException && error.name === 'AbortError')) {
+          console.error('Analytics fetch failed', error)
         }
       } finally {
-        setIsFetching(false);
+        setIsFetching(false)
       }
-    };
+    }
 
-    fetchAnalytics();
-    return () => controller.abort();
-  }, [selectedYear, monthRange.start, monthRange.end]);
+    fetchAnalytics()
+    return () => controller.abort()
+  }, [selectedYear, monthRange.start, monthRange.end])
 
   const filteredBookingData = useMemo(() => {
     return bookingData
       .filter((row) => (row.year ?? selectedYear) === selectedYear)
       .filter((row) => {
-        const monthIndex = MONTH_LOOKUP.get(row.month) ?? 1;
-        return monthIndex >= monthRange.start && monthIndex <= monthRange.end;
+        const monthIndex = MONTH_LOOKUP.get(row.month) ?? 1
+        return monthIndex >= monthRange.start && monthIndex <= monthRange.end
       })
       .map((row) => ({
         ...row,
         monthShort:
           MONTHS.find((item) => item.label === row.month)?.short ?? row.month,
-      }));
-  }, [bookingData, selectedYear, monthRange]);
+      }))
+  }, [bookingData, selectedYear, monthRange])
 
   const filteredRevenueData = useMemo(() => {
     return revenueData
       .filter((row) => (row.year ?? selectedYear) === selectedYear)
       .filter((row) => {
-        const monthIndex = MONTH_LOOKUP.get(row.month) ?? 1;
-        return monthIndex >= monthRange.start && monthIndex <= monthRange.end;
+        const monthIndex = MONTH_LOOKUP.get(row.month) ?? 1
+        return monthIndex >= monthRange.start && monthIndex <= monthRange.end
       })
       .map((row) => ({
         ...row,
         monthShort:
           MONTHS.find((item) => item.label === row.month)?.short ?? row.month,
-      }));
-  }, [revenueData, selectedYear, monthRange]);
+      }))
+  }, [revenueData, selectedYear, monthRange])
 
   return (
     <div className="space-y-6 p-6">
@@ -264,7 +292,7 @@ export default function AdminDashboardPage() {
             Admin Analytics Dashboard
           </h1>
           <p className="text-sm text-muted-foreground">
-            Monitor bookings, revenue, and overall performance for{" "}
+            Monitor bookings, revenue, and overall performance for{' '}
             {selectedYear}. Adjust filters to hone in on seasonal trends.
           </p>
         </div>
@@ -318,20 +346,21 @@ export default function AdminDashboardPage() {
             onToggleTrend={setShowRevenueTrend}
             showBreakdown={showRevenueBreakdown}
             onToggleBreakdown={setShowRevenueBreakdown}
+            breakdown={revenueBreakdown}
           />
         </TabsContent>
       </Tabs>
     </div>
-  );
+  )
 }
 
 type FilterBarProps = {
-  selectedYear: number;
-  onYearChange: (value: number) => void;
-  monthRange: MonthRange;
-  onMonthRangeChange: (range: MonthRange) => void;
-  isFetching: boolean;
-};
+  selectedYear: number
+  onYearChange: (value: number) => void
+  monthRange: MonthRange
+  onMonthRangeChange: (range: MonthRange) => void
+  isFetching: boolean
+}
 
 function FilterBar({
   selectedYear,
@@ -343,25 +372,25 @@ function FilterBar({
   const years = useMemo(
     () => [currentYear, currentYear - 1, currentYear - 2],
     []
-  );
+  )
 
   const handleStartMonth = (value: string) => {
-    const start = Number(value);
+    const start = Number(value)
     if (start > monthRange.end) {
-      onMonthRangeChange({ start, end: start });
+      onMonthRangeChange({ start, end: start })
     } else {
-      onMonthRangeChange({ start, end: monthRange.end });
+      onMonthRangeChange({ start, end: monthRange.end })
     }
-  };
+  }
 
   const handleEndMonth = (value: string) => {
-    const end = Number(value);
+    const end = Number(value)
     if (end < monthRange.start) {
-      onMonthRangeChange({ start: end, end });
+      onMonthRangeChange({ start: end, end })
     } else {
-      onMonthRangeChange({ start: monthRange.start, end });
+      onMonthRangeChange({ start: monthRange.start, end })
     }
-  };
+  }
 
   return (
     <Card className="w-full max-w-xl border border-slate-200/70 bg-white/70 shadow-sm backdrop-blur-sm dark:border-slate-700/60 dark:bg-slate-900/60">
@@ -371,7 +400,7 @@ function FilterBar({
             variant="secondary"
             className="bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-200"
           >
-            {isFetching ? "Refreshing" : "Live"}
+            {isFetching ? 'Refreshing' : 'Live'}
           </Badge>
           <span>Filters</span>
         </div>
@@ -455,48 +484,20 @@ function FilterBar({
             </Select>
           </div>
         </div>
-        <Separator className="bg-slate-200 dark:bg-slate-800" />
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="text-xs text-muted-foreground">
-            Showing{" "}
-            {MONTHS.find((m) => m.value === monthRange.start)?.label ?? ""} –{" "}
-            {MONTHS.find((m) => m.value === monthRange.end)?.label ?? ""}{" "}
-            {selectedYear}
-          </div>
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              className="rounded-xl border-slate-200 bg-white hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900"
-              onClick={() => handleExport("csv")}
-            >
-              <FiDownload className="mr-1.5 h-4 w-4" />
-              Export CSV
-            </Button>
-            <Button
-              size="sm"
-              className="rounded-xl bg-slate-900 text-white shadow-sm hover:bg-slate-900/90 dark:bg-slate-100 dark:text-slate-900"
-              onClick={() => handleExport("pdf")}
-            >
-              <FiFileText className="mr-1.5 h-4 w-4" />
-              Export PDF
-            </Button>
-          </div>
-        </div>
       </CardContent>
     </Card>
-  );
+  )
 }
 
 type BookingsTabProps = {
-  data: (BookingAnalyticsRow & { monthShort: string })[];
-  selectedYear: number;
-  monthRange: MonthRange;
-  showTrend: boolean;
-  onToggleTrend: (value: boolean) => void;
-  showComposition: boolean;
-  onToggleComposition: (value: boolean) => void;
-};
+  data: (BookingAnalyticsRow & { monthShort: string })[]
+  selectedYear: number
+  monthRange: MonthRange
+  showTrend: boolean
+  onToggleTrend: (value: boolean) => void
+  showComposition: boolean
+  onToggleComposition: (value: boolean) => void
+}
 
 function BookingsTab({
   data,
@@ -510,19 +511,19 @@ function BookingsTab({
   const totals = useMemo(() => {
     return data.reduce(
       (acc, row) => {
-        acc.successful += row.successful;
-        acc.cancelled += row.cancelled;
-        acc.declined += row.declined;
-        return acc;
+        acc.successful += row.successful
+        acc.cancelled += row.cancelled
+        acc.declined += row.declined
+        return acc
       },
       { successful: 0, cancelled: 0, declined: 0 }
-    );
-  }, [data]);
+    )
+  }, [data])
 
-  const bookingTotal = totals.successful + totals.cancelled + totals.declined;
+  const bookingTotal = totals.successful + totals.cancelled + totals.declined
   const successRate = bookingTotal
     ? Math.round((totals.successful / bookingTotal) * 1000) / 10
-    : 0;
+    : 0
 
   const trendData = useMemo(() => {
     return data.map((row, index, array) => ({
@@ -530,28 +531,28 @@ function BookingsTab({
       successful: row.successful,
       total: row.successful + row.cancelled + row.declined,
       growth: index === 0 ? 0 : row.successful - array[index - 1].successful,
-    }));
-  }, [data]);
+    }))
+  }, [data])
 
   const compositionData = useMemo(() => {
     return [
       {
-        name: "Successful",
+        name: 'Successful',
         value: totals.successful,
         color: BOOKING_COLORS.successful,
       },
       {
-        name: "Cancelled",
+        name: 'Cancelled',
         value: totals.cancelled,
         color: BOOKING_COLORS.cancelled,
       },
       {
-        name: "Declined",
+        name: 'Declined',
         value: totals.declined,
         color: BOOKING_COLORS.declined,
       },
-    ];
-  }, [totals]);
+    ]
+  }, [totals])
 
   return (
     <>
@@ -606,7 +607,7 @@ function BookingsTab({
                 />
                 <RechartsTooltip
                   content={<BookingTooltip />}
-                  cursor={{ fill: "rgba(15, 118, 110, 0.05)" }}
+                  cursor={{ fill: 'rgba(15, 118, 110, 0.05)' }}
                 />
                 <Bar
                   dataKey="successful"
@@ -640,21 +641,21 @@ function BookingsTab({
             <SummaryCard
               title="Total Successful"
               primary={`${totals.successful.toLocaleString()} bookings`}
-              helper="Completed shoots this season"
+              helper="Confirmed Bookings this season"
               accent="from-emerald-500/10 to-emerald-500/0"
               icon="✅"
             />
             <SummaryCard
               title="Total Cancelled"
               primary={`${totals.cancelled.toLocaleString()} bookings`}
-              helper="Client-cancelled events"
+              helper="Cancelled events"
               accent="from-orange-500/10 to-orange-500/0"
               icon="⚠️"
             />
             <SummaryCard
               title="Total Declined"
               primary={`${totals.declined.toLocaleString()} requests`}
-              helper="Declined proposals"
+              helper="Declined Bookings"
               accent="from-red-500/10 to-red-500/0"
               icon="🚫"
             />
@@ -781,18 +782,19 @@ function BookingsTab({
         </CardContent>
       </Card>
     </>
-  );
+  )
 }
 
 type RevenueTabProps = {
-  data: (RevenueAnalyticsRow & { monthShort: string })[];
-  selectedYear: number;
-  monthRange: MonthRange;
-  showTrend: boolean;
-  onToggleTrend: (value: boolean) => void;
-  showBreakdown: boolean;
-  onToggleBreakdown: (value: boolean) => void;
-};
+  data: (RevenueAnalyticsRow & { monthShort: string })[]
+  selectedYear: number
+  monthRange: MonthRange
+  showTrend: boolean
+  onToggleTrend: (value: boolean) => void
+  showBreakdown: boolean
+  onToggleBreakdown: (value: boolean) => void
+  breakdown: RevenueBreakdownItem[]
+}
 
 function RevenueTab({
   data,
@@ -802,36 +804,48 @@ function RevenueTab({
   onToggleTrend,
   showBreakdown,
   onToggleBreakdown,
+  breakdown,
 }: RevenueTabProps) {
   const totals = useMemo(() => {
     return data.reduce(
       (acc, row) => {
-        acc.revenue += row.revenue;
-        acc.refunds += row.refunds;
-        acc.net += row.net;
-        return acc;
+        acc.revenue += row.revenue
+        acc.refunds += row.refunds
+        acc.net += row.net
+        return acc
       },
       { revenue: 0, refunds: 0, net: 0 }
-    );
-  }, [data]);
+    )
+  }, [data])
 
-  const avgMonthlyRevenue = data.length ? totals.revenue / data.length : 0;
-  const lastTwo = data.slice(-2);
+  const avgMonthlyRevenue = data.length ? totals.revenue / data.length : 0
+  const lastTwo = data.slice(-2)
   const netDelta =
-    lastTwo.length === 2 ? lastTwo[1].net - lastTwo[0].net : totals.net;
+    lastTwo.length === 2 ? lastTwo[1].net - lastTwo[0].net : totals.net
   const netChangePercent =
     lastTwo.length === 2 && lastTwo[0].net
       ? (netDelta / lastTwo[0].net) * 100
-      : 0;
+      : 0
 
-  const breakdown = useMemo(() => {
-    if (!totals.revenue)
-      return REVENUE_BREAKDOWN_TEMPLATE.map((item) => ({ ...item, value: 0 }));
-    return REVENUE_BREAKDOWN_TEMPLATE.map((item) => ({
-      ...item,
-      value: Math.round(totals.revenue * item.share),
-    }));
-  }, [totals.revenue]);
+  const breakdownData = useMemo<RevenueBreakdownItem[]>(() => {
+    if (breakdown.length) return breakdown
+    if (!totals.revenue) return []
+    return [
+      {
+        packageId: undefined,
+        name: 'All Packages',
+        revenue: totals.revenue,
+        refunds: totals.refunds,
+        net: totals.net,
+        value: Math.max(totals.revenue, 0),
+        color: REVENUE_COLOR_PALETTE[0],
+      },
+    ]
+  }, [breakdown, totals.net, totals.refunds, totals.revenue])
+
+  const breakdownTotal = useMemo(() => {
+    return breakdownData.reduce((sum, entry) => sum + entry.value, 0)
+  }, [breakdownData])
 
   return (
     <Card className="border-none bg-gradient-to-br from-white via-white to-slate-50 shadow-xl dark:from-slate-950 dark:via-slate-950/90 dark:to-slate-950">
@@ -841,7 +855,7 @@ function RevenueTab({
             Revenue Intelligence
           </CardTitle>
           <CardDescription>
-            Track monthly revenue, refunds, and net performance for{" "}
+            Track monthly revenue, refunds, and net performance for{' '}
             {selectedYear}.
           </CardDescription>
         </div>
@@ -896,7 +910,7 @@ function RevenueTab({
             accent="from-violet-500/10 to-violet-500/0"
             icon="📊"
             trend={netChangePercent}
-            trendDirection={netDelta >= 0 ? "up" : "down"}
+            trendDirection={netDelta >= 0 ? 'up' : 'down'}
           />
         </div>
 
@@ -907,45 +921,72 @@ function RevenueTab({
                 <CardTitle className="text-base font-semibold">
                   Revenue Breakdown
                 </CardTitle>
-                <CardDescription>
-                  Contribution by service category.
-                </CardDescription>
+                <CardDescription>Earnings per Event Packages.</CardDescription>
               </CardHeader>
               <CardContent className="flex flex-col gap-4 md:flex-row md:items-center">
-                <div className="h-56 w-full md:w-1/2">
-                  <ResponsiveContainer>
-                    <PieChart>
-                      <Pie
-                        data={breakdown}
-                        dataKey="value"
-                        nameKey="name"
-                        innerRadius={60}
-                        outerRadius={90}
-                        paddingAngle={2}
-                      >
-                        {breakdown.map((entry) => (
-                          <Cell key={entry.name} fill={entry.color} />
-                        ))}
-                      </Pie>
-                      <RechartsTooltip content={<RevenueBreakdownTooltip />} />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
-                <div className="flex flex-1 flex-col gap-3">
-                  {breakdown.map((entry) => (
-                    <div
-                      key={entry.name}
-                      className="flex items-center justify-between rounded-2xl border border-slate-200/70 bg-white/80 px-4 py-3 text-sm shadow-sm dark:border-slate-800 dark:bg-slate-950/60"
-                    >
-                      <span className="font-medium text-slate-600 dark:text-slate-200">
-                        {entry.name}
-                      </span>
-                      <span className="font-semibold text-slate-900 dark:text-white">
-                        ₱{entry.value.toLocaleString()}
-                      </span>
+                {breakdownData.length ? (
+                  <>
+                    <div className="h-56 w-full md:w-1/2">
+                      <ResponsiveContainer>
+                        <PieChart>
+                          <Pie
+                            data={breakdownData}
+                            dataKey="value"
+                            nameKey="name"
+                            innerRadius={60}
+                            outerRadius={90}
+                            paddingAngle={2}
+                          >
+                            {breakdownData.map((entry) => (
+                              <Cell key={entry.name} fill={entry.color} />
+                            ))}
+                          </Pie>
+                          <RechartsTooltip
+                            content={
+                              <RevenueBreakdownTooltip total={breakdownTotal} />
+                            }
+                          />
+                        </PieChart>
+                      </ResponsiveContainer>
                     </div>
-                  ))}
-                </div>
+                    <div className="flex flex-1 flex-col gap-3">
+                      {breakdownData.map((entry) => {
+                        const share =
+                          breakdownTotal > 0
+                            ? Math.round(
+                                (entry.value / breakdownTotal) * 1000
+                              ) / 10
+                            : 0
+                        return (
+                          <div
+                            key={entry.name}
+                            className="flex items-center justify-between rounded-2xl border border-slate-200/70 bg-white/80 px-4 py-3 text-sm shadow-sm dark:border-slate-800 dark:bg-slate-950/60"
+                          >
+                            <div className="flex flex-col">
+                              <span className="font-medium text-slate-600 dark:text-slate-200">
+                                {entry.name}
+                              </span>
+                              <span className="text-xs text-muted-foreground">
+                                {share}% of gross revenue
+                              </span>
+                              <span className="text-[11px] text-muted-foreground">
+                                Gross ₱{entry.revenue.toLocaleString()} ·
+                                Refunds ₱{entry.refunds.toLocaleString()}
+                              </span>
+                            </div>
+                            <span className="font-semibold text-slate-900 dark:text-white">
+                              ₱{entry.net.toLocaleString()}
+                            </span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </>
+                ) : (
+                  <div className="flex h-56 w-full items-center justify-center rounded-2xl border border-dashed border-slate-200/70 bg-slate-50/60 text-sm text-muted-foreground dark:border-slate-800 dark:bg-slate-950/40">
+                    No revenue data available for the selected range.
+                  </div>
+                )}
               </CardContent>
             </Card>
 
@@ -962,10 +1003,10 @@ function RevenueTab({
                 <div className="flex items-center gap-3 rounded-2xl border border-slate-200/70 bg-white/90 px-4 py-3 shadow-sm dark:border-slate-800 dark:bg-slate-950/60">
                   <div
                     className={cn(
-                      "flex h-10 w-10 items-center justify-center rounded-full",
+                      'flex h-10 w-10 items-center justify-center rounded-full',
                       netDelta >= 0
-                        ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-300"
-                        : "bg-rose-500/15 text-rose-600 dark:text-rose-300"
+                        ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-300'
+                        : 'bg-rose-500/15 text-rose-600 dark:text-rose-300'
                     )}
                   >
                     {netDelta >= 0 ? (
@@ -977,24 +1018,24 @@ function RevenueTab({
                   <div>
                     <p className="text-sm font-semibold text-slate-900 dark:text-white">
                       {netDelta >= 0
-                        ? "Net revenue is growing"
-                        : "Net revenue dipped"}
+                        ? 'Net revenue is growing'
+                        : 'Net revenue dipped'}
                     </p>
                     <p className="text-xs text-muted-foreground">
                       {Math.abs(netDelta)
                         ? `₱${Math.abs(
                             netDelta
                           ).toLocaleString()} (${netChangePercent.toFixed(1)}%)`
-                        : "No change vs last month."}
+                        : 'No change vs last month.'}
                     </p>
                   </div>
                 </div>
                 <div className="rounded-2xl border border-slate-200/60 bg-gradient-to-br from-slate-100/80 via-white to-white p-4 text-xs text-muted-foreground shadow-inner dark:border-slate-800 dark:from-slate-900/80 dark:via-slate-900 dark:to-slate-900">
-                  Insights consider data between{" "}
+                  Insights consider data between{' '}
                   {MONTHS.find((m) => m.value === monthRange.start)?.label ??
-                    ""}{" "}
-                  and{" "}
-                  {MONTHS.find((m) => m.value === monthRange.end)?.label ?? ""}.
+                    ''}{' '}
+                  and{' '}
+                  {MONTHS.find((m) => m.value === monthRange.end)?.label ?? ''}.
                   Export the report for executive review.
                 </div>
               </CardContent>
@@ -1003,15 +1044,15 @@ function RevenueTab({
         )}
       </CardContent>
     </Card>
-  );
+  )
 }
 
 type ToggleRowProps = {
-  id: string;
-  label: string;
-  value: boolean;
-  onValueChange: (value: boolean) => void;
-};
+  id: string
+  label: string
+  value: boolean
+  onValueChange: (value: boolean) => void
+}
 
 function ToggleRow({ id, label, value, onValueChange }: ToggleRowProps) {
   return (
@@ -1024,18 +1065,18 @@ function ToggleRow({ id, label, value, onValueChange }: ToggleRowProps) {
         {label}
       </Label>
     </div>
-  );
+  )
 }
 
 type SummaryCardProps = {
-  title: string;
-  primary: string;
-  helper: string;
-  accent: string;
-  icon: string;
-  trend?: number;
-  trendDirection?: "up" | "down";
-};
+  title: string
+  primary: string
+  helper: string
+  accent: string
+  icon: string
+  trend?: number
+  trendDirection?: 'up' | 'down'
+}
 
 function SummaryCard({
   title,
@@ -1046,12 +1087,12 @@ function SummaryCard({
   trend,
   trendDirection,
 }: SummaryCardProps) {
-  const showTrend = typeof trend === "number" && !Number.isNaN(trend);
+  const showTrend = typeof trend === 'number' && !Number.isNaN(trend)
   return (
     <Card className="relative overflow-hidden border border-slate-200/70 bg-white/80 shadow-lg transition-shadow hover:shadow-xl dark:border-slate-800 dark:bg-slate-950/70">
       <div
         className={cn(
-          "pointer-events-none absolute inset-0 bg-gradient-to-br",
+          'pointer-events-none absolute inset-0 bg-gradient-to-br',
           accent
         )}
       />
@@ -1069,13 +1110,13 @@ function SummaryCard({
         {showTrend && trendDirection && (
           <div
             className={cn(
-              "inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-semibold",
-              trendDirection === "up"
-                ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-300"
-                : "bg-rose-500/15 text-rose-600 dark:text-rose-300"
+              'inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-semibold',
+              trendDirection === 'up'
+                ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-300'
+                : 'bg-rose-500/15 text-rose-600 dark:text-rose-300'
             )}
           >
-            {trendDirection === "up" ? (
+            {trendDirection === 'up' ? (
               <FiArrowUpRight className="h-3.5 w-3.5" />
             ) : (
               <FiArrowDownRight className="h-3.5 w-3.5" />
@@ -1085,7 +1126,7 @@ function SummaryCard({
         )}
       </CardContent>
     </Card>
-  );
+  )
 }
 
 function BookingTooltip({
@@ -1093,33 +1134,33 @@ function BookingTooltip({
   label,
   payload,
 }: TooltipProps<ValueType, NameType>) {
-  if (!active || !payload?.length) return null;
-  const row = payload[0].payload as BookingAnalyticsRow;
+  if (!active || !payload?.length) return null
+  const row = payload[0].payload as BookingAnalyticsRow
   return (
     <div className="rounded-xl border border-slate-800/40 bg-slate-900/90 p-3 text-sm text-white shadow-xl">
       <p className="text-xs uppercase tracking-wide text-slate-300">{label}</p>
       <div className="mt-2 space-y-1">
         <div>
-          Successful:{" "}
+          Successful:{' '}
           <span className="font-semibold text-emerald-300">
             {row.successful.toLocaleString()}
           </span>
         </div>
         <div>
-          Cancelled:{" "}
+          Cancelled:{' '}
           <span className="font-semibold text-amber-200">
             {row.cancelled.toLocaleString()}
           </span>
         </div>
         <div>
-          Declined:{" "}
+          Declined:{' '}
           <span className="font-semibold text-rose-200">
             {row.declined.toLocaleString()}
           </span>
         </div>
       </div>
     </div>
-  );
+  )
 }
 
 function GrowthTooltip({
@@ -1127,43 +1168,43 @@ function GrowthTooltip({
   label,
   payload,
 }: TooltipProps<ValueType, NameType>) {
-  if (!active || !payload?.length) return null;
+  if (!active || !payload?.length) return null
   const row = payload[0].payload as {
-    successful: number;
-    total: number;
-    growth: number;
-  };
+    successful: number
+    total: number
+    growth: number
+  }
   return (
     <div className="rounded-xl border border-slate-800/40 bg-slate-900/90 p-3 text-sm text-white shadow-xl">
       <p className="text-xs uppercase tracking-wide text-slate-300">{label}</p>
       <div className="mt-2 space-y-1">
         <div>
-          Successful bookings:{" "}
+          Successful bookings:{' '}
           <span className="font-semibold text-emerald-300">
             {row.successful.toLocaleString()}
           </span>
         </div>
         <div>
-          Total requests:{" "}
+          Total requests:{' '}
           <span className="font-semibold text-sky-200">
             {row.total.toLocaleString()}
           </span>
         </div>
         <div>
-          Growth vs prior month: {row.growth >= 0 ? "+" : ""}
+          Growth vs prior month: {row.growth >= 0 ? '+' : ''}
           {row.growth.toLocaleString()} bookings
         </div>
       </div>
     </div>
-  );
+  )
 }
 
 function CompositionTooltip({
   active,
   payload,
 }: TooltipProps<ValueType, NameType>) {
-  if (!active || !payload?.length) return null;
-  const entry = payload[0];
+  if (!active || !payload?.length) return null
+  const entry = payload[0]
   return (
     <div className="rounded-xl border border-slate-800/40 bg-slate-900/90 p-3 text-sm text-white shadow-xl">
       <p className="text-sm font-semibold">{entry.name}</p>
@@ -1171,29 +1212,40 @@ function CompositionTooltip({
         {Number(entry.value).toLocaleString()} bookings
       </p>
     </div>
-  );
+  )
 }
 
 function RevenueBreakdownTooltip({
   active,
   payload,
-}: TooltipProps<ValueType, NameType>) {
-  if (!active || !payload?.length) return null;
-  const entry = payload[0];
+  total,
+}: TooltipProps<ValueType, NameType> & { total?: number }) {
+  if (!active || !payload?.length) return null
+  const entry = payload[0]
+  const value = Number(entry.value)
+  const share = total ? Math.round(((value || 0) / total) * 1000) / 10 : null
+  const detail = (entry.payload ?? {}) as Partial<RevenueBreakdownItem>
+  const gross = Number(detail.revenue ?? value)
+  const refunds = Number(detail.refunds ?? 0)
+  const net = Number(detail.net ?? value)
   return (
     <div className="rounded-xl border border-slate-800/40 bg-slate-900/90 p-3 text-sm text-white shadow-xl">
       <p className="text-sm font-semibold">{entry.name}</p>
       <p className="text-xs text-slate-300">
-        ₱{Number(entry.value).toLocaleString()}
+        Net ₱{net.toLocaleString()}
+        {share != null ? ` · ${share}% of gross` : ''}
+      </p>
+      <p className="text-[11px] text-slate-400">
+        Gross ₱{gross.toLocaleString()} · Refunds ₱{refunds.toLocaleString()}
       </p>
     </div>
-  );
+  )
 }
 
 type ComposedRevenueChartProps = {
-  data: (RevenueAnalyticsRow & { monthShort: string })[];
-  showTrend: boolean;
-};
+  data: (RevenueAnalyticsRow & { monthShort: string })[]
+  showTrend: boolean
+}
 
 function ComposedRevenueChart({ data, showTrend }: ComposedRevenueChartProps) {
   return (
@@ -1223,7 +1275,7 @@ function ComposedRevenueChart({ data, showTrend }: ComposedRevenueChartProps) {
         />
         <RechartsTooltip
           content={<RevenueTooltip />}
-          cursor={{ fill: "rgba(56, 189, 248, 0.08)" }}
+          cursor={{ fill: 'rgba(56, 189, 248, 0.08)' }}
         />
         <Area
           type="monotone"
@@ -1253,7 +1305,7 @@ function ComposedRevenueChart({ data, showTrend }: ComposedRevenueChartProps) {
         )}
       </AreaChart>
     </ResponsiveContainer>
-  );
+  )
 }
 
 function RevenueTooltip({
@@ -1261,37 +1313,31 @@ function RevenueTooltip({
   label,
   payload,
 }: TooltipProps<ValueType, NameType>) {
-  if (!active || !payload?.length) return null;
-  const row = payload[0].payload as RevenueAnalyticsRow;
+  if (!active || !payload?.length) return null
+  const row = payload[0].payload as RevenueAnalyticsRow
   return (
     <div className="rounded-xl border border-slate-800/40 bg-slate-900/90 p-3 text-sm text-white shadow-xl">
       <p className="text-xs uppercase tracking-wide text-slate-300">{label}</p>
       <div className="mt-2 space-y-1">
         <div>
-          Total revenue:{" "}
+          Total revenue:{' '}
           <span className="font-semibold text-sky-200">
             ₱{row.revenue.toLocaleString()}
           </span>
         </div>
         <div>
-          Refunds issued:{" "}
+          Refunds issued:{' '}
           <span className="font-semibold text-rose-200">
             ₱{row.refunds.toLocaleString()}
           </span>
         </div>
         <div>
-          Net revenue:{" "}
+          Net revenue:{' '}
           <span className="font-semibold text-teal-200">
             ₱{row.net.toLocaleString()}
           </span>
         </div>
       </div>
     </div>
-  );
-}
-
-function handleExport(format: "csv" | "pdf") {
-  console.info(
-    `Exporting analytics report as ${format.toUpperCase()}. Implement server-side export to enable.`
-  );
+  )
 }
