@@ -6,28 +6,41 @@ import LitratoBranding from '../../../Litratocomponents/Branding'
 import LitratoFooter from '../../../Litratocomponents/Footer'
 import { toast } from 'sonner'
 import { jwtDecode } from 'jwt-decode'
+import { Eye, EyeOff } from 'lucide-react'
 
 export default function LoginPage() {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
+  const [passwordVisible, setPasswordVisible] = useState(false)
   const [showForgotModal, setShowForgotModal] = useState(false)
   const [forgotEmail, setForgotEmail] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [showResendModal, setShowResendModal] = useState(false)
+  const [resendEmail, setResendEmail] = useState('')
+  const [verificationMessage, setVerificationMessage] = useState('')
+  const [isResendingVerification, setIsResendingVerification] = useState(false)
   const router = useRouter()
 
   const handleLogin = async () => {
     try {
+      const trimmedUsername = username.trim()
       const res = await fetch('http://localhost:5000/api/auth/login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({ username: trimmedUsername, password }),
       })
 
-      if (res.ok) {
-        const data = await res.json()
+      const data = await res.json().catch(() => null)
+
+      if (res.ok && data) {
         console.log('Login response:', data)
+
+        if (!data.token || typeof data.token !== 'string') {
+          toast.error('Unexpected login response.')
+          return
+        }
 
         // If backend sends "Bearer <token>", strip the prefix
         const token = data.token.startsWith('Bearer ')
@@ -64,14 +77,30 @@ export default function LoginPage() {
         }
       } else {
         let message = 'Login failed'
-        try {
-          const errorData = await res.json()
-          if (res.status === 401) {
-            message = 'Invalid username or password'
-          } else if (errorData?.message) {
-            message = errorData.message
-          }
-        } catch {}
+        const reason =
+          data && typeof data === 'object' && 'reason' in data
+            ? (data.reason as string | undefined)
+            : undefined
+
+        if (res.status === 401) {
+          message = 'Invalid username or password'
+        } else if (data && typeof data === 'object' && 'message' in data) {
+          message = String(data.message)
+        }
+
+        if (res.status === 403 && reason === 'verification_expired') {
+          setVerificationMessage(message)
+          setResendEmail(trimmedUsername || username)
+          setShowResendModal(true)
+          toast.error(message)
+          return
+        }
+
+        if (res.status === 403 && reason === 'verification_pending') {
+          toast.info(message)
+          return
+        }
+
         toast.error(message)
       }
     } catch {
@@ -112,8 +141,79 @@ export default function LoginPage() {
     }
   }
 
+  const handleResendVerification = async () => {
+    if (!resendEmail) return
+    setIsResendingVerification(true)
+    try {
+      const res = await fetch(
+        'http://localhost:5000/api/auth/resendVerification',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ email: resendEmail }),
+        }
+      )
+      const data = await res.json().catch(() => null)
+
+      if (!res.ok) {
+        const message =
+          data && typeof data === 'object' && 'message' in data
+            ? String(data.message)
+            : 'Failed to resend verification email.'
+        throw new Error(message)
+      }
+
+      toast.success('Verification email sent. Please check your inbox.')
+      setShowResendModal(false)
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'Failed to resend verification email.'
+      toast.error(message)
+    } finally {
+      setIsResendingVerification(false)
+    }
+  }
+
   return (
     <div>
+      {showResendModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+          <div className="bg-white rounded-lg shadow-lg p-6 w-[360px] relative">
+            <button
+              className="absolute top-2 right-2 text-gray-500 hover:text-black"
+              onClick={() => {
+                setShowResendModal(false)
+                setVerificationMessage('')
+              }}
+              aria-label="Close"
+            >
+              &times;
+            </button>
+            <h2 className="text-xl font-bold mb-3 text-center">
+              Verify Your Email
+            </h2>
+            <p className="text-sm text-gray-600 mb-5 text-center">
+              {verificationMessage ||
+                `Your verification link has expired. Resend a new email to ${
+                  resendEmail || 'this email address'
+                }.`}
+            </p>
+            <button
+              onClick={handleResendVerification}
+              className="bg-litratoblack text-white px-4 py-2 rounded w-full font-bold hover:bg-black transition-all disabled:opacity-60"
+              disabled={isResendingVerification}
+            >
+              {isResendingVerification
+                ? 'Sending...'
+                : 'Resend Verification Email'}
+            </button>
+          </div>
+        </div>
+      )}
       {/* Forgot Password Modal */}
       {showForgotModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
@@ -176,13 +276,27 @@ export default function LoginPage() {
               className="w-full bg-gray-200 rounded-md p-2 text-sm mb-2 focus:outline-none"
             />
             <label className="block text-lg mb-1">Password:</label>
-            <input
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              type="password"
-              placeholder="Enter here:"
-              className="w-full bg-gray-200 rounded-md p-2 text-sm focus:outline-none"
-            />
+            <div className="relative">
+              <input
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                type={passwordVisible ? 'text' : 'password'}
+                placeholder="Enter here:"
+                className="w-full bg-gray-200 rounded-md p-2 pr-10 text-sm focus:outline-none"
+              />
+              <button
+                type="button"
+                onClick={() => setPasswordVisible((prev) => !prev)}
+                className="absolute inset-y-0 right-2 flex items-center text-gray-600"
+                aria-label={passwordVisible ? 'Hide password' : 'Show password'}
+              >
+                {passwordVisible ? (
+                  <EyeOff className="h-5 w-5" />
+                ) : (
+                  <Eye className="h-5 w-5" />
+                )}
+              </button>
+            </div>
           </div>
           <div className="text-right mt-2">
             <button

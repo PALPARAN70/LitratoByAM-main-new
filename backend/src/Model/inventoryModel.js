@@ -12,7 +12,6 @@ async function initInventoryTable() {
       material_type VARCHAR(50),
       condition VARCHAR(50) DEFAULT 'Good',
       status BOOLEAN DEFAULT TRUE,
-      last_date_checked TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       notes TEXT,
       display BOOLEAN DEFAULT TRUE,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -27,10 +26,18 @@ async function createInventoryItem(
   materialType,
   condition,
   status,
-  lastDateChecked,
   notes,
   display = true
 ) {
+  const baseValues = [
+    materialName,
+    materialType,
+    condition,
+    status,
+    notes,
+    display,
+  ]
+
   const result = await pool.query(
     `
       INSERT INTO inventory (
@@ -38,22 +45,13 @@ async function createInventoryItem(
         material_type,
         condition,
         status,
-        last_date_checked,
         notes,
         display
       )
-      VALUES ($1,$2,$3,$4,$5,$6,$7)
+      VALUES ($1,$2,$3,$4,$5,$6)
       RETURNING *
     `,
-    [
-      materialName,
-      materialType,
-      condition,
-      status,
-      lastDateChecked,
-      notes,
-      display,
-    ]
+    baseValues
   )
   return result.rows[0]
 }
@@ -84,7 +82,6 @@ async function updateInventory(id, updates) {
     material_type: true,
     condition: true,
     status: true,
-    last_date_checked: true,
     notes: true,
     display: true,
   }

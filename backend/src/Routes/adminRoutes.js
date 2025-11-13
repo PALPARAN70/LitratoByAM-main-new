@@ -3,6 +3,7 @@ const adminController = require('../Controller/adminControllers/adminController'
 const adminGridController = require('../Controller/adminControllers/adminGridController')
 const adminBookingController = require('../Controller/adminControllers/adminBookingController')
 const adminConfirmedBookingController = require('../Controller/adminControllers/adminConfirmedBookingController')
+const adminAnalyticsController = require('../Controller/adminControllers/adminAnalyticsController')
 const authMiddleware = require('../Middleware/authMiddleware')
 const roleMiddleware = require('../Middleware/roleMiddleware')
 const path = require('path')
@@ -84,6 +85,21 @@ const uploadContractOriginal = multer({
   storage: storageContractOriginal,
   fileFilter: contractFileFilter,
 })
+
+// -------- analytics routes -------- //
+router.get(
+  '/analytics/bookings',
+  authMiddleware,
+  roleMiddleware('admin'),
+  adminAnalyticsController.getBookingAnalytics
+)
+
+router.get(
+  '/analytics/revenue',
+  authMiddleware,
+  roleMiddleware('admin'),
+  adminAnalyticsController.getRevenueAnalytics
+)
 // -------- user management routes -------- //
 // List users by role (?role=customer|employee|admin)
 router.get(

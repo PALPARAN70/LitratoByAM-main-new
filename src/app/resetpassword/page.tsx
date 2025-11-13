@@ -1,6 +1,7 @@
 'use client'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useState, useEffect } from 'react'
+import { Eye, EyeOff } from 'lucide-react'
 import { toast } from 'sonner'
 
 export default function ResetPasswordPage() {
@@ -11,6 +12,10 @@ export default function ResetPasswordPage() {
   const [confirmPwd, setConfirmPwd] = useState('')
   const [confirmReset, setConfirmReset] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [visibility, setVisibility] = useState({
+    password: false,
+    confirmPassword: false,
+  })
 
   useEffect(() => {
     if (!token) {
@@ -42,6 +47,10 @@ export default function ResetPasswordPage() {
 
   const handleDialogCancel = () => setConfirmReset(false)
 
+  const toggleVisibility = (key: 'password' | 'confirmPassword') => {
+    setVisibility((prev) => ({ ...prev, [key]: !prev[key] }))
+  }
+
   const handleConfirmReset = async () => {
     setSubmitting(true)
     try {
@@ -59,6 +68,7 @@ export default function ResetPasswordPage() {
       }
 
       toast.success('Password reset successfully.')
+      setVisibility({ password: false, confirmPassword: false })
       router.push('/login')
     } catch (err: unknown) {
       const message =
@@ -69,6 +79,7 @@ export default function ResetPasswordPage() {
     } finally {
       setSubmitting(false)
       setConfirmReset(false)
+      setVisibility({ password: false, confirmPassword: false })
     }
   }
 
@@ -78,23 +89,57 @@ export default function ResetPasswordPage() {
       <section className="flex flex-col items-center justify-center mt-8 gap-y-4 mb-12 w-full">
         <div className="flex flex-col w-full max-w-md">
           <label className="block text-lg mb-1">Enter New Password:</label>
-          <input
-            type="password"
-            placeholder="New password"
-            className="w-full bg-gray-200 rounded-md p-2 text-sm mb-3 focus:outline-none"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            disabled={submitting}
-          />
+          <div className="relative mb-3">
+            <input
+              type={visibility.password ? 'text' : 'password'}
+              placeholder="New password"
+              className="w-full bg-gray-200 rounded-md p-2 pr-10 text-sm focus:outline-none"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              disabled={submitting}
+            />
+            <button
+              type="button"
+              onClick={() => toggleVisibility('password')}
+              disabled={submitting}
+              className="absolute inset-y-0 right-2 flex items-center text-gray-600 disabled:text-gray-400"
+              aria-label={
+                visibility.password ? 'Hide password' : 'Show password'
+              }
+            >
+              {visibility.password ? (
+                <EyeOff className="h-5 w-5" />
+              ) : (
+                <Eye className="h-5 w-5" />
+              )}
+            </button>
+          </div>
           <label className="block text-lg mb-1">Confirm New Password:</label>
-          <input
-            type="password"
-            placeholder="Confirm password"
-            className="w-full bg-gray-200 rounded-md p-2 text-sm focus:outline-none"
-            value={confirmPwd}
-            onChange={(e) => setConfirmPwd(e.target.value)}
-            disabled={submitting}
-          />
+          <div className="relative">
+            <input
+              type={visibility.confirmPassword ? 'text' : 'password'}
+              placeholder="Confirm password"
+              className="w-full bg-gray-200 rounded-md p-2 pr-10 text-sm focus:outline-none"
+              value={confirmPwd}
+              onChange={(e) => setConfirmPwd(e.target.value)}
+              disabled={submitting}
+            />
+            <button
+              type="button"
+              onClick={() => toggleVisibility('confirmPassword')}
+              disabled={submitting}
+              className="absolute inset-y-0 right-2 flex items-center text-gray-600 disabled:text-gray-400"
+              aria-label={
+                visibility.confirmPassword ? 'Hide password' : 'Show password'
+              }
+            >
+              {visibility.confirmPassword ? (
+                <EyeOff className="h-5 w-5" />
+              ) : (
+                <Eye className="h-5 w-5" />
+              )}
+            </button>
+          </div>
         </div>
 
         <div className="flex flex-row justify-between w-full max-w-md">

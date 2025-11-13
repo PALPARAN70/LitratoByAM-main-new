@@ -11,22 +11,14 @@ const materialTypesModel = require('../../Model/materialTypesModel')
 // -------- Inventory Items -------- //
 exports.createInventoryItem = async (req, res) => {
   try {
-    const {
-      materialName,
-      materialType,
-      condition,
-      status,
-      lastDateChecked,
-      notes,
-      display,
-    } = req.body
+    const { materialName, materialType, condition, status, notes, display } =
+      req.body
 
     const newItem = await inventoryModel.createInventoryItem(
       materialName,
       materialType,
       condition,
       status,
-      lastDateChecked,
       notes,
       display
     )
@@ -460,7 +452,15 @@ exports.createPackageInventoryItem = async (req, res) => {
   try {
     const { package_id, inventory_id, quantity } = req.body
 
-    if (!package_id || !inventory_id || quantity == null) {
+    const packageId = Number(package_id)
+    const inventoryId = Number(inventory_id)
+    const qty = Number(quantity)
+
+    if (
+      !Number.isFinite(packageId) ||
+      !Number.isFinite(inventoryId) ||
+      !Number.isFinite(qty)
+    ) {
       return res.status(400).json({
         toast: {
           type: 'error',
@@ -468,28 +468,43 @@ exports.createPackageInventoryItem = async (req, res) => {
         },
       })
     }
-    if (quantity <= 0) {
+    if (qty <= 0) {
       return res
         .status(400)
         .json({ toast: { type: 'error', message: 'Quantity must be > 0' } })
     }
 
-    const pkg = await packageModel.getPackageByIdAny(package_id)
+    const pkg = await packageModel.getPackageByIdAny(packageId)
     if (!pkg) {
       return res
         .status(404)
         .json({ toast: { type: 'error', message: 'Package not found' } })
     }
 
-    const inv = await inventoryModel.findInventoryById(inventory_id)
+    const inv = await inventoryModel.findInventoryById(inventoryId)
     if (!inv) {
       return res
         .status(404)
         .json({ toast: { type: 'error', message: 'Inventory item not found' } })
     }
 
+    const existingAssignment =
+      await packageInventoryItemModel.getActivePackageInventoryItemByInventoryId(
+        inventoryId
+      )
+    if (existingAssignment) {
+      const assignedPackageName = existingAssignment.package_name
+        ? `package ${existingAssignment.package_name}`
+        : 'another package'
+      const message =
+        Number(existingAssignment.package_id) === packageId
+          ? 'Inventory item is already assigned to this package.'
+          : `Inventory item is already assigned to ${assignedPackageName}.`
+      return res.status(409).json({ toast: { type: 'error', message } })
+    }
+
     const junction = await packageInventoryItemModel.createPackageInventoryItem(
-      { package_id, inventory_id, quantity }
+      { package_id: packageId, inventory_id: inventoryId, quantity: qty }
     )
 
     res.status(201).json({
@@ -498,6 +513,14 @@ exports.createPackageInventoryItem = async (req, res) => {
     })
   } catch (error) {
     console.error('Create Package Inventory Item Error:', error)
+    if (error?.code === '23505') {
+      return res.status(409).json({
+        toast: {
+          type: 'error',
+          message: 'Inventory item is already assigned to another package.',
+        },
+      })
+    }
     res
       .status(500)
       .json({ toast: { type: 'error', message: 'Internal server error' } })
@@ -528,6 +551,13 @@ exports.updatePackageInventoryItem = async (req, res) => {
     const { package_inventory_item_id } = req.params
     const { package_id, inventory_id, quantity, display } = req.body
 
+    const packageInventoryItemId = Number(package_inventory_item_id)
+    if (!Number.isFinite(packageInventoryItemId)) {
+      return res
+        .status(400)
+        .json({ toast: { type: 'error', message: 'Invalid item id' } })
+    }
+
     const updates = {
       ...(package_id !== undefined && { package_id }),
       ...(inventory_id !== undefined && { inventory_id }),
@@ -541,8 +571,87 @@ exports.updatePackageInventoryItem = async (req, res) => {
         .json({ toast: { type: 'error', message: 'No valid fields provided' } })
     }
 
+    const currentItem =
+      await packageInventoryItemModel.getPackageInventoryItemById(
+        packageInventoryItemId
+      )
+    if (!currentItem) {
+      return res.status(404).json({
+        toast: { type: 'error', message: 'Package inventory item not found' },
+      })
+    }
+
+    const targetPackageId = Number(
+      updates.package_id !== undefined
+        ? updates.package_id
+        : currentItem.package_id
+    )
+    if (!Number.isFinite(targetPackageId)) {
+      return res
+        .status(400)
+        .json({ toast: { type: 'error', message: 'Invalid package id' } })
+    }
+
+    const targetInventoryId = Number(
+      updates.inventory_id !== undefined
+        ? updates.inventory_id
+        : currentItem.inventory_id
+    )
+    if (!Number.isFinite(targetInventoryId)) {
+      return res.status(400).json({
+        toast: { type: 'error', message: 'Invalid inventory id' },
+      })
+    }
+
+    if (updates.package_id !== undefined) updates.package_id = targetPackageId
+    if (updates.inventory_id !== undefined)
+      updates.inventory_id = targetInventoryId
+
+    if (updates.quantity !== undefined) {
+      const qty = Number(updates.quantity)
+      if (!Number.isFinite(qty) || qty <= 0) {
+        return res
+          .status(400)
+          .json({ toast: { type: 'error', message: 'Quantity must be > 0' } })
+      }
+      updates.quantity = qty
+    }
+
+    const parseDisplay = (value, fallback) => {
+      if (value === undefined) return fallback
+      if (value === true || value === 'true' || value === 1 || value === '1')
+        return true
+      if (value === false || value === 'false' || value === 0 || value === '0')
+        return false
+      return Boolean(value)
+    }
+
+    const targetDisplay = parseDisplay(
+      updates.display,
+      currentItem.display !== false
+    )
+    if (updates.display !== undefined) updates.display = targetDisplay
+
+    if (targetDisplay) {
+      const conflict =
+        await packageInventoryItemModel.getActivePackageInventoryItemByInventoryId(
+          targetInventoryId
+        )
+      if (conflict && Number(conflict.id) !== Number(currentItem.id)) {
+        const assignedPackageName = conflict.package_name
+          ? `package ${conflict.package_name}`
+          : 'another package'
+        return res.status(409).json({
+          toast: {
+            type: 'error',
+            message: `Inventory item is already assigned to ${assignedPackageName}.`,
+          },
+        })
+      }
+    }
+
     const updated = await packageInventoryItemModel.updatePackageInventoryItem(
-      package_inventory_item_id,
+      packageInventoryItemId,
       updates
     )
     if (!updated) {
@@ -560,6 +669,14 @@ exports.updatePackageInventoryItem = async (req, res) => {
     })
   } catch (e) {
     console.error('Update Package Inventory Item Error:', e)
+    if (e?.code === '23505') {
+      return res.status(409).json({
+        toast: {
+          type: 'error',
+          message: 'Inventory item is already assigned to another package.',
+        },
+      })
+    }
     res
       .status(500)
       .json({ toast: { type: 'error', message: 'Internal server error' } })
@@ -797,16 +914,16 @@ exports.replacePackageItems = async (req, res) => {
     const existing = all.filter(
       (it) => Number(it.package_id) === packageId && it.display !== false
     )
-    for (const it of existing) {
-      await packageInventoryItemModel.updatePackageInventoryItem(it.id, {
-        display: false,
-      })
-    }
 
-    const newItems = []
+    const seenInventory = new Set()
+    const normalizedItems = []
+
     for (const item of items) {
       const { inventory_id, quantity } = item
-      if (!inventory_id || quantity == null) {
+      const inventoryId = Number(inventory_id)
+      const qty = Number(quantity)
+
+      if (!Number.isFinite(inventoryId) || !Number.isFinite(qty)) {
         return res.status(400).json({
           toast: {
             type: 'error',
@@ -814,24 +931,60 @@ exports.replacePackageItems = async (req, res) => {
           },
         })
       }
-      if (quantity <= 0) {
+      if (qty <= 0) {
         return res
           .status(400)
           .json({ toast: { type: 'error', message: 'Quantity must be > 0' } })
       }
+      if (seenInventory.has(inventoryId)) {
+        return res.status(400).json({
+          toast: {
+            type: 'error',
+            message: 'Duplicate inventory items provided',
+          },
+        })
+      }
 
-      const inv = await inventoryModel.findInventoryById(inventory_id)
+      const inv = await inventoryModel.findInventoryById(inventoryId)
       if (!inv) {
         return res.status(404).json({
           toast: { type: 'error', message: 'Inventory item not found' },
         })
       }
 
+      const activeLink =
+        await packageInventoryItemModel.getActivePackageInventoryItemByInventoryId(
+          inventoryId
+        )
+      if (activeLink && Number(activeLink.package_id) !== packageId) {
+        const assignedPackageName = activeLink.package_name
+          ? `package ${activeLink.package_name}`
+          : 'another package'
+        return res.status(409).json({
+          toast: {
+            type: 'error',
+            message: `Inventory item is already assigned to ${assignedPackageName}.`,
+          },
+        })
+      }
+
+      seenInventory.add(inventoryId)
+      normalizedItems.push({ inventory_id: inventoryId, quantity: qty })
+    }
+
+    for (const it of existing) {
+      await packageInventoryItemModel.updatePackageInventoryItem(it.id, {
+        display: false,
+      })
+    }
+
+    const newItems = []
+    for (const item of normalizedItems) {
       const junction =
         await packageInventoryItemModel.createPackageInventoryItem({
           package_id: packageId,
-          inventory_id,
-          quantity,
+          inventory_id: item.inventory_id,
+          quantity: item.quantity,
         })
       newItems.push(junction)
     }

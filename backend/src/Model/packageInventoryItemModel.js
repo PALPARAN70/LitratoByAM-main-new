@@ -13,6 +13,18 @@ async function initPackageInventoryItemsTable() {
       last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `)
+  try {
+    await pool.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS package_inventory_items_unique_inventory
+      ON package_inventory_items (inventory_id)
+      WHERE display IS TRUE
+    `)
+  } catch (error) {
+    console.error(
+      'Ensure unique inventory assignment index failed to initialize:',
+      error
+    )
+  }
 }
 //create package inventory item
 async function createPackageInventoryItem({
@@ -77,6 +89,32 @@ async function updatePackageInventoryItem(id, updates) {
   return result.rows[0]
 }
 
+async function getPackageInventoryItemById(id) {
+  const result = await pool.query(
+    `
+      SELECT *
+      FROM package_inventory_items
+      WHERE id = $1
+    `,
+    [id]
+  )
+  return result.rows[0]
+}
+
+async function getActivePackageInventoryItemByInventoryId(inventory_id) {
+  const result = await pool.query(
+    `
+      SELECT pii.*, p.package_name
+      FROM package_inventory_items pii
+      JOIN packages p ON p.id = pii.package_id
+      WHERE pii.inventory_id = $1 AND pii.display = TRUE
+      LIMIT 1
+    `,
+    [inventory_id]
+  )
+  return result.rows[0]
+}
+
 // NEW: get items for a specific package (visible ones)
 async function getPackageInventoryItemsByPackage(package_id) {
   const result = await pool.query(
@@ -102,5 +140,7 @@ module.exports = {
   createPackageInventoryItem,
   getAllPackageInventoryItems,
   updatePackageInventoryItem,
+  getPackageInventoryItemById,
+  getActivePackageInventoryItemByInventoryId,
   getPackageInventoryItemsByPackage, // NEW export
 }
