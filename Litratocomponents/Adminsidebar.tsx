@@ -1,5 +1,5 @@
 "use client";
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import type { KeyboardEvent } from "react";
 import Image from "next/image";
 import { HiMenu } from "react-icons/hi";
@@ -13,6 +13,7 @@ import {
   FiLogOut,
   FiCreditCard,
 } from "react-icons/fi";
+import { FaFemale, FaMale, FaUser } from "react-icons/fa";
 import type { IconType } from "react-icons";
 import { useRouter, usePathname } from "next/navigation";
 
@@ -57,6 +58,7 @@ export default function LitratoSidebar({
   const [User, setUser] = useState<{
     firstname?: string;
     lastname?: string;
+    sex?: string | null;
   } | null>(null);
   const [internalOpen, setInternalOpen] = useState(true);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
@@ -108,11 +110,17 @@ export default function LitratoSidebar({
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (data && data.firstname) {
-          setUser({ firstname: data.firstname });
+          setUser({ firstname: data.firstname, sex: data.sex });
         }
       })
       .catch(() => {});
   }, []);
+
+  const ProfileIcon = useMemo<IconType>(() => {
+    if (User?.sex === "Male") return FaMale;
+    if (User?.sex === "Female") return FaFemale;
+    return FaUser;
+  }, [User?.sex]);
 
   return (
     <div
@@ -251,14 +259,8 @@ export default function LitratoSidebar({
             onClick={handleProfileCheck}
             className="pl-2 h-16 flex cursor-pointer flex-row items-center text-litratoblack font-medium text-base min-w-0"
           >
-            <div className="relative w-12 rounded-full h-12 shrink-0">
-              <Image
-                src="/Images/me.jpg"
-                alt="Profile Picture"
-                fill
-                priority
-                className="object-cover rounded-full"
-              />
+            <div className="flex items-center justify-center w-12 h-12 shrink-0 rounded-full bg-litratoblack text-white">
+              <ProfileIcon size={26} aria-hidden />
             </div>
             <div
               className={cx(
