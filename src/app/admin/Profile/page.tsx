@@ -25,7 +25,7 @@ import {
 import { profileUpdateSchema } from '../../../../schemas/schema/uservalidation'
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:5000'
 
-type SexOption = 'Male' | 'Female' | 'Prefer not to say'
+type SexOption = 'Male' | 'Female'
 
 type ProfileForm = {
   firstname: string
@@ -80,7 +80,7 @@ const ADDRESS_FIELDS: readonly AddressField[] = [
   { label: 'Postal Code', type: 'text', key: 'postalCode' },
 ] as const
 
-const SEX_OPTIONS: SexOption[] = ['Male', 'Female', 'Prefer not to say']
+const SEX_OPTIONS: SexOption[] = ['Male', 'Female']
 
 const DATE_LOWER_BOUND = new Date(1900, 0, 1)
 
