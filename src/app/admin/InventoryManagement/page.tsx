@@ -78,6 +78,7 @@ type EquipmentRow = {
   type: string
   condition: string
   status: EquipmentTabKey
+  assignedPackage: string
   moreDetails: string
   notes: string
   created_at: string
@@ -321,6 +322,9 @@ export default function InventoryManagementPage() {
   function CreateEquipmentPanel({ searchTerm }: { searchTerm?: string }) {
     const [active, setActive] = useState<EquipmentViewTabKey>('available')
     const [items, setItems] = useState<EquipmentRow[]>([])
+    const [assignmentMap, setAssignmentMap] = useState<Record<string, string>>(
+      {}
+    )
     const [equipmentTypes, setEquipmentTypes] = useState<string[]>(() =>
       mergeEquipmentTypes(DEFAULT_EQUIPMENT_TYPES)
     )
@@ -388,6 +392,15 @@ export default function InventoryManagementPage() {
         ignore = true
       }
     }, [API_BASE, getAuthHeaders])
+
+    useEffect(() => {
+      setItems((prev) =>
+        prev.map((row) => ({
+          ...row,
+          assignedPackage: assignmentMap[row.id] ?? 'Unassigned',
+        }))
+      )
+    }, [assignmentMap])
 
     const persistMaterialType = useCallback(
       async (typeName: string): Promise<MaterialTypePersistResult> => {
@@ -466,21 +479,28 @@ export default function InventoryManagementPage() {
       [persistMaterialType]
     )
 
-    const mapItem = (it: Record<string, unknown>): EquipmentRow => ({
-      id: String(it.id ?? ''),
-      name: String((it as { material_name?: unknown }).material_name ?? ''),
-      type: String((it as { material_type?: unknown }).material_type ?? ''),
-      condition: String((it as { condition?: unknown }).condition ?? ''),
-      status: ((it as { status?: unknown }).status
-        ? 'available'
-        : 'unavailable') as EquipmentTabKey,
-      moreDetails: 'View',
-      notes: String((it as { notes?: unknown }).notes ?? ''),
-      created_at: String((it as { created_at?: unknown }).created_at ?? ''),
-      last_updated: String(
-        (it as { last_updated?: unknown }).last_updated ?? ''
-      ),
-    })
+    const mapItem = (
+      it: Record<string, unknown>,
+      assignments: Record<string, string> = assignmentMap
+    ): EquipmentRow => {
+      const id = String(it.id ?? '')
+      return {
+        id,
+        name: String((it as { material_name?: unknown }).material_name ?? ''),
+        type: String((it as { material_type?: unknown }).material_type ?? ''),
+        condition: String((it as { condition?: unknown }).condition ?? ''),
+        status: ((it as { status?: unknown }).status
+          ? 'available'
+          : 'unavailable') as EquipmentTabKey,
+        assignedPackage: assignments[id] ?? 'Unassigned',
+        moreDetails: 'View',
+        notes: String((it as { notes?: unknown }).notes ?? ''),
+        created_at: String((it as { created_at?: unknown }).created_at ?? ''),
+        last_updated: String(
+          (it as { last_updated?: unknown }).last_updated ?? ''
+        ),
+      }
+    }
 
     // load from backend
     useEffect(() => {
@@ -488,19 +508,63 @@ export default function InventoryManagementPage() {
       ;(async () => {
         try {
           console.log('API_BASE', API_BASE)
-          const res = await fetch(`${API_BASE}/inventory`, {
-            headers: {
-              'Content-Type': 'application/json',
-              ...getAuthHeaders(),
-            },
-          })
-          if (res.status === 401)
+          const headers = {
+            'Content-Type': 'application/json',
+            ...getAuthHeaders(),
+          }
+
+          const [inventoryRes, assignmentsRes] = await Promise.all([
+            fetch(`${API_BASE}/inventory`, { headers }),
+            fetch(`${API_BASE}/package-inventory-item`, { headers }),
+          ])
+
+          if (inventoryRes.status === 401 || assignmentsRes.status === 401)
             throw new Error('Unauthorized. Please log in.')
-          if (res.status === 403)
+          if (inventoryRes.status === 403 || assignmentsRes.status === 403)
             throw new Error('Forbidden: Admin role required.')
-          if (!res.ok) throw new Error(`GET /inventory ${res.status}`)
-          const data = await res.json()
-          if (!ignore) setItems((data.items ?? data ?? []).map(mapItem))
+          if (!inventoryRes.ok)
+            throw new Error(`GET /inventory ${inventoryRes.status}`)
+
+          const inventoryPayload = await inventoryRes.json()
+          const rawItems = inventoryPayload.items ?? inventoryPayload ?? []
+
+          let assignmentLookup: Record<string, string> = {}
+          if (assignmentsRes.ok) {
+            try {
+              const assignmentsPayload = await assignmentsRes.json()
+              const rows = Array.isArray(
+                assignmentsPayload?.packageInventoryItems
+              )
+                ? assignmentsPayload.packageInventoryItems
+                : Array.isArray(assignmentsPayload)
+                ? assignmentsPayload
+                : []
+              assignmentLookup = rows.reduce<Record<string, string>>(
+                (acc, row) => {
+                  const inventoryId = String(row?.inventory_id ?? '')
+                  const packageName = String(row?.package_name ?? '').trim()
+                  if (inventoryId) {
+                    acc[inventoryId] = packageName || 'Unnamed Package'
+                  }
+                  return acc
+                },
+                {}
+              )
+            } catch (error) {
+              console.error('Parse package assignments failed:', error)
+            }
+          } else {
+            console.warn(`GET /package-inventory-item ${assignmentsRes.status}`)
+          }
+
+          if (!ignore) {
+            setAssignmentMap(assignmentLookup)
+            setItems(
+              rawItems.map((item: Record<string, unknown>) =>
+                mapItem(item, assignmentLookup)
+              )
+            )
+          }
         } catch (e) {
           console.error('Load inventory failed:', e)
         }
@@ -635,6 +699,7 @@ export default function InventoryManagementPage() {
         { key: 'name', label: 'Name' },
         { key: 'type', label: 'Type' },
         { key: 'condition', label: 'Condition' },
+        { key: 'assignedPackage', label: 'Package' },
         { key: 'status', label: 'Status' },
         { key: 'moreDetails', label: 'More Details' },
         { key: 'actions', label: 'Actions' },
@@ -730,11 +795,13 @@ export default function InventoryManagementPage() {
         const name = (it.name || '').toLowerCase()
         const type = (it.type || '').toLowerCase()
         const condition = (it.condition || '').toLowerCase()
+        const assigned = (it.assignedPackage || '').toLowerCase()
         return (
           id.includes(normalizedSearch) ||
           name.includes(normalizedSearch) ||
           type.includes(normalizedSearch) ||
-          condition.includes(normalizedSearch)
+          condition.includes(normalizedSearch) ||
+          assigned.includes(normalizedSearch)
         )
       })
     }, [items, normalizedSearch])
@@ -1068,6 +1135,10 @@ export default function InventoryManagementPage() {
           </PopoverTrigger>
           <PopoverContent align="end" className="w-64 text-sm">
             <div className="space-y-1">
+              <div>
+                <span className="font-medium">Package: </span>
+                {row.assignedPackage}
+              </div>
               <div>
                 <span className="font-medium">Notes: </span>
                 {row.notes}

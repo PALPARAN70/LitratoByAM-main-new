@@ -356,6 +356,24 @@ async function cancelBookingRequest(req, res) {
         .json({ message: 'Only pending/accepted bookings can be cancelled' })
     }
 
+    if (existing.status === 'accepted') {
+      const rawEventDate = existing.event_date || existing.eventdate || null
+      if (rawEventDate) {
+        const eventDate = new Date(rawEventDate)
+        if (!Number.isNaN(eventDate.getTime())) {
+          const now = new Date()
+          const diffMs = eventDate.getTime() - now.getTime()
+          const oneWeekMs = 7 * 24 * 60 * 60 * 1000
+          if (diffMs > 0 && diffMs < oneWeekMs) {
+            return res.status(400).json({
+              message:
+                'Approved bookings can only be cancelled at least 7 days before the event. Please contact support for assistance.',
+            })
+          }
+        }
+      }
+    }
+
     const updated = await cancelBookingRequestModel(requestid)
     return res.json({ message: 'Booking cancelled', booking: updated })
   } catch (err) {

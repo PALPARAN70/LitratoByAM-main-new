@@ -5,9 +5,80 @@ import LitratoNavbar from '../../../Litratocomponents/Navbar'
 import LitratoBranding from '../../../Litratocomponents/Branding'
 import Datepicker from '../../../Litratocomponents/availability_picker'
 import ImageSlider from '../../../Litratocomponents/Carousel'
-import PromoCard from '../../../Litratocomponents/Service_Card'
+import PromoCarousel from '../../../Litratocomponents/PromoCarousel'
 import LitratoFooter from '../../../Litratocomponents/Footer'
 import { useRouter } from 'next/navigation'
+
+const promoPackages = [
+  {
+    imageSrc: '/Images/V2 booth.jpg',
+    title: 'V2 Booth',
+    price: '₱8,000',
+    descriptions: [
+      '2 hours photo booth operation',
+      'Vintage TV with video camera',
+      'Unlimited shots',
+      'High quality photo strips',
+      'High quality of real time digital copy & GIFs',
+      'Compiled soft copies of picture & GIF (via Gdrive)',
+      'Customized welcome layout & photo strip',
+      '6 photo grids to choose from (two free grids)',
+      'Free transportation within DVO City',
+      'On-site staff',
+    ],
+  },
+  {
+    imageSrc: '/Images/The OG.jpg',
+    title: 'The OG',
+    price: '₱8,000',
+    descriptions: [
+      '2 hours photo booth operation',
+      'Vintage TV with video camera',
+      'Unlimited shots',
+      'High quality photo strips',
+      'High quality of real time digital copy & GIFs',
+      'Compiled soft copies of picture & GIF (via Gdrive)',
+      'Customized welcome layout & photo strip',
+      '6 photo grids to choose from (two free grids)',
+      'Free transportation within DVO City',
+      'On-site staff',
+    ],
+  },
+  {
+    imageSrc: '/Images/V3 booth.jpg',
+    title: 'V3 Booth',
+    price: '₱8,000',
+    descriptions: [
+      '2 hours photo booth operation',
+      'Vintage TV with video camera',
+      'Unlimited shots',
+      'High quality photo strips',
+      'High quality of real time digital copy & GIFs',
+      'Compiled soft copies of picture & GIF (via Gdrive)',
+      'Customized welcome layout & photo strip',
+      '6 photo grids to choose from (two free grids)',
+      'Free transportation within DVO City',
+      'On-site staff',
+    ],
+  },
+  {
+    imageSrc: '/Images/Hangad Booth.jpg',
+    title: 'Hangad Booth',
+    price: '₱8,000',
+    descriptions: [
+      '2 hours photo booth operation',
+      'Vintage TV with video camera',
+      'Unlimited shots',
+      'High quality photo strips',
+      'High quality of real time digital copy & GIFs',
+      'Compiled soft copies of picture & GIF (via Gdrive)',
+      'Customized welcome layout & photo strip',
+      '6 photo grids to choose from (two free grids)',
+      'Free transportation within DVO City',
+      'On-site staff',
+    ],
+  },
+]
 export default function HomePage() {
   const router = useRouter()
   const handleAvailableDate = () => {
@@ -110,45 +181,12 @@ export default function HomePage() {
       {/* Service Section */}
       <section
         id="services"
-        className="flex flex-row justify-self-center gap-40 mt-12"
+        className="flex flex-col xl:flex-row justify-self-center gap-16 mt-12 items-center xl:items-start"
       >
-        <div className="flex flex-row gap-10">
-          <PromoCard
-            imageSrc="/Images/litratobg.jpg"
-            title="The OG"
-            price="₱8,000"
-            descriptions={[
-              '2 hours photo booth operation',
-              'Vintage TV with video camera',
-              'Unlimited shots',
-              'High quality photo strips',
-              'High quality of real time digital copy & GIFs',
-              'Compiled soft copies of picture & GIF (via Gdrive)',
-              'Customized welcome layout & photo strip',
-              '6 photo grids to choose from (two free grids)',
-              'Free transportation within DVO City',
-              'On-site staff',
-            ]}
-          />
-          <PromoCard
-            imageSrc="/Images/litratobg.jpg"
-            title="The OG"
-            price="₱8,000"
-            descriptions={[
-              '2 hours photo booth operation',
-              'Vintage TV with video camera',
-              'Unlimited shots',
-              'High quality photo strips',
-              'High quality of real time digital copy & GIFs',
-              'Compiled soft copies of picture & GIF (via Gdrive)',
-              'Customized welcome layout & photo strip',
-              '6 photo grids to choose from (two free grids)',
-              'Free transportation within DVO City',
-              'On-site staff',
-            ]}
-          />
+        <div className="w-full max-w-5xl">
+          <PromoCarousel promos={promoPackages} />
         </div>
-        <div className="flex flex-col">
+        <div className="flex flex-col items-center xl:items-start xl:pl-15">
           <Image
             src="/Images/litratopic.jpg"
             alt="litratobyam"
@@ -158,7 +196,7 @@ export default function HomePage() {
           ></Image>
           <div
             onClick={handleLogin}
-            className="bg-litratoblack hover:scale-110 select-none duration-500 text-white w-1/2 py-3 text-center rounded-xl hover:cursor-pointer self-center mt-20 font-bold"
+            className="bg-litratoblack hover:scale-110 select-none duration-500 text-white w-1/2 py-3 text-center rounded-xl hover:cursor-pointer mt-24 font-bold"
           >
             {' '}
             BOOK NOW{' '}
