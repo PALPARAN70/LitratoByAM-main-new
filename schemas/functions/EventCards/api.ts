@@ -10,6 +10,8 @@ export type PackageItem = {
   condition?: string
   status?: boolean
   inventory_notes?: string | null
+  equipment_notes?: string | null
+  notes?: string | null
 }
 
 export type InventoryItem = {

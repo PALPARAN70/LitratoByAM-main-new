@@ -8,11 +8,34 @@ const packageInventoryItemModel = require('../../Model/packageInventoryItemModel
 const inventoryStatusLogModel = require('../../Model/inventoryStatusLogModel')
 const materialTypesModel = require('../../Model/materialTypesModel')
 
+const TRUE_LITERALS = new Set(['true', '1', 't', 'yes', 'y'])
+const FALSE_LITERALS = new Set(['false', '0', 'f', 'no', 'n'])
+const parseBooleanLike = (value, defaultValue = false) => {
+  if (value === undefined || value === null) return defaultValue
+  if (typeof value === 'boolean') return value
+  if (typeof value === 'number') return value !== 0
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase()
+    if (TRUE_LITERALS.has(normalized)) return true
+    if (FALSE_LITERALS.has(normalized)) return false
+  }
+  return Boolean(value)
+}
+
 // -------- Equipment Items -------- //
 exports.createInventoryItem = async (req, res) => {
   try {
-    const { materialName, materialType, condition, status, notes, display } =
-      req.body
+    const {
+      materialName,
+      materialType,
+      condition,
+      status,
+      notes,
+      display,
+      is_archived,
+    } = req.body
+
+    const isArchivedPayload = parseBooleanLike(is_archived, false)
 
     const newItem = await inventoryModel.createInventoryItem(
       materialName,
@@ -20,7 +43,8 @@ exports.createInventoryItem = async (req, res) => {
       condition,
       status,
       notes,
-      display
+      display,
+      isArchivedPayload
     )
 
     // auto log
@@ -35,6 +59,10 @@ exports.createInventoryItem = async (req, res) => {
             material_type: [null, newItem.material_type],
             condition: [null, newItem.condition],
             status: [null, newItem.status ? 'available' : 'unavailable'],
+            is_archived: [
+              null,
+              newItem.is_archived ? 'archived' : 'unarchived',
+            ],
           },
         }),
         null,
@@ -80,12 +108,24 @@ exports.listInventory = async (_req, res) => {
 exports.updateInventoryItem = async (req, res) => {
   try {
     const { inventoryID } = req.params
-    const updates = req.body
+    const body = req.body || {}
+    const updates = { ...body }
+
     const current = await inventoryModel.findInventoryById(inventoryID)
     if (!current) {
       return res
         .status(404)
         .json({ toast: { type: 'error', message: 'Equipment item not found' } })
+    }
+
+    if (Object.prototype.hasOwnProperty.call(updates, 'status')) {
+      updates.status = parseBooleanLike(updates.status, !!current.status)
+    }
+    if (Object.prototype.hasOwnProperty.call(updates, 'is_archived')) {
+      updates.is_archived = parseBooleanLike(
+        updates.is_archived,
+        !!current.is_archived
+      )
     }
 
     const updated = await inventoryModel.updateInventory(inventoryID, updates)
@@ -97,7 +137,9 @@ exports.updateInventoryItem = async (req, res) => {
       'material_type',
       'condition',
       'status',
+      'is_archived',
     ]
+    let logStatus = 'updated'
     for (const f of trackFields) {
       if (Object.prototype.hasOwnProperty.call(updates, f)) {
         const oldVal = current[f]
@@ -105,9 +147,13 @@ exports.updateInventoryItem = async (req, res) => {
         if (oldVal !== newVal) {
           const normalize = (field, val) => {
             if (field === 'status') return val ? 'available' : 'unavailable'
+            if (field === 'is_archived') return val ? 'archived' : 'unarchived'
             return val === null || val === undefined ? null : String(val)
           }
           diff[f] = [normalize(f, oldVal), normalize(f, newVal)]
+          if (f === 'is_archived') {
+            logStatus = newVal ? 'archived' : 'unarchived'
+          }
         }
       }
     }
@@ -116,7 +162,7 @@ exports.updateInventoryItem = async (req, res) => {
         await inventoryStatusLogModel.createStatusLog(
           'Equipments',
           Number(inventoryID),
-          'updated',
+          logStatus,
           JSON.stringify({ changes: diff }),
           null,
           req.user?.id ?? null
@@ -800,11 +846,9 @@ exports.updateInventoryStatusLog = async (req, res) => {
     const { inventory_log_id } = req.params
     const { entity_type, entity_id, status, notes, additional_notes } = req.body
     if (!inventory_log_id) {
-      return res
-        .status(400)
-        .json({
-          toast: { type: 'error', message: 'inventory_log_id is required' },
-        })
+      return res.status(400).json({
+        toast: { type: 'error', message: 'inventory_log_id is required' },
+      })
     }
     if (entity_id == null || !status) {
       return res.status(400).json({

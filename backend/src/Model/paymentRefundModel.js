@@ -45,9 +45,39 @@ async function getTotalRefundedForPayment(payment_id) {
   return Number(res.rows?.[0]?.total || 0)
 }
 
+async function getRefundTotalsForPayments(paymentIds = []) {
+  if (!Array.isArray(paymentIds) || paymentIds.length === 0) {
+    return {}
+  }
+  const numbersOnly = paymentIds
+    .map((id) => Number(id))
+    .filter((id) => Number.isFinite(id))
+    .sort((a, b) => a - b)
+  const distinctIds = numbersOnly.filter(
+    (id, idx) => id !== numbersOnly[idx - 1]
+  )
+  if (!distinctIds.length) return {}
+  const res = await pool.query(
+    `SELECT payment_id, COALESCE(SUM(amount),0)::numeric AS total
+       FROM payment_refunds
+      WHERE payment_id = ANY($1::int[])
+   GROUP BY payment_id`,
+    [distinctIds]
+  )
+  const map = {}
+  for (const row of res.rows || []) {
+    const id = Number(row.payment_id)
+    if (Number.isFinite(id)) {
+      map[id] = Number(row.total || 0)
+    }
+  }
+  return map
+}
+
 module.exports = {
   initPaymentRefundsTable,
   createRefund,
   listRefundsByPayment,
   getTotalRefundedForPayment,
+  getRefundTotalsForPayments,
 }

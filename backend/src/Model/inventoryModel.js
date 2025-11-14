@@ -27,12 +27,26 @@ async function initInventoryTable() {
       material_type VARCHAR(50),
       condition VARCHAR(50) DEFAULT 'Good',
       status BOOLEAN DEFAULT TRUE,
+      is_archived BOOLEAN DEFAULT FALSE,
       notes TEXT,
       display BOOLEAN DEFAULT TRUE,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `)
+
+  // Ensure new schema changes exist on legacy tables
+  await pool.query(
+    `ALTER TABLE equipments ADD COLUMN IF NOT EXISTS is_archived BOOLEAN DEFAULT FALSE`
+  )
+
+  // Backfill archive flag for legacy records that used condition='Archived'
+  await pool.query(
+    `UPDATE equipments
+     SET is_archived = TRUE
+     WHERE is_archived IS DISTINCT FROM TRUE
+       AND LOWER(COALESCE(condition, '')) = 'archived'`
+  )
 }
 
 // Create equipment item
@@ -42,7 +56,8 @@ async function createInventoryItem(
   condition,
   status,
   notes,
-  display = true
+  display = true,
+  isArchived = false
 ) {
   const baseValues = [
     materialName,
@@ -51,6 +66,7 @@ async function createInventoryItem(
     status,
     notes,
     display,
+    Boolean(isArchived),
   ]
 
   const result = await pool.query(
@@ -61,9 +77,10 @@ async function createInventoryItem(
         condition,
         status,
         notes,
-        display
+        display,
+        is_archived
       )
-      VALUES ($1,$2,$3,$4,$5,$6)
+      VALUES ($1,$2,$3,$4,$5,$6,$7)
       RETURNING *
     `,
     baseValues
@@ -99,6 +116,7 @@ async function updateInventory(id, updates) {
     status: true,
     notes: true,
     display: true,
+    is_archived: true,
   }
 
   const fields = []

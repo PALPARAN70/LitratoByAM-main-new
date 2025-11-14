@@ -48,7 +48,6 @@ type StaffEvent = {
   grid?: string
   imageUrl?: string
   damagedItems?: Item[]
-  missingItems?: Item[]
 }
 
 // shared 3-page window helper
@@ -192,7 +191,6 @@ export default function DashboardPage() {
                 : '',
               imageUrl: undefined,
               damagedItems: [],
-              missingItems: [],
             }
           })
         if (mounted) setEvents(mapped)
@@ -229,8 +227,7 @@ export default function DashboardPage() {
     const tokens = search.trim().toLowerCase().split(/\s+/).filter(Boolean)
     return events.filter((e) => {
       const statusOk = statusFilter === 'all' ? true : e.status === statusFilter
-      const issues =
-        (e.damagedItems?.length || 0) + (e.missingItems?.length || 0)
+      const issues = e.damagedItems?.length || 0
       const itemsOk =
         itemsFilter === 'all'
           ? true
@@ -358,7 +355,6 @@ export default function DashboardPage() {
                   totalPrice={ev.totalPrice}
                   imageUrl={ev.imageUrl}
                   damagedItems={ev.damagedItems}
-                  missingItems={ev.missingItems}
                   strongestSignal={ev.strongestSignal}
                   contactInfo={ev.contactInfo}
                   contactPerson={ev.contactPerson}

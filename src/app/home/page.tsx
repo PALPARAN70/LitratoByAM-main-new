@@ -127,14 +127,14 @@ export default function HomePage() {
       >
         <div className="flex flex-row gap-14 mt-12">
           <Image
-            src="/Images/hanz.png"
+            src="/Images/litratobg.jpg"
             alt="display_img"
             width={100}
             height={10}
             className="w-[300px] h-[400px] object-cover bg-no-repeat rounded-2xl"
           ></Image>
           <Image
-            src="/Images/litratobg.jpg"
+            src="/Images/litratobyam2.jpg"
             alt="display_img"
             width={100}
             height={10}

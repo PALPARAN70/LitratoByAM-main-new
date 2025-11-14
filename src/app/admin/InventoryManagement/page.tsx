@@ -78,6 +78,7 @@ type EquipmentRow = {
   type: string
   condition: string
   status: EquipmentTabKey
+  isArchived: boolean
   assignedPackage: string
   moreDetails: string
   notes: string
@@ -296,7 +297,7 @@ export default function InventoryManagementPage() {
             active={active === 'logitems'}
             onClick={() => setActive('logitems')}
           >
-            Item Logs
+            Logs
           </TabButton>
 
           <div className="flex-grow flex">
@@ -495,14 +496,34 @@ export default function InventoryManagementPage() {
       assignments: Record<string, string> = assignmentMap
     ): EquipmentRow => {
       const id = String(it.id ?? '')
+      const rawCondition = String(
+        (it as { condition?: unknown }).condition ?? ''
+      )
+      const archiveValue = (it as { is_archived?: unknown }).is_archived
+      const derivedArchived = (() => {
+        if (archiveValue === undefined) {
+          return rawCondition.trim().toLowerCase() === 'archived'
+        }
+        if (typeof archiveValue === 'string') {
+          const normalized = archiveValue.trim().toLowerCase()
+          return ['true', '1', 't', 'yes', 'y'].includes(normalized)
+        }
+        if (typeof archiveValue === 'number') {
+          return Number(archiveValue) !== 0
+        }
+        return Boolean(archiveValue)
+      })()
+      const statusBool = Boolean((it as { status?: unknown }).status)
+      const status = (
+        statusBool && !derivedArchived ? 'available' : 'unavailable'
+      ) as EquipmentTabKey
       return {
         id,
         name: String((it as { material_name?: unknown }).material_name ?? ''),
         type: String((it as { material_type?: unknown }).material_type ?? ''),
-        condition: String((it as { condition?: unknown }).condition ?? ''),
-        status: ((it as { status?: unknown }).status
-          ? 'available'
-          : 'unavailable') as EquipmentTabKey,
+        condition: rawCondition,
+        status,
+        isArchived: derivedArchived,
         assignedPackage: assignments[id] ?? 'Unassigned',
         moreDetails: 'View',
         notes: String((it as { notes?: unknown }).notes ?? ''),
@@ -627,6 +648,7 @@ export default function InventoryManagementPage() {
           status: form.status === 'available',
           notes: form.notes,
           display: true,
+          is_archived: false,
         }
         const res = await fetch(`${API_BASE}/inventory`, {
           method: 'POST',
@@ -806,7 +828,9 @@ export default function InventoryManagementPage() {
         const id = (it.id || '').toString().toLowerCase()
         const name = (it.name || '').toLowerCase()
         const type = (it.type || '').toLowerCase()
-        const condition = (it.condition || '').toLowerCase()
+        const condition = (it.isArchived ? 'archived' : it.condition || '')
+          .toString()
+          .toLowerCase()
         const assigned = (it.assignedPackage || '').toLowerCase()
         return (
           id.includes(normalizedSearch) ||
@@ -822,19 +846,19 @@ export default function InventoryManagementPage() {
     const availableRows = useMemo(
       () =>
         filteredItems.filter(
-          (it) => it.status === 'available' && it.condition !== 'Archived'
+          (it) => !it.isArchived && it.status === 'available'
         ),
       [filteredItems]
     )
     const unavailableRows = useMemo(
       () =>
         filteredItems.filter(
-          (it) => it.status === 'unavailable' && it.condition !== 'Archived'
+          (it) => !it.isArchived && it.status === 'unavailable'
         ),
       [filteredItems]
     )
     const archivedRows = useMemo(
-      () => filteredItems.filter((it) => it.condition === 'Archived'),
+      () => filteredItems.filter((it) => it.isArchived),
       [filteredItems]
     )
 
@@ -1243,14 +1267,18 @@ export default function InventoryManagementPage() {
                             )
                           ) : col.key === 'moreDetails' ? (
                             <MoreDetailsCell row={row} />
+                          ) : col.key === 'condition' ? (
+                            row.isArchived ? (
+                              'Archived'
+                            ) : (
+                              String(row.condition)
+                            )
                           ) : col.key === 'actions' ? (
                             <div className="flex gap-2 items-center">
-                              {row.condition !== 'Archived' ? (
+                              {!row.isArchived ? (
                                 <button
                                   type="button"
-                                  onClick={() =>
-                                    updateCondition(row.id, 'Archived')
-                                  }
+                                  onClick={() => updateArchive(row.id, true)}
                                   aria-label={`Archive ${row.name}`}
                                   title="Archive"
                                   className="inline-flex justify-center rounded-full text-muted-foreground hover:text-black"
@@ -1260,9 +1288,7 @@ export default function InventoryManagementPage() {
                               ) : (
                                 <button
                                   type="button"
-                                  onClick={() =>
-                                    updateCondition(row.id, 'Good')
-                                  }
+                                  onClick={() => updateArchive(row.id, false)}
                                   aria-label={`Unarchive ${row.name}`}
                                   title="Unarchive"
                                   className="inline-flex justify-center rounded-full text-muted-foreground hover:text-black"
@@ -1545,8 +1571,8 @@ export default function InventoryManagementPage() {
         </Dialog>
       )
     }
-    // PATCH equipment condition (Archive/Unarchive)
-    async function updateCondition(id: string, condition: string) {
+    // PATCH equipment archive flag
+    async function updateArchive(id: string, archived: boolean) {
       // capture original for rollback
       const original = items.find((it) => it.id === id)
       // optimistic update
@@ -1555,7 +1581,7 @@ export default function InventoryManagementPage() {
           it.id === id
             ? {
                 ...it,
-                condition,
+                isArchived: archived,
                 // Always force status to unavailable whenever condition changes via archive/unarchive flow
                 status: 'unavailable' as EquipmentTabKey,
               }
@@ -1564,7 +1590,10 @@ export default function InventoryManagementPage() {
       )
       try {
         // Always send status=false so backend logs reflect unavailable after archive or unarchive
-        const payload: Record<string, unknown> = { condition, status: false }
+        const payload: Record<string, unknown> = {
+          is_archived: archived,
+          status: false,
+        }
 
         const res = await fetch(`${API_BASE}/inventory/${id}`, {
           method: 'PATCH',
@@ -1587,14 +1616,14 @@ export default function InventoryManagementPage() {
           // ignore body parse
         }
       } catch (e) {
-        console.error('Update condition failed:', e)
+        console.error('Update archive flag failed:', e)
         // rollback to original values if available
         setItems((prev) =>
           prev.map((it) =>
             it.id === id
               ? {
                   ...it,
-                  condition: original?.condition ?? it.condition,
+                  isArchived: original?.isArchived ?? it.isArchived,
                   status: original?.status ?? it.status,
                 }
               : it
@@ -2016,6 +2045,7 @@ export default function InventoryManagementPage() {
     type InvPick = {
       id: string
       name: string
+      isArchived: boolean
     }
     const [inventory, setInventory] = useState<InvPick[]>([])
     const [selected, setSelected] = useState<Record<string, number>>({}) // inventory_id -> qty
@@ -2126,16 +2156,39 @@ export default function InventoryManagementPage() {
             : Array.isArray(data.items)
             ? data.items
             : []
-          const items = list.map((it: unknown) => {
-            const rec = it as Record<string, unknown>
-            return {
-              id: String(rec.id ?? ''),
-              name: String(
-                (rec as { material_name?: unknown }).material_name ?? ''
-              ),
-              // quantities removed from schema
-            }
-          })
+          const items = list
+            .map((it: unknown) => {
+              const rec = it as Record<string, unknown>
+              const conditionRaw = String(
+                (rec as { condition?: unknown }).condition ?? ''
+              )
+              const archiveValue = (rec as { is_archived?: unknown })
+                .is_archived
+              const isArchived = (() => {
+                if (archiveValue === undefined) {
+                  return conditionRaw.trim().toLowerCase() === 'archived'
+                }
+                if (typeof archiveValue === 'string') {
+                  const normalized = archiveValue.trim().toLowerCase()
+                  return ['true', '1', 't', 'yes', 'y', 'archived'].includes(
+                    normalized
+                  )
+                }
+                if (typeof archiveValue === 'number') {
+                  return Number(archiveValue) !== 0
+                }
+                return Boolean(archiveValue)
+              })()
+              return {
+                id: String(rec.id ?? ''),
+                name: String(
+                  (rec as { material_name?: unknown }).material_name ?? ''
+                ),
+                isArchived,
+                // quantities removed from schema
+              } as InvPick
+            })
+            .filter((it: InvPick) => !it.isArchived)
           if (!ignore) setInventory(items)
         } catch (e) {
           console.error('Load inventory for packages failed:', e)
@@ -3640,6 +3693,12 @@ export default function InventoryManagementPage() {
             if (changes?.status) {
               // Direct availability change
               statusDisplay = normalizeAvailability(changes.status[1])
+            } else if (changes?.is_archived) {
+              const target = toKey(changes.is_archived[1])
+              const archivedTargets = ['true', '1', 't', 'yes', 'y', 'archived']
+              const nextArchived = archivedTargets.includes(target)
+              statusDisplay = 'unavailable'
+              conditionDisplay = nextArchived ? 'Archived' : 'Unarchived'
             } else if (changes?.condition) {
               // Condition change: keep condition in separate column; status remains availability only
               const fromCond = toKey(changes.condition[0])

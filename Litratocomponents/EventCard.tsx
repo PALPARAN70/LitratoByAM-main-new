@@ -61,7 +61,6 @@ interface EventCardProps {
   payment?: Payment
   imageUrl?: string
   damagedItems?: Item[]
-  missingItems?: Item[]
   basePrice?: number // base booking price
   extensionHours?: number // extension hours
   totalPrice?: number // optional total price to display
@@ -75,7 +74,7 @@ interface EventCardProps {
   contactPersonNumber?: string
   onItemsChange?: (
     items: Array<{
-      type: 'damaged' | 'missing'
+      type: 'damaged'
       name: string
       qty?: number
       notes?: string
@@ -103,7 +102,6 @@ export default function EventCard({
   payment = 'unpaid',
   imageUrl = '/Images/litratobg.jpg',
   damagedItems = [],
-  missingItems = [],
   basePrice,
   extensionHours,
   totalPrice,
@@ -122,7 +120,7 @@ export default function EventCard({
   type ItemEntry = {
     id: string
     name: string
-    type: 'ok' | 'damaged' | 'missing'
+    type: 'good' | 'damaged'
     inventoryId?: number
     notes?: string // staff notes per item
     showNotes?: boolean // UI: toggle to reveal notes input
@@ -203,7 +201,7 @@ export default function EventCard({
     setCardStatus(status)
   }, [status])
 
-  const setItemStatus = (id: string, type: 'ok' | 'damaged' | 'missing') => {
+  const setItemStatus = (id: string, type: 'good' | 'damaged') => {
     setEditItems((prev) =>
       prev.map((it) => (it.id === id ? { ...it, type } : it))
     )
@@ -247,19 +245,6 @@ export default function EventCard({
         })
         .filter(Boolean) as Array<[string, string | undefined]>
     )
-    const missingMap = new Map(
-      missingItems
-        .map((it) => {
-          const key = normalize(String(it.name || ''))
-          if (!key.length) return null
-          const note =
-            typeof it.notes === 'string' && it.notes.trim().length
-              ? it.notes.trim()
-              : undefined
-          return [key, note] as [string, string | undefined]
-        })
-        .filter(Boolean) as Array<[string, string | undefined]>
-    )
 
     const toEntries: ItemEntry[] = catalog.map((name, i) => {
       const key = normalize(name)
@@ -273,17 +258,7 @@ export default function EventCard({
           showNotes: Boolean(note?.length),
         }
       }
-      if (missingMap.has(key)) {
-        const note = (missingMap.get(key) as string | undefined)?.trim()
-        return {
-          id: `m-${i}-${name}`,
-          name,
-          type: 'missing',
-          notes: note,
-          showNotes: Boolean(note?.length),
-        }
-      }
-      return { id: `o-${i}-${name}`, name, type: 'ok' }
+      return { id: `g-${i}-${name}`, name, type: 'good' }
     })
     setEditItems(toEntries)
   }
@@ -291,6 +266,22 @@ export default function EventCard({
   // NEW: load items dynamically from package when available
   const loadPackageItems = async () => {
     if (!packageId) return false
+    const resolveItemNote = (item: any): string | undefined => {
+      if (!item || typeof item !== 'object') return undefined
+      const candidates = [
+        item.inventory_notes,
+        item.equipment_notes,
+        item.notes,
+        item.item_notes,
+      ]
+      for (const candidate of candidates) {
+        if (typeof candidate === 'string') {
+          const trimmed = candidate.trim()
+          if (trimmed.length) return trimmed
+        }
+      }
+      return undefined
+    }
     try {
       const items =
         summaryRole === 'employee'
@@ -329,7 +320,7 @@ export default function EventCard({
         return true
       }
 
-      // Build entries per unit so each unit can be marked Good/Damaged/Missing
+      // Build entries per unit so each unit can be marked Good or Damaged
       const normalize = (value: string) =>
         value
           .replace(/\s*\(.*?\)\s*$/, '')
@@ -337,19 +328,6 @@ export default function EventCard({
           .toLowerCase()
       const damagedMap = new Map(
         damagedItems
-          .map((it) => {
-            const key = normalize(String(it.name || ''))
-            if (!key.length) return null
-            const note =
-              typeof it.notes === 'string' && it.notes.trim().length
-                ? it.notes.trim()
-                : undefined
-            return [key, note] as [string, string | undefined]
-          })
-          .filter(Boolean) as Array<[string, string | undefined]>
-      )
-      const missingMap = new Map(
-        missingItems
           .map((it) => {
             const key = normalize(String(it.name || ''))
             if (!key.length) return null
@@ -369,28 +347,29 @@ export default function EventCard({
         const qty = Math.max(1, Number(it.quantity || 1))
         const invId =
           typeof it.inventory_id === 'number' ? it.inventory_id : undefined
+        const fallbackNote = resolveItemNote(it)
         const current =
           invId != null
             ? invMap.get(invId) ?? {
                 condition: it.condition,
                 status: it.status,
-                notes: it.inventory_notes ?? null,
+                notes: fallbackNote ?? null,
               }
             : {
                 condition: it.condition,
                 status: it.status,
-                notes: it.inventory_notes ?? null,
+                notes: fallbackNote ?? null,
               }
         for (let i = 0; i < qty; i++) {
           const label = qty > 1 ? `${baseName} (${i + 1}/${qty})` : baseName
           // Priority for initial selection:
-          // 1) If inventory status is unavailable => Missing
+          // 1) If inventory status is unavailable => mark as Damaged
           // 2) Else if inventory condition is Damaged => Damaged
-          // 3) Else fallback to provided damaged/missing lists
-          // 4) Else OK
-          let type: 'ok' | 'damaged' | 'missing' = 'ok'
+          // 3) Else fallback to provided damaged list
+          // 4) Else Good
+          let type: 'good' | 'damaged' = 'good'
           if (current && current.status === false) {
-            type = 'missing'
+            type = 'damaged'
           } else if (
             current &&
             typeof current.condition === 'string' &&
@@ -399,20 +378,13 @@ export default function EventCard({
             type = 'damaged'
           } else if (damagedMap.has(normalizedName)) {
             type = 'damaged'
-          } else if (missingMap.has(normalizedName)) {
-            type = 'missing'
           }
           const inventoryNotes =
             typeof current?.notes === 'string' && current.notes.trim().length
               ? current.notes.trim()
               : undefined
-          const packageNotes =
-            typeof it.inventory_notes === 'string' &&
-            it.inventory_notes.trim().length
-              ? it.inventory_notes.trim()
-              : undefined
-          const listNotes =
-            damagedMap.get(normalizedName) || missingMap.get(normalizedName)
+          const packageNotes = fallbackNote
+          const listNotes = damagedMap.get(normalizedName)
           const existingNotes =
             inventoryNotes || packageNotes || listNotes || undefined
           entries.push({
@@ -441,26 +413,23 @@ export default function EventCard({
     const groups = new Map<
       number,
       {
-        hasMissing: boolean
         hasDamaged: boolean
         total: number
-        okCount: number
+        goodCount: number
         notes: Set<string>
       }
     >()
     for (const it of editItems) {
       if (!it.inventoryId) continue
       const g = groups.get(it.inventoryId) || {
-        hasMissing: false,
         hasDamaged: false,
         total: 0,
-        okCount: 0,
+        goodCount: 0,
         notes: new Set<string>(),
       }
       g.total += 1
-      if (it.type === 'missing') g.hasMissing = true
-      else if (it.type === 'damaged') g.hasDamaged = true
-      else if (it.type === 'ok') g.okCount += 1
+      if (it.type === 'damaged') g.hasDamaged = true
+      else if (it.type === 'good') g.goodCount += 1
       if (it.notes && it.notes.trim()) {
         g.notes.add(it.notes.trim())
       }
@@ -473,14 +442,11 @@ export default function EventCard({
     const tasks: Array<Promise<void>> = []
     groups.forEach((g, invId) => {
       let body: Record<string, unknown> | null = null
-      if (g.hasMissing) {
-        // missing: set status to unavailable
-        body = { status: false }
-      } else if (g.hasDamaged) {
+      if (g.hasDamaged) {
         // damaged: set condition to 'Damaged'
         body = { condition: 'Damaged' }
-      } else if (g.okCount === g.total) {
-        // all OK: set condition to 'Good' and status to available
+      } else if (g.goodCount === g.total) {
+        // all Good: set condition to 'Good' and status to available
         body = { condition: 'Good', status: true }
       }
       if (!body) body = {}
@@ -1559,12 +1525,12 @@ export default function EventCard({
                                     <input
                                       type="radio"
                                       name={`status-${it.id}`}
-                                      checked={it.type === 'ok'}
+                                      checked={it.type === 'good'}
                                       onChange={() =>
-                                        setItemStatus(it.id, 'ok')
+                                        setItemStatus(it.id, 'good')
                                       }
                                     />
-                                    OK
+                                    Good
                                   </label>
                                   <label className="inline-flex items-center gap-1">
                                     <input
@@ -1576,17 +1542,6 @@ export default function EventCard({
                                       }
                                     />
                                     Damaged
-                                  </label>
-                                  <label className="inline-flex items-center gap-1">
-                                    <input
-                                      type="radio"
-                                      name={`status-${it.id}`}
-                                      checked={it.type === 'missing'}
-                                      onChange={() =>
-                                        setItemStatus(it.id, 'missing')
-                                      }
-                                    />
-                                    Missing
                                   </label>
                                 </div>
                               </div>
@@ -1613,7 +1568,7 @@ export default function EventCard({
                                     <textarea
                                       id={`notes-${it.id}`}
                                       className="min-h-[56px] w-full resize-y rounded border px-2 py-1 text-xs"
-                                      placeholder="Staff notes (damage description, missing context, etc.)"
+                                      placeholder="Staff notes (damage description, handling notes, etc.)"
                                       value={it.notes || ''}
                                       onChange={(e) =>
                                         setItemNotes(it.id, e.target.value)
@@ -1645,14 +1600,13 @@ export default function EventCard({
                           )}
                         </div>
                         <div>
-                          <div className="font-semibold mb-1">Missing</div>
-                          {editItems.filter((x) => x.type === 'missing')
-                            .length ? (
+                          <div className="font-semibold mb-1">Good</div>
+                          {editItems.filter((x) => x.type === 'good').length ? (
                             <ul className="list-disc list-inside">
                               {editItems
-                                .filter((x) => x.type === 'missing')
+                                .filter((x) => x.type === 'good')
                                 .map((it) => (
-                                  <li key={`sum-m-${it.id}`}>{it.name}</li>
+                                  <li key={`sum-g-${it.id}`}>{it.name}</li>
                                 ))}
                             </ul>
                           ) : (
@@ -1711,12 +1665,10 @@ export default function EventCard({
                       })()
                       onItemsChange?.(
                         editItems
-                          .filter(
-                            (x) => x.type === 'damaged' || x.type === 'missing'
-                          )
-                          .map(({ name, type, notes }) => ({
+                          .filter((x) => x.type === 'damaged')
+                          .map(({ name, notes }) => ({
                             name,
-                            type: type as 'damaged' | 'missing',
+                            type: 'damaged',
                             notes: notes?.trim() || undefined,
                           }))
                       )

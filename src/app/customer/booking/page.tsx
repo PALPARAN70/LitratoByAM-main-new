@@ -31,6 +31,17 @@ const API_BASE =
   (process.env.NEXT_PUBLIC_API_BASE?.replace(/\/$/, '') ||
     'http://localhost:5000') + '/api/auth/getProfile'
 
+function toDateKey(value: Date | string | number | null | undefined): string {
+  if (!value) return ''
+  try {
+    const date = value instanceof Date ? value : new Date(value)
+    if (Number.isNaN(date.getTime())) return ''
+    return date.toISOString().slice(0, 10)
+  } catch {
+    return ''
+  }
+}
+
 export default function BookingPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -54,11 +65,12 @@ export default function BookingPage() {
     'Approved' | 'Declined' | 'Pending' | 'Cancelled' | null
   >(null)
   const [showScheduleConfirm, setShowScheduleConfirm] = useState(false)
-  const [pendingScheduleChange, setPendingScheduleChange] = useState<{
-    eventDate?: Date
-    eventTime?: string
-    eventEndTime?: string
+  const [initialSchedule, setInitialSchedule] = useState<{
+    date: Date
+    time: string
+    endTime: string
   } | null>(null)
+  const [scheduleChanged, setScheduleChanged] = useState(false)
 
   // Moved UP: booking form state before useEffects
   const initialForm: BookingForm = {
@@ -243,6 +255,27 @@ export default function BookingPage() {
     setTimepickerReady(true) // enable child onChange after first commit
   }, [])
 
+  useEffect(() => {
+    if (currentStatus !== 'Approved') {
+      setScheduleChanged(false)
+      return
+    }
+    if (!initialSchedule) return
+    const dateKey = toDateKey(form.eventDate)
+    const originalKey = toDateKey(initialSchedule.date)
+    const changed =
+      dateKey !== originalKey ||
+      form.eventTime !== initialSchedule.time ||
+      form.eventEndTime !== initialSchedule.endTime
+    setScheduleChanged(changed)
+  }, [
+    form.eventDate,
+    form.eventTime,
+    form.eventEndTime,
+    currentStatus,
+    initialSchedule,
+  ])
+
   // Prefill using requestid (after packages are loaded)
   useEffect(() => {
     if (!requestIdParam) return
@@ -268,6 +301,22 @@ export default function BookingPage() {
           contactNumber:
             prev.contactNumber || (res.patch as any)?.contactNumber || '',
         }))
+        const patchedDateRaw =
+          (res.patch as any)?.eventDate ?? form.eventDate ?? new Date()
+        const patchedDate =
+          patchedDateRaw instanceof Date
+            ? patchedDateRaw
+            : new Date(patchedDateRaw)
+        const patchedTime =
+          (res.patch as any)?.eventTime ?? form.eventTime ?? '12:00'
+        const patchedEnd =
+          (res.patch as any)?.eventEndTime ?? form.eventEndTime ?? '14:00'
+        setInitialSchedule({
+          date: new Date(patchedDate.getTime()),
+          time: String(patchedTime),
+          endTime: String(patchedEnd),
+        })
+        setScheduleChanged(false)
         // Derive status for UI restrictions from fetched booking
         try {
           const st = String(res.booking?.status || '').toLowerCase()
@@ -292,53 +341,7 @@ export default function BookingPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [requestIdParam, packages])
 
-  // Intercept schedule changes for approved bookings
-  const requestScheduleChange = (patch: {
-    eventDate?: Date
-    eventTime?: string
-    eventEndTime?: string
-  }) => {
-    if (currentStatus === 'Approved') {
-      setPendingScheduleChange(patch)
-      setShowScheduleConfirm(true)
-      return
-    }
-    if (patch.eventDate) setField('eventDate', patch.eventDate as Date)
-    if (patch.eventTime) setField('eventTime', patch.eventTime)
-    if (patch.eventEndTime) setField('eventEndTime', patch.eventEndTime)
-  }
-
-  const confirmApplyScheduleChange = () => {
-    if (!pendingScheduleChange) return
-    const { eventDate, eventTime, eventEndTime } = pendingScheduleChange
-    if (eventDate) setField('eventDate', eventDate as Date)
-    if (eventTime) setField('eventTime', eventTime)
-    if (eventEndTime) setField('eventEndTime', eventEndTime)
-    setPendingScheduleChange(null)
-    setShowScheduleConfirm(false)
-  }
-
-  const cancelScheduleChange = () => {
-    setPendingScheduleChange(null)
-    setShowScheduleConfirm(false)
-  }
-
-  const handleSubmit = async () => {
-    if (submitting) return
-    setErrors({})
-    setHasSubmitted(true)
-    const result = bookingFormSchema.safeParse(form)
-    if (!result.success) {
-      const fieldErrors: Partial<Record<keyof BookingForm, string>> = {}
-      for (const issue of result.error.issues) {
-        const key = issue.path[0] as keyof BookingForm
-        if (!fieldErrors[key]) fieldErrors[key] = issue.message
-      }
-      setErrors(fieldErrors)
-      toast.error('Please fill in all required fields.')
-      return
-    }
-
+  const performSubmit = async () => {
     try {
       setSubmitting(true)
       if (isUpdate) {
@@ -352,13 +355,11 @@ export default function BookingPage() {
         return
       }
 
-      // CREATE flow
       const resp = await createBookingRequest({
         form,
         packageid: selectedPackageId ?? undefined,
       })
 
-      // Use the selected package's actual name from the loaded list for dashboard display
       const selectedPkg = packages.find((p) => p.id === selectedPackageId)
       const displayPackageName = (
         selectedPkg?.package_name || form.package
@@ -373,9 +374,8 @@ export default function BookingPage() {
         place: form.eventLocation,
         paymentStatus: 'Pending',
         status: 'Pending' as 'Approved' | 'Declined' | 'Pending',
-        // Updated: second action label from Reschedule to Edit after removing rescheduling tab
         action: ['Cancel', 'Edit'] as string[],
-        requestid: resp?.booking?.requestid, // keep id for reschedule
+        requestid: resp?.booking?.requestid,
       }
       const raw =
         (typeof window !== 'undefined' &&
@@ -399,6 +399,48 @@ export default function BookingPage() {
     } finally {
       setSubmitting(false)
     }
+  }
+
+  const attemptSubmit = async (skipScheduleGuard = false) => {
+    if (submitting) return
+    setErrors({})
+    setHasSubmitted(true)
+    const result = bookingFormSchema.safeParse(form)
+    if (!result.success) {
+      const fieldErrors: Partial<Record<keyof BookingForm, string>> = {}
+      for (const issue of result.error.issues) {
+        const key = issue.path[0] as keyof BookingForm
+        if (!fieldErrors[key]) fieldErrors[key] = issue.message
+      }
+      setErrors(fieldErrors)
+      toast.error('Please fill in all required fields.')
+      return
+    }
+
+    if (!skipScheduleGuard && currentStatus === 'Approved' && scheduleChanged) {
+      setShowScheduleConfirm(true)
+      return
+    }
+
+    await performSubmit()
+  }
+
+  const handleSubmit = () => {
+    void attemptSubmit()
+  }
+
+  const confirmScheduleSubmit = () => {
+    setShowScheduleConfirm(false)
+    void attemptSubmit(true)
+  }
+
+  const cancelScheduleSubmit = () => {
+    if (initialSchedule) {
+      setField('eventDate', new Date(initialSchedule.date))
+      setField('eventTime', initialSchedule.time)
+      setField('eventEndTime', initialSchedule.endTime)
+    }
+    setShowScheduleConfirm(false)
   }
 
   const handleClear = () => {
@@ -694,13 +736,8 @@ export default function BookingPage() {
                       ),
                       ext
                     )
-                    if (currentStatus === 'Approved') {
-                      setField('extensionHours', ext)
-                      requestScheduleChange({ eventEndTime: end })
-                    } else {
-                      setField('extensionHours', ext)
-                      setField('eventEndTime', end)
-                    }
+                    setField('extensionHours', ext)
+                    setField('eventEndTime', end)
                   }}
                 >
                   <option value="0">No extension</option>
@@ -774,9 +811,7 @@ export default function BookingPage() {
                 </label>
                 <Calendar
                   value={form.eventDate}
-                  onDateChangeAction={(d) =>
-                    requestScheduleChange({ eventDate: d as Date })
-                  }
+                  onDateChangeAction={(d) => setField('eventDate', d as Date)}
                 />
                 {errors.eventDate && (
                   <p className="text-red-600 text-xs mt-1">
@@ -808,15 +843,8 @@ export default function BookingPage() {
                             ),
                             Number(form.extensionHours)
                           )
-                          if (currentStatus === 'Approved') {
-                            requestScheduleChange({
-                              eventTime: start,
-                              eventEndTime: end,
-                            })
-                          } else {
-                            setField('eventTime', start)
-                            setField('eventEndTime', end)
-                          }
+                          setField('eventTime', start)
+                          setField('eventEndTime', end)
                         }}
                       />
                     </div>
@@ -883,7 +911,7 @@ export default function BookingPage() {
         >
           <div
             className="absolute inset-0 bg-black/40"
-            onClick={cancelScheduleChange}
+            onClick={cancelScheduleSubmit}
           />
           <div className="relative z-10 w-[95%] max-w-md rounded-lg bg-white p-4 shadow-lg">
             <h3 className="text-lg font-semibold mb-2">Change schedule?</h3>
@@ -896,16 +924,16 @@ export default function BookingPage() {
               <button
                 type="button"
                 className="px-4 py-2 rounded border border-gray-300 hover:bg-gray-100"
-                onClick={cancelScheduleChange}
+                onClick={cancelScheduleSubmit}
               >
                 Keep current schedule
               </button>
               <button
                 type="button"
                 className="px-4 py-2 rounded bg-litratoblack text-white hover:bg-black"
-                onClick={confirmApplyScheduleChange}
+                onClick={confirmScheduleSubmit}
               >
-                Change schedule
+                Submit changes
               </button>
             </div>
           </div>

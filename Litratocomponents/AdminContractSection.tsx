@@ -10,8 +10,10 @@ import {
 
 export default function AdminContractSection({
   bookingId,
+  onStatusChange,
 }: {
   bookingId: number | string
+  onStatusChange?: (status: BookingContract['status'] | null) => void
 }) {
   const [loading, setLoading] = React.useState(false)
   const [saving, setSaving] = React.useState(false)
@@ -19,11 +21,18 @@ export default function AdminContractSection({
   const [file, setFile] = React.useState<File | null>(null)
   const [ctr, setCtr] = React.useState<BookingContract | null>(null)
 
+  // Use ref to store callback and avoid dependency issues
+  const onStatusChangeRef = React.useRef(onStatusChange)
+  React.useEffect(() => {
+    onStatusChangeRef.current = onStatusChange
+  })
+
   const refresh = React.useCallback(async () => {
     try {
       setLoading(true)
       const c = await getAdminContract(bookingId)
       setCtr(c)
+      onStatusChangeRef.current?.(c?.status ?? null)
     } finally {
       setLoading(false)
     }
