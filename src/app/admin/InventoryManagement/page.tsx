@@ -122,6 +122,17 @@ type MaterialTypePersistSuccess = Extract<
   { ok: true }
 >
 
+const EQUIPMENT_ENTITY_TYPES = new Set(['Equipments', 'Equipment', 'Inventory'])
+
+const isEquipmentEntity = (entityType: string) =>
+  EQUIPMENT_ENTITY_TYPES.has(entityType)
+
+const displayEntityType = (entityType: string) => {
+  if (isEquipmentEntity(entityType)) return 'Equipment'
+  if (entityType === 'Packages') return 'Package'
+  return entityType
+}
+
 // Default equipment type options
 const DEFAULT_EQUIPMENT_TYPES = [
   'Camera',
@@ -539,8 +550,9 @@ export default function InventoryManagementPage() {
                 : Array.isArray(assignmentsPayload)
                 ? assignmentsPayload
                 : []
-              assignmentLookup = rows.reduce<Record<string, string>>(
-                (acc, row) => {
+              const typedRows = rows as Array<Record<string, unknown>>
+              assignmentLookup = typedRows.reduce(
+                (acc: Record<string, string>, row) => {
                   const inventoryId = String(row?.inventory_id ?? '')
                   const packageName = String(row?.package_name ?? '').trim()
                   if (inventoryId) {
@@ -548,7 +560,7 @@ export default function InventoryManagementPage() {
                   }
                   return acc
                 },
-                {}
+                {} as Record<string, string>
               )
             } catch (error) {
               console.error('Parse package assignments failed:', error)
@@ -3259,7 +3271,7 @@ export default function InventoryManagementPage() {
 
   function ItemLogsPanel({ searchTerm }: { searchTerm?: string }) {
     type LogRow = {
-      log_id: number
+      inventory_log_id?: number
       entity_type: string
       entity_id: number
       status: string
@@ -3268,7 +3280,10 @@ export default function InventoryManagementPage() {
       updated_by: number | null
       updated_by_name?: string
       updated_by_username?: string
-      updated_at: string
+      last_updated?: string | null
+      updated_at?: string | null
+      created_at?: string | null
+      log_id?: number // legacy field support
     }
 
     const [logs, setLogs] = useState<LogRow[]>([])
@@ -3277,12 +3292,12 @@ export default function InventoryManagementPage() {
     const [editAdditionalNotes, setEditAdditionalNotes] = useState('')
     const [loading, setLoading] = useState(false)
     const [form, setForm] = useState<{
-      entity_type: 'Inventory' | 'Package'
+      entity_type: 'Equipments' | 'Package'
       entity_id: string
       status: string
       notes: string
     }>({
-      entity_type: 'Inventory',
+      entity_type: 'Equipments',
       entity_id: '',
       status: 'available',
       notes: '',
@@ -3619,7 +3634,8 @@ export default function InventoryManagementPage() {
             if (key === 'archived' || key === 'unarchived') return key
             return key
           }
-          if (l.entity_type === 'Inventory') {
+          const entityDisplayType = displayEntityType(l.entity_type)
+          if (entityDisplayType === 'Equipment') {
             // For equipment, "Status" should only ever be available/unavailable
             if (changes?.status) {
               // Direct availability change
@@ -3640,7 +3656,7 @@ export default function InventoryManagementPage() {
               // Default when unspecified
               statusDisplay = 'available'
             }
-          } else if (l.entity_type === 'Package') {
+          } else if (entityDisplayType === 'Package') {
             if (changes?.display) {
               const target = toKey(changes.display[1])
               if (['visible', 'true', '1', 'unarchived'].includes(target))
@@ -3654,7 +3670,7 @@ export default function InventoryManagementPage() {
               statusDisplay = 'unarchived'
             }
             conditionDisplay = null
-          } else if (l.entity_type === 'Grid') {
+          } else if (entityDisplayType === 'Grid') {
             if (changes?.display) {
               const target = toKey(changes.display[1])
               if (['visible', 'true', '1', 'unarchived'].includes(target))
@@ -3675,7 +3691,7 @@ export default function InventoryManagementPage() {
           // Global fallback, but keep equipment limited to available/unavailable
           if (!statusDisplay) {
             const fallback = toKey(l.status)
-            if (l.entity_type === 'Inventory') {
+            if (entityDisplayType === 'Equipment') {
               statusDisplay = ['available', 'unavailable'].includes(fallback)
                 ? fallback
                 : 'available'
@@ -3686,7 +3702,7 @@ export default function InventoryManagementPage() {
 
           // Final guard: enforce equipment status values
           if (
-            l.entity_type === 'Inventory' &&
+            entityDisplayType === 'Equipment' &&
             !['available', 'unavailable'].includes(statusDisplay)
           ) {
             // Map any other value (good/damaged/archived/unarchived/etc.) appropriately
@@ -3702,17 +3718,21 @@ export default function InventoryManagementPage() {
           } as EnrichedLog
         })
         .sort((a, b) => {
-          // Sort by updated_at in descending order (latest first)
-          const dateA = new Date(a.updated_at).getTime()
-          const dateB = new Date(b.updated_at).getTime()
+          // Sort by last_updated (fallback to legacy timestamps) in descending order
+          const dateA = new Date(
+            a.last_updated ?? a.updated_at ?? a.created_at ?? 0
+          ).getTime()
+          const dateB = new Date(
+            b.last_updated ?? b.updated_at ?? b.created_at ?? 0
+          ).getTime()
           return dateB - dateA
         })
     }, [logs])
 
-    const resolvedInventoryNames = useMemo(() => {
+    const resolvedEquipmentNames = useMemo(() => {
       const map: Record<string, string> = { ...inventoryNames }
       for (const log of enrichedLogs) {
-        if (log.entity_type !== 'Inventory') continue
+        if (!isEquipmentEntity(log.entity_type)) continue
         const entry = log._changes?.material_name as
           | [unknown, unknown]
           | undefined
@@ -3727,7 +3747,7 @@ export default function InventoryManagementPage() {
     const resolvedPackageNames = useMemo(() => {
       const map: Record<string, string> = { ...packageNames }
       for (const log of enrichedLogs) {
-        if (log.entity_type !== 'Package') continue
+        if (displayEntityType(log.entity_type) !== 'Package') continue
         const entry = log._changes?.package_name as
           | [unknown, unknown]
           | undefined
@@ -3756,14 +3776,13 @@ export default function InventoryManagementPage() {
     const filteredLogs = useMemo(() => {
       const q = (searchTerm || '').trim().toLowerCase()
       return enrichedLogs.filter((l) => {
-        const entityTypeNormalized =
-          l.entity_type === 'Inventory' ? 'Equipment' : l.entity_type
+        const entityTypeNormalized = displayEntityType(l.entity_type)
         if (filterEntity !== 'all' && entityTypeNormalized !== filterEntity)
           return false
         if (filterStatus !== 'all') {
           const wanted = filterStatus.toLowerCase()
           if (
-            l.entity_type === 'Inventory' &&
+            isEquipmentEntity(l.entity_type) &&
             (wanted === 'good' || wanted === 'damaged')
           ) {
             const cond = (l._conditionDisplay || '').toLowerCase()
@@ -3773,14 +3792,13 @@ export default function InventoryManagementPage() {
           }
         }
         if (q) {
-          const name =
-            l.entity_type === 'Inventory'
-              ? resolvedInventoryNames[String(l.entity_id)] ?? ''
-              : l.entity_type === 'Package'
-              ? resolvedPackageNames[String(l.entity_id)] ?? ''
-              : l.entity_type === 'Grid'
-              ? resolvedGridNames[String(l.entity_id)] ?? ''
-              : ''
+          const name = isEquipmentEntity(l.entity_type)
+            ? resolvedEquipmentNames[String(l.entity_id)] ?? ''
+            : displayEntityType(l.entity_type) === 'Package'
+            ? resolvedPackageNames[String(l.entity_id)] ?? ''
+            : l.entity_type === 'Grid'
+            ? resolvedGridNames[String(l.entity_id)] ?? ''
+            : ''
           const fallbackLabel =
             l.entity_type === 'Grid'
               ? `Grid #${l.entity_id}`
@@ -3796,7 +3814,7 @@ export default function InventoryManagementPage() {
       filterStatus,
       searchTerm, // <-- use unified search term
       inventoryNames,
-      resolvedInventoryNames,
+      resolvedEquipmentNames,
       resolvedPackageNames,
       resolvedGridNames,
     ])
@@ -3913,18 +3931,30 @@ export default function InventoryManagementPage() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  paginatedLogs.map((l) => (
-                    <TableRow key={l.log_id} className="even:bg-gray-50">
+                  paginatedLogs.map((l, idx) => (
+                    <TableRow
+                      key={
+                        l.inventory_log_id != null
+                          ? `log-${l.inventory_log_id}`
+                          : l.log_id != null
+                          ? `legacy-${l.log_id}`
+                          : `${l.entity_type}-${l.entity_id}-${
+                              l.last_updated ??
+                              l.updated_at ??
+                              l.created_at ??
+                              'unknown'
+                            }-${idx}`
+                      }
+                      className="even:bg-gray-50"
+                    >
                       <TableCell className="px-4 py-2">
-                        {l.entity_type === 'Inventory'
-                          ? 'Equipment'
-                          : l.entity_type}
+                        {displayEntityType(l.entity_type)}
                       </TableCell>
                       <TableCell className="px-4 py-2">
-                        {l.entity_type === 'Inventory'
-                          ? resolvedInventoryNames[String(l.entity_id)] ??
+                        {isEquipmentEntity(l.entity_type)
+                          ? resolvedEquipmentNames[String(l.entity_id)] ??
                             `#${l.entity_id}`
-                          : l.entity_type === 'Package'
+                          : displayEntityType(l.entity_type) === 'Package'
                           ? resolvedPackageNames[String(l.entity_id)] ??
                             `#${l.entity_id}`
                           : l.entity_type === 'Grid'
@@ -3938,7 +3968,9 @@ export default function InventoryManagementPage() {
                       </TableCell>
                       <TableCell className="px-4 py-2 capitalize">
                         {l._conditionDisplay ??
-                          (l.entity_type === 'Package' ? '' : '—')}
+                          (displayEntityType(l.entity_type) === 'Package'
+                            ? ''
+                            : '—')}
                       </TableCell>
                       <TableCell className="px-4 py-2">
                         <Popover>
@@ -4032,7 +4064,9 @@ export default function InventoryManagementPage() {
                         })()}
                       </TableCell>
                       <TableCell className="px-4 py-2">
-                        {formatDisplayDateTime(l.updated_at)}
+                        {formatDisplayDateTime(
+                          l.last_updated ?? l.updated_at ?? l.created_at
+                        )}
                       </TableCell>
                       <TableCell className="px-4 py-2">
                         <button
@@ -4122,7 +4156,10 @@ export default function InventoryManagementPage() {
             </DialogHeader>
             <div className="space-y-3 py-2">
               <div className="text-xs text-gray-500">
-                Log ID: {editingLog?.log_id}
+                Log ID:{' '}
+                {editingLog
+                  ? editingLog.inventory_log_id ?? editingLog.log_id ?? '—'
+                  : '—'}
               </div>
               <Textarea
                 rows={5}
@@ -4143,9 +4180,12 @@ export default function InventoryManagementPage() {
                 className="bg-litratoblack text-white"
                 onClick={async () => {
                   if (!editingLog) return
+                  const targetId =
+                    editingLog.inventory_log_id ?? editingLog.log_id
+                  if (targetId == null) return
                   try {
                     const res = await fetch(
-                      `${API_BASE}/inventory-status-log/${editingLog.log_id}`,
+                      `${API_BASE}/inventory-status-log/${targetId}`,
                       {
                         method: 'PATCH',
                         headers: {
@@ -4165,7 +4205,7 @@ export default function InventoryManagementPage() {
                     // optimistic local update
                     setLogs((prev) =>
                       prev.map((log) =>
-                        log.log_id === editingLog.log_id
+                        (log.inventory_log_id ?? log.log_id) === targetId
                           ? {
                               ...log,
                               additional_notes: editAdditionalNotes || null,

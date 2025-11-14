@@ -36,7 +36,7 @@ initConfirmedBookingTable().catch((e) =>
 )
 // Ensure staff assignment junction table exists
 initConfirmedBookingStaffTable().catch((e) =>
-  console.warn('Init confirmed_booking_staff table failed:', e?.message)
+  console.warn('Init assigned_staff table failed:', e?.message)
 )
 // Ensure staff logs table exists
 initEventStaffLogsTable().catch((e) =>

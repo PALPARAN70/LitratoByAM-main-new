@@ -279,14 +279,14 @@ router.get(
 )
 
 // -------- inventory management routes -------- //
-//create inventory item
+//create equipment item
 router.post(
   '/inventory',
   authMiddleware,
   roleMiddleware('admin'),
   adminController.createInventoryItem
 )
-//get all inventory items
+//get all equipment items
 router.get(
   '/inventory',
   authMiddleware,
@@ -360,15 +360,15 @@ router.delete(
   adminController.deletePackage
 )
 
-// -----package inventory item routes ----- //
-//add inventory item to package
+// -----package equipment item routes ----- //
+//add equipment item to package
 router.post(
   '/package-inventory-item',
   authMiddleware,
   roleMiddleware('admin'),
   adminController.createPackageInventoryItem
 )
-//get all package inventory items
+//get all package equipment items
 router.get(
   '/package-inventory-item',
   authMiddleware,
@@ -491,14 +491,14 @@ router.get(
 )
 
 router.patch(
-  '/inventory-status-log/:log_id',
+  '/inventory-status-log/:inventory_log_id',
   authMiddleware,
   roleMiddleware('admin'),
   adminController.updateInventoryStatusLog
 )
 
 router.delete(
-  '/inventory-status-log/:log_id',
+  '/inventory-status-log/:inventory_log_id',
   authMiddleware,
   roleMiddleware('admin'),
   adminController.deleteInventoryStatusLog

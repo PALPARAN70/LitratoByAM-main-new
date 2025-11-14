@@ -24,10 +24,7 @@ const {
 
 // Ensure the staff assignment table exists on load (best-effort)
 initConfirmedBookingStaffTable().catch((e) =>
-  console.warn(
-    'Init confirmed_booking_staff table (employee) failed:',
-    e?.message
-  )
+  console.warn('Init assigned_staff table (employee) failed:', e?.message)
 )
 // Ensure staff logs table exists on load
 initEventStaffLogsTable().catch((e) =>
@@ -76,7 +73,7 @@ exports.setAssignedBookingStatus = async (req, res) => {
 
     // Ensure the booking is assigned to this staff user
     const { rows } = await pool.query(
-      `SELECT 1 FROM confirmed_booking_staff WHERE bookingid = $1 AND staff_userid = $2 LIMIT 1`,
+      `SELECT 1 FROM assigned_staff WHERE bookingid = $1 AND staff_userid = $2 LIMIT 1`,
       [id, uid]
     )
     if (!rows[0]) {
@@ -106,7 +103,7 @@ exports.getAssignedBookingPaymentSummary = async (req, res) => {
 
     // Ensure the booking is assigned to this staff user
     const { rows } = await pool.query(
-      `SELECT 1 FROM confirmed_booking_staff WHERE bookingid = $1 AND staff_userid = $2 LIMIT 1`,
+      `SELECT 1 FROM assigned_staff WHERE bookingid = $1 AND staff_userid = $2 LIMIT 1`,
       [id, uid]
     )
     if (!rows[0]) {
@@ -148,13 +145,13 @@ exports.listPackageItemsForPackage = async (req, res) => {
   }
 }
 
-// NEW: Allow employees to update inventory condition/status (limited fields)
+// NEW: Allow employees to update equipment condition/status (limited fields)
 exports.updateInventoryItemLimited = async (req, res) => {
   try {
     const { inventoryID } = req.params
     const id = Number(inventoryID)
     if (!Number.isFinite(id))
-      return res.status(400).json({ message: 'Invalid inventory id' })
+      return res.status(400).json({ message: 'Invalid equipment id' })
 
     const body = req.body || {}
     const updates = {}
@@ -184,7 +181,7 @@ exports.updateInventoryItemLimited = async (req, res) => {
     console.error('employee.updateInventoryItemLimited error:', err)
     return res
       .status(500)
-      .json({ message: 'Error updating inventory (employee)' })
+      .json({ message: 'Error updating equipment (employee)' })
   }
 }
 
@@ -198,7 +195,7 @@ exports.getAssignedBookingStaffLogs = async (req, res) => {
       return res.status(400).json({ message: 'Invalid booking id' })
 
     const { rows } = await pool.query(
-      `SELECT 1 FROM confirmed_booking_staff WHERE bookingid = $1 AND staff_userid = $2 LIMIT 1`,
+      `SELECT 1 FROM assigned_staff WHERE bookingid = $1 AND staff_userid = $2 LIMIT 1`,
       [id, uid]
     )
     if (!rows[0]) {
@@ -242,7 +239,7 @@ exports.updateMyStaffLogForBooking = async (req, res) => {
     }
     // ensure assignment
     const { rows } = await pool.query(
-      `SELECT 1 FROM confirmed_booking_staff WHERE bookingid = $1 AND staff_userid = $2 LIMIT 1`,
+      `SELECT 1 FROM assigned_staff WHERE bookingid = $1 AND staff_userid = $2 LIMIT 1`,
       [id, uid]
     )
     if (!rows[0]) {
@@ -272,7 +269,7 @@ exports.listAssignedBookingPayments = async (req, res) => {
 
     // ensure assignment
     const { rows } = await pool.query(
-      `SELECT 1 FROM confirmed_booking_staff WHERE bookingid = $1 AND staff_userid = $2 LIMIT 1`,
+      `SELECT 1 FROM assigned_staff WHERE bookingid = $1 AND staff_userid = $2 LIMIT 1`,
       [id, uid]
     )
     if (!rows[0]) {
@@ -302,7 +299,7 @@ exports.createAssignedBookingPayment = async (req, res) => {
 
     // ensure assignment
     const { rows } = await pool.query(
-      `SELECT 1 FROM confirmed_booking_staff WHERE bookingid = $1 AND staff_userid = $2 LIMIT 1`,
+      `SELECT 1 FROM assigned_staff WHERE bookingid = $1 AND staff_userid = $2 LIMIT 1`,
       [id, uid]
     )
     if (!rows[0]) {

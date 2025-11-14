@@ -34,6 +34,7 @@ exports.createGrid = async (req, res) => {
             display: [null, row.display ? 'visible' : 'hidden'],
           },
         }),
+        null,
         req.user?.id ?? null
       )
     } catch (logErr) {
@@ -147,6 +148,7 @@ exports.updateGrid = async (req, res) => {
           id,
           logStatus,
           JSON.stringify({ changes }),
+          null,
           req.user?.id ?? null
         )
       } catch (logErr) {
@@ -190,6 +192,7 @@ exports.deleteGrid = async (req, res) => {
         id,
         'archived',
         JSON.stringify({ changes: { display: ['visible', 'hidden'] } }),
+        null,
         req.user?.id ?? null
       )
     } catch (logErr) {
