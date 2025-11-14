@@ -106,7 +106,7 @@ type BookingRow = {
   clientName: string
   eventStatus: 'ongoing' | 'standby' | 'finished'
   payment: 'paid' | 'unpaid' | 'partially-paid'
-  items: { damaged: Item[]; missing: Item[] }
+  items: { damaged: Item[] }
   // NEW: contract status for admin view
   contractStatus?: ContractStatus | null
   createdAt?: string | null
@@ -968,9 +968,8 @@ function MasterListPanel({
   } | null>(null)
   const [reportItems, setReportItems] = useState<{
     total: number
-    ok: number
+    good: number
     damaged: number
-    missing: number
   } | null>(null)
   const [reportStaff, setReportStaff] = useState<
     Array<{ id: number; firstname?: string; lastname?: string }>
@@ -999,7 +998,6 @@ function MasterListPanel({
   const [reportItemLists, setReportItemLists] = useState<{
     good: Array<{ name: string; qty: number }>
     damaged: Array<{ name: string; qty: number }>
-    missing: Array<{ name: string; qty: number }>
   } | null>(null)
 
   const openReport = async (row: BookingRow) => {
@@ -1100,36 +1098,30 @@ function MasterListPanel({
             Number(row.packageId)
           )
           let total = 0,
-            missing = 0,
             damaged = 0,
-            ok = 0
+            good = 0
           const goodAgg = new Map<string, number>()
           const damagedAgg = new Map<string, number>()
-          const missingAgg = new Map<string, number>()
           for (const it of items) {
             const q = Math.max(1, Number((it as any).quantity || 1))
             total += q
             const stat = (it as any).status
             const cond = String((it as any).condition || '').toLowerCase()
             const name = String((it as any).material_name || 'Item')
-            if (stat === false) {
-              missing += q
-              missingAgg.set(name, (missingAgg.get(name) || 0) + q)
-            } else if (cond === 'damaged') {
+            if (stat === false || cond === 'damaged') {
               damaged += q
               damagedAgg.set(name, (damagedAgg.get(name) || 0) + q)
             } else {
-              ok += q
+              good += q
               goodAgg.set(name, (goodAgg.get(name) || 0) + q)
             }
           }
-          setReportItems({ total, ok, damaged, missing })
+          setReportItems({ total, good, damaged })
           const toArray = (m: Map<string, number>) =>
             Array.from(m.entries()).map(([name, qty]) => ({ name, qty }))
           setReportItemLists({
             good: toArray(goodAgg),
             damaged: toArray(damagedAgg),
-            missing: toArray(missingAgg),
           })
         } catch {}
       }
@@ -1157,9 +1149,13 @@ function MasterListPanel({
   const [contractTargetId, setContractTargetId] = useState<
     number | string | null
   >(null)
+  const [contractRowId, setContractRowId] = useState<BookingRow['id'] | null>(
+    null
+  )
   const openContractDialog = (row: BookingRow) => {
     const id = row.requestid ?? row.confirmedid ?? row.id
     setContractTargetId(id as number | string)
+    setContractRowId(row.id)
     setContractOpen(true)
   }
 
@@ -1324,7 +1320,7 @@ function MasterListPanel({
             r.kind === 'confirmed'
               ? mapPaymentStatus(paymentStatusRaw)
               : 'unpaid'
-          const items = { damaged: [] as Item[], missing: [] as Item[] }
+          const items = { damaged: [] as Item[] }
 
           // NEW: capture package id when available (from confirmed bookings select)
           const packageId =
@@ -1568,6 +1564,11 @@ function MasterListPanel({
       }
       // Always build a normalized combined string so the edit page can split reliably
       const combinedContact = `${contactPersonName} | ${contactPersonNumber}`
+      const extensionHours = (() => {
+        if (row.extension_duration == null) return 0
+        const parsed = Number(row.extension_duration)
+        return Number.isFinite(parsed) ? parsed : 0
+      })()
       // Build prefill payload for createBooking page
       const prefill = {
         email: row.username || '',
@@ -1576,10 +1577,7 @@ function MasterListPanel({
         contactPersonAndNumber: combinedContact,
         eventName: row.eventName || '',
         eventLocation: row.place || '',
-        extensionHours:
-          typeof row.extension_duration === 'number'
-            ? row.extension_duration
-            : 0,
+        extensionHours,
         booth_placement: 'Indoor',
         signal: row.strongest_signal || '',
         package: row.package || 'The Hanz',
@@ -1715,6 +1713,39 @@ function MasterListPanel({
 
   const handleUndoCancel = async (row: BookingRow) => {
     if (!row.requestid || row.status !== 'cancelled') return
+    const targetDate = toISODateString(row.date)
+    const normalizeTime = (value: string | null | undefined) =>
+      typeof value === 'string' && value.trim() ? value.trim().slice(0, 5) : ''
+    const targetTime = normalizeTime(row.startTime)
+    const targetPackageId =
+      typeof row.packageId === 'number' && Number.isFinite(row.packageId)
+        ? row.packageId
+        : null
+    const conflict = rows.some((other) => {
+      if (other.id === row.id) return false
+      if (other.status !== 'approved') return false
+      const otherDate = toISODateString(other.date)
+      if (!targetDate || !otherDate || targetDate !== otherDate) return false
+      const otherTime = normalizeTime(other.startTime)
+      if (targetTime && otherTime && targetTime !== otherTime) return false
+      if (targetPackageId != null) {
+        const otherPkgId =
+          typeof other.packageId === 'number' &&
+          Number.isFinite(other.packageId)
+            ? other.packageId
+            : null
+        if (otherPkgId != null && otherPkgId !== targetPackageId) {
+          return false
+        }
+      }
+      return true
+    })
+    if (conflict) {
+      toast.error(
+        'Cannot undo cancellation: another approved booking already exists for this schedule.'
+      )
+      return
+    }
     try {
       setBusy('undo')
       await updateConfirmedBooking({
@@ -2684,16 +2715,12 @@ function MasterListPanel({
                       {reportItems.total}
                     </div>
                     <div>
-                      <span className="text-gray-600">OK:</span>{' '}
-                      {reportItems.ok}
+                      <span className="text-gray-600">Good:</span>{' '}
+                      {reportItems.good}
                     </div>
                     <div>
                       <span className="text-gray-600">Damaged:</span>{' '}
                       {reportItems.damaged}
-                    </div>
-                    <div>
-                      <span className="text-gray-600">Missing:</span>{' '}
-                      {reportItems.missing}
                     </div>
                   </div>
                   <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -2712,11 +2739,11 @@ function MasterListPanel({
                       )}
                     </div>
                     <div className="max-h-44 overflow-y-auto pr-1">
-                      <div className="font-semibold mb-1">Missing items</div>
-                      {reportItemLists && reportItemLists.missing.length ? (
+                      <div className="font-semibold mb-1">Good items</div>
+                      {reportItemLists && reportItemLists.good.length ? (
                         <ul className="list-disc list-inside space-y-0.5">
-                          {reportItemLists.missing.map((it, idx) => (
-                            <li key={`miss-${idx}`}>
+                          {reportItemLists.good.map((it, idx) => (
+                            <li key={`good-${idx}`}>
                               {it.name} × {it.qty}
                             </li>
                           ))}
@@ -2813,6 +2840,7 @@ function MasterListPanel({
           if (!o) {
             setContractOpen(false)
             setContractTargetId(null)
+            setContractRowId(null)
           }
         }}
       >
@@ -2824,7 +2852,23 @@ function MasterListPanel({
             </DialogDescription>
           </DialogHeader>
           {contractTargetId != null ? (
-            <AdminContractSection bookingId={contractTargetId} />
+            <AdminContractSection
+              bookingId={contractTargetId}
+              onStatusChange={(status) => {
+                if (contractRowId) {
+                  setRows((prev) =>
+                    prev.map((r) =>
+                      r.id === contractRowId
+                        ? {
+                            ...r,
+                            contractStatus: status as ContractStatus | null,
+                          }
+                        : r
+                    )
+                  )
+                }
+              }}
+            />
           ) : null}
           <DialogFooter>
             <button
@@ -2863,7 +2907,6 @@ function EventCardsPanel() {
     totalPrice?: number
     imageUrl?: string
     damagedItems?: Item[]
-    missingItems?: Item[]
     assignedStaff?: { id: number; firstname: string; lastname: string }[]
     // extra details
     strongestSignal?: string
@@ -3026,7 +3069,6 @@ function EventCardsPanel() {
               totalPrice,
               imageUrl: undefined,
               damagedItems: [],
-              missingItems: [],
               assignedStaff: [],
               strongestSignal: b.strongest_signal || undefined,
               contactInfo: b.contact_info || undefined,
@@ -3095,8 +3137,7 @@ function EventCardsPanel() {
     const tokens = search.trim().toLowerCase().split(/\s+/).filter(Boolean)
     return events.filter((e) => {
       const statusOk = statusFilter === 'all' ? true : e.status === statusFilter
-      const issues =
-        (e.damagedItems?.length || 0) + (e.missingItems?.length || 0)
+      const issues = e.damagedItems?.length || 0
       const itemsOk =
         itemsFilter === 'all'
           ? true
@@ -3243,7 +3284,6 @@ function EventCardsPanel() {
                 totalPrice={ev.totalPrice}
                 imageUrl={ev.imageUrl}
                 damagedItems={ev.damagedItems}
-                missingItems={ev.missingItems}
                 assignedStaff={ev.assignedStaff}
                 strongestSignal={ev.strongestSignal}
                 contactInfo={ev.contactInfo}

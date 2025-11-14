@@ -121,13 +121,6 @@ export default function AdminPaymentsPage() {
     payment_method: 'cash',
     reference_no: '' as string,
     notes: '' as string,
-    verified: true,
-    payment_status: 'Pending' as
-      | 'Pending'
-      | 'Partially Paid'
-      | 'Failed'
-      | 'Refunded'
-      | 'Fully Paid',
   })
   const [eventOptions, setEventOptions] = useState<
     Array<{ id: number; label: string; userLabel: string }>
@@ -389,6 +382,8 @@ export default function AdminPaymentsPage() {
           event_time?: string
           event_name?: string
           package_name?: string
+          booking_status?: string | null
+          payment_status?: string | null
         }
         const rows: ConfirmedBookingRow[] =
           typeof data === 'object' &&
@@ -400,21 +395,33 @@ export default function AdminPaymentsPage() {
                   typeof b === 'object' && b !== null
               )
             : []
-        const opts = rows.map((b) => {
-          const userLabel = [b.firstname, b.lastname]
-            .filter(Boolean)
-            .join(' ')
-            .trim()
-          const fallback = b.username || 'Customer'
-          const who = userLabel || fallback
-          const when = [b.event_date, b.event_time].filter(Boolean).join(' ')
-          const title = b.event_name || b.package_name || 'Event'
-          return {
-            id: Number(b.id),
-            label: `#${b.id} • ${title} • ${when} • ${who}`,
-            userLabel: who,
-          }
-        })
+        const opts = rows
+          .filter((b) => {
+            const bookingStatus = (b.booking_status || '')
+              .toString()
+              .toLowerCase()
+            const paymentStatus = (b.payment_status || '')
+              .toString()
+              .toLowerCase()
+            const isApproved = bookingStatus !== 'cancelled'
+            const isNotFullyPaid = paymentStatus !== 'paid'
+            return isApproved && isNotFullyPaid
+          })
+          .map((b) => {
+            const userLabel = [b.firstname, b.lastname]
+              .filter(Boolean)
+              .join(' ')
+              .trim()
+            const fallback = b.username || 'Customer'
+            const who = userLabel || fallback
+            const when = [b.event_date, b.event_time].filter(Boolean).join(' ')
+            const title = b.event_name || b.package_name || 'Event'
+            return {
+              id: Number(b.id),
+              label: `#${b.id} • ${title} • ${when} • ${who}`,
+              userLabel: who,
+            }
+          })
         if (!ignore) setEventOptions(opts)
       } catch (e) {
         console.error('Load confirmed bookings for dropdown failed:', e)
@@ -424,6 +431,17 @@ export default function AdminPaymentsPage() {
       ignore = true
     }
   }, [createOpen, API_BASE])
+
+  useEffect(() => {
+    if (!createOpen) return
+    if (!createForm.booking_id) return
+    const exists = eventOptions.some(
+      (opt) => String(opt.id) === String(createForm.booking_id)
+    )
+    if (!exists) {
+      setCreateForm((prev) => ({ ...prev, booking_id: '' }))
+    }
+  }, [createOpen, eventOptions, createForm.booking_id])
 
   // Load booking balance when booking changes in create form
   useEffect(() => {
@@ -818,7 +836,7 @@ export default function AdminPaymentsPage() {
               return (
                 <div className="hidden md:flex items-center gap-3 mr-2 text-sm">
                   <span className="px-2 py-1 rounded bg-gray-200">
-                    Total (filtered): ₱
+                    Total: ₱
                     {totalAll.toLocaleString('en-PH', {
                       minimumFractionDigits: 2,
                       maximumFractionDigits: 2,
@@ -1585,7 +1603,6 @@ export default function AdminPaymentsPage() {
                 >
                   <option value="cash">cash</option>
                   <option value="gcash">gcash</option>
-                  <option value="bank">bank</option>
                 </select>
               </div>
 
@@ -1614,39 +1631,6 @@ export default function AdminPaymentsPage() {
                   }
                   placeholder="Any remarks about the payment"
                 />
-              </div>
-
-              <div className="flex items-center gap-3 sm:col-span-3">
-                <label className="text-sm">Mark as verified</label>
-                <input
-                  type="checkbox"
-                  checked={createForm.verified}
-                  onChange={(e) =>
-                    setCreateForm((p) => ({ ...p, verified: e.target.checked }))
-                  }
-                />
-                <label className="text-sm">Status</label>
-                <select
-                  className="border rounded px-2 py-1"
-                  value={createForm.payment_status}
-                  onChange={(e) =>
-                    setCreateForm((p) => ({
-                      ...p,
-                      payment_status: e.target.value as
-                        | 'Pending'
-                        | 'Partially Paid'
-                        | 'Failed'
-                        | 'Refunded'
-                        | 'Fully Paid',
-                    }))
-                  }
-                >
-                  <option value="Pending">Pending</option>
-                  <option value="Partially Paid">Partially Paid</option>
-                  <option value="Failed">Failed</option>
-                  <option value="Refunded">Refunded</option>
-                  <option value="Fully Paid">Fully Paid</option>
-                </select>
               </div>
             </div>
           </div>
@@ -1679,13 +1663,12 @@ export default function AdminPaymentsPage() {
                   return
                 }
                 try {
-                  // If marking as verified and status left as Pending, auto-derive status from remaining balance
-                  let statusToSend = createForm.payment_status
-                  if (
-                    createForm.verified &&
-                    statusToSend === 'Pending' &&
-                    balance
-                  ) {
+                  const markVerified = true
+                  let statusToSend:
+                    | 'Pending'
+                    | 'Partially Paid'
+                    | 'Fully Paid' = 'Pending'
+                  if (markVerified && balance) {
                     statusToSend =
                       amount_paid >= balance.balance
                         ? 'Fully Paid'
@@ -1698,7 +1681,7 @@ export default function AdminPaymentsPage() {
                     reference_no:
                       createForm.reference_no.trim() || 'CASH-ON-EVENT',
                     notes: createForm.notes.trim() || undefined,
-                    verified: createForm.verified,
+                    verified: markVerified,
                     payment_status: statusToSend,
                   })
                   setCreateForm({
@@ -1707,8 +1690,6 @@ export default function AdminPaymentsPage() {
                     payment_method: 'cash',
                     reference_no: '',
                     notes: '',
-                    verified: true,
-                    payment_status: 'Pending',
                   })
                   setBalance(null)
                   setCreateOpen(false)

@@ -248,11 +248,19 @@ export function computePrefillPatch(params: {
 
   const eventDateStr = pick<string>('eventdate', 'event_date')
   const eventTimeStr = pick<string>('eventtime', 'event_time')
+  const eventEndTimeStr = pick<string>('event_end_time', 'eventendtime')
   const addressStr = pick<string>('eventaddress', 'event_address')
   const eventNameStr = pick<string>('event_name', 'eventname')
   const signalStr = pick<string>('strongest_signal', 'signal')
   const gridNamesArr = (booking as any).grid_names as string[] | undefined
   const gridStr = pick<string>('grid')
+  const extensionRaw = pick<number>('extension_duration', 'extensionduration')
+  const normalizedExtension = (() => {
+    if (extensionRaw == null) return prevForm.extensionHours
+    const parsed = Number(extensionRaw)
+    if (!Number.isFinite(parsed)) return prevForm.extensionHours
+    return Math.max(0, Math.floor(parsed))
+  })()
 
   // Prefer normalized names array from backend; fallback to splitting legacy snapshot
   const selectedGridNames: string[] | undefined = Array.isArray(gridNamesArr)
@@ -284,6 +292,8 @@ export function computePrefillPatch(params: {
     package: (resolvedName || prevForm.package) as BookingForm['package'],
     eventDate: eventDateStr ? new Date(eventDateStr) : prevForm.eventDate,
     eventTime: toHHmm(eventTimeStr) || prevForm.eventTime,
+    eventEndTime: toHHmm(eventEndTimeStr) || prevForm.eventEndTime,
+    extensionHours: normalizedExtension,
     // Prefill selected grids by name (matches UI expectation)
     selectedGrids: selectedGridNames ?? prevForm.selectedGrids,
   }

@@ -20,6 +20,7 @@ const {
 const {
   createRefund,
   getTotalRefundedForPayment,
+  getRefundTotalsForPayments,
 } = require('../../Model/paymentRefundModel')
 
 // List payments with optional filters: status, user_id, booking_id
@@ -263,6 +264,23 @@ async function generateSalesReportHandler(req, res) {
 
     // Only include verified payments in the report
     const reportRows = filteredRows.filter((p) => Boolean(p.verified_at))
+    const refundTotalsMap = await getRefundTotalsForPayments(
+      reportRows
+        .map((p) => Number(p.payment_id))
+        .filter((id) => Number.isFinite(id))
+    )
+    const reportRowsWithRefunds = reportRows.map((p) => {
+      const pid = Number(p.payment_id)
+      let refunded = 0
+      if (
+        refundTotalsMap &&
+        Object.prototype.hasOwnProperty.call(refundTotalsMap, pid)
+      ) {
+        refunded = Number(refundTotalsMap[pid])
+      }
+      if (!Number.isFinite(refunded)) refunded = 0
+      return { ...p, refunded_amount: refunded }
+    })
 
     // Fetch confirmed bookings to compute total due for the selected period
     const confirmedBookings = await listConfirmedBookings()
@@ -402,7 +420,7 @@ async function generateSalesReportHandler(req, res) {
     doc
       .fontSize(10)
       .font(bodyFont)
-      .text(`Generated at: ${formatDateTime(new Date())}`)
+      .text(`Generated at: ${formatDate(new Date())}`)
     doc.moveDown(0.5)
 
     // Helpers
@@ -422,24 +440,41 @@ async function generateSalesReportHandler(req, res) {
     const startX = doc.page.margins.left
     const usableWidth =
       doc.page.width - doc.page.margins.left - doc.page.margins.right
-    // Columns per spec: Event Name, User Name, Due Amount, Paid, Created
+    // Columns per spec: Event Name, User Name, Due Amount, Paid, Refunded, Created
     // Adjust widths to keep amounts on one line and fit within page margins.
-    const EVENT_W = 100
-    const USER_W = 90
-    const DUE_W = 110
-    const PAID_W = 110
-    const CREATED_W = Math.max(
-      120,
-      usableWidth - (EVENT_W + USER_W + DUE_W + PAID_W)
-    )
-    const columns = [
-      { key: 'event', label: 'Event Name', width: EVENT_W, align: 'left' },
-      { key: 'user', label: 'User Name', width: USER_W, align: 'left' },
-      { key: 'amount', label: 'Due Amount', width: DUE_W, align: 'left' },
-      { key: 'paid', label: 'Paid', width: PAID_W, align: 'left' },
-      { key: 'created', label: 'Created', width: CREATED_W, align: 'left' },
+    const MIN_COL_WIDTH = 70
+    const baseColumns = [
+      { key: 'event', label: 'Event Name', baseWidth: 140 },
+      { key: 'user', label: 'User Name', baseWidth: 110 },
+      { key: 'amount', label: 'Due Amount', baseWidth: 110 },
+      { key: 'paid', label: 'Paid', baseWidth: 110 },
+      { key: 'refunded', label: 'Refunded', baseWidth: 110 },
+      { key: 'created', label: 'Date', baseWidth: 120 },
     ]
-    const totalWidth = columns.reduce((s, c) => s + c.width, 0)
+    const baseTotal = baseColumns.reduce((sum, c) => sum + c.baseWidth, 0)
+    const scale = baseTotal > usableWidth ? usableWidth / baseTotal : 1
+    const columns = baseColumns.map((c) => {
+      const scaled = Math.floor(c.baseWidth * scale)
+      return {
+        key: c.key,
+        label: c.label,
+        align: 'left',
+        width: Math.max(MIN_COL_WIDTH, scaled),
+      }
+    })
+    let totalWidth = columns.reduce((sum, c) => sum + c.width, 0)
+    let overflow = totalWidth - usableWidth
+    if (overflow > 0) {
+      for (let i = columns.length - 1; i >= 0 && overflow > 0; i -= 1) {
+        const col = columns[i]
+        const spare = col.width - MIN_COL_WIDTH
+        if (spare <= 0) continue
+        const reduceBy = Math.min(spare, overflow)
+        col.width -= reduceBy
+        overflow -= reduceBy
+      }
+      totalWidth = columns.reduce((sum, c) => sum + c.width, 0)
+    }
 
     let y = doc.y + 4
     const rowH = 16
@@ -474,7 +509,7 @@ async function generateSalesReportHandler(req, res) {
 
     drawHeader()
 
-    reportRows.forEach((p, idx) => {
+    reportRowsWithRefunds.forEach((p, idx) => {
       // Body rows slightly smaller to avoid wrapping in amount columns
       doc.font(bodyFont).fontSize(9)
       maybeNewPage()
@@ -485,7 +520,8 @@ async function generateSalesReportHandler(req, res) {
         getName(p),
         `${currencyPrefix}${fmtMoney(p.booking_amount_due ?? p.amount)}`,
         `${currencyPrefix}${fmtMoney(p.amount_paid)}`,
-        formatDateTime(p.created_at),
+        `${currencyPrefix}${fmtMoney(p.refunded_amount || 0)}`,
+        formatDate(p.created_at),
       ]
       let x = startX
       // Optional zebra striping
@@ -508,10 +544,15 @@ async function generateSalesReportHandler(req, res) {
     })
 
     // Summary
-    const totalPaid = reportRows.reduce(
+    const totalPaidGross = reportRowsWithRefunds.reduce(
       (sum, r) => sum + Number(r.amount_paid || 0),
       0
     )
+    const totalRefunded = reportRowsWithRefunds.reduce(
+      (sum, r) => sum + Number(r.refunded_amount || 0),
+      0
+    )
+    const totalPaid = Math.max(0, totalPaidGross - totalRefunded)
     const totalDue = bookingsTotalDue
     // Period label
     const periodLabel = (() => {
@@ -542,6 +583,19 @@ async function generateSalesReportHandler(req, res) {
         )}`,
         startX,
         y + 6,
+        { width: totalWidth, align: 'right' }
+      )
+
+    doc.moveDown(0.2)
+    doc
+      .font(bodyFont)
+      .fontSize(9)
+      .text(
+        `Total Refunded: ${usePesoSymbol ? '₱' : 'PHP'} ${fmtMoney(
+          totalRefunded
+        )}`,
+        startX,
+        doc.y,
         { width: totalWidth, align: 'right' }
       )
 

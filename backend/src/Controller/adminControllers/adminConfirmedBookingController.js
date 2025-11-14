@@ -43,6 +43,19 @@ initEventStaffLogsTable().catch((e) =>
   console.warn('Init event_staff_logs table failed:', e?.message)
 )
 
+async function syncRequestStatusFromConfirmed(confirmedRow, nextBookingStatus) {
+  if (!confirmedRow || !confirmedRow.requestid) return
+  const requestStatus =
+    nextBookingStatus === 'cancelled' ? 'cancelled' : 'accepted'
+  const updated = await updateBookingRequestStatus(
+    confirmedRow.requestid,
+    requestStatus
+  )
+  if (!updated) {
+    throw new Error('Related booking request not found for confirmed booking')
+  }
+}
+
 async function list(req, res) {
   try {
     const rows = await listConfirmedBookings()
@@ -117,6 +130,14 @@ async function setBookingStatus(req, res) {
     if (!status) return res.status(400).json({ message: 'status required' })
     const row = await updateBookingStatus(id, status)
     if (!row) return res.status(404).json({ message: 'Not found' })
+    try {
+      await syncRequestStatusFromConfirmed(row, status)
+    } catch (syncErr) {
+      console.error('confirmed.setBookingStatus sync error:', syncErr)
+      return res
+        .status(500)
+        .json({ message: 'Failed to update related booking request status' })
+    }
     // Notify user about booking status change (best-effort)
     try {
       const full = await getConfirmedBookingById(id)
@@ -258,6 +279,7 @@ async function updateConfirmedCombined(req, res) {
     if (typeof bookingStatus === 'string') {
       try {
         last = await updateBookingStatus(id, bookingStatus)
+        await syncRequestStatusFromConfirmed(last, bookingStatus)
         changes.booking_status = bookingStatus
       } catch (e) {
         return res
@@ -311,6 +333,14 @@ async function cancelConfirmed(req, res) {
     }
     const row = await updateBookingStatus(id, 'cancelled')
     if (!row) return res.status(404).json({ message: 'Not found' })
+    try {
+      await syncRequestStatusFromConfirmed(row, 'cancelled')
+    } catch (syncErr) {
+      console.error('confirmed.cancelConfirmed sync error:', syncErr)
+      return res
+        .status(500)
+        .json({ message: 'Failed to update related booking request status' })
+    }
     // Notify user about cancellation (best-effort)
     try {
       const full = await getConfirmedBookingById(id)

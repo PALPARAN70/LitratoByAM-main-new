@@ -392,15 +392,63 @@ export default function DashboardPage() {
     void loadRows()
   }, [loadRows])
 
+  const minutesFromMidnight = (row: Row) => {
+    const twentyFour = to24h(row.startTime)
+    const match = twentyFour.match(/^([0-1]?\d|2[0-3]):([0-5]\d)$/)
+    if (!match) return 0
+    const hours = parseInt(match[1], 10)
+    const minutes = parseInt(match[2], 10)
+    return hours * 60 + minutes
+  }
+
+  const compareNearest = (a: Row, b: Row) => {
+    const da = daysUntil(a.date)
+    const db = daysUntil(b.date)
+    const futureA = da >= 0
+    const futureB = db >= 0
+    if (futureA && !futureB) return -1
+    if (!futureA && futureB) return 1
+    if (futureA && futureB) {
+      if (da !== db) return da - db
+      return minutesFromMidnight(a) - minutesFromMidnight(b)
+    }
+    const absA = Math.abs(da)
+    const absB = Math.abs(db)
+    if (absA !== absB) return absA - absB
+    return minutesFromMidnight(b) - minutesFromMidnight(a)
+  }
+
+  const statusPriority = (row: Row) => {
+    const map: Record<NonNullable<Row['status']>, number> = {
+      Approved: 0,
+      Pending: 1,
+      Declined: 2,
+      Cancelled: 3,
+    }
+    const status = (row.status ?? 'Pending') as NonNullable<Row['status']>
+    return map[status] ?? 99
+  }
+
+  const compareStatusThenNearest = (a: Row, b: Row) => {
+    const sa = statusPriority(a)
+    const sb = statusPriority(b)
+    if (sa !== sb) return sa - sb
+    return compareNearest(a, b)
+  }
+
   // Compute filtered rows based on selected status
   const filteredRows = statusFilter
     ? rows.filter((r) => (r.status ?? 'Pending') === statusFilter)
     : rows
 
+  const displayRows = statusFilter
+    ? [...filteredRows].sort(compareNearest)
+    : [...filteredRows].sort(compareStatusThenNearest)
+
   // Use filtered rows for pagination
-  const totalPages = Math.max(1, Math.ceil(filteredRows.length / PER_PAGE))
+  const totalPages = Math.max(1, Math.ceil(displayRows.length / PER_PAGE))
   const windowPages = pageWindow(page, totalPages, 3)
-  const paginated = filteredRows.slice(
+  const paginated = displayRows.slice(
     (page - 1) * PER_PAGE,
     (page - 1) * PER_PAGE + PER_PAGE
   )
