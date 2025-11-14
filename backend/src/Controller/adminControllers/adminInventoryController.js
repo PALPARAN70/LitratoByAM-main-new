@@ -1,5 +1,5 @@
-// Inventory & Package Management Controller (split from adminController.js)
-// Contains endpoints related to inventory items, packages, package inventory junctions,
+// Equipment & Package Management Controller (split from adminController.js)
+// Contains endpoints related to equipment items, packages, package equipment junctions,
 // material types, and inventory status logs.
 
 const inventoryModel = require('../../Model/inventoryModel')
@@ -8,7 +8,7 @@ const packageInventoryItemModel = require('../../Model/packageInventoryItemModel
 const inventoryStatusLogModel = require('../../Model/inventoryStatusLogModel')
 const materialTypesModel = require('../../Model/materialTypesModel')
 
-// -------- Inventory Items -------- //
+// -------- Equipment Items -------- //
 exports.createInventoryItem = async (req, res) => {
   try {
     const { materialName, materialType, condition, status, notes, display } =
@@ -26,7 +26,7 @@ exports.createInventoryItem = async (req, res) => {
     // auto log
     try {
       await inventoryStatusLogModel.createStatusLog(
-        'Inventory',
+        'Equipments',
         Number(newItem.id),
         'created',
         JSON.stringify({
@@ -37,6 +37,7 @@ exports.createInventoryItem = async (req, res) => {
             status: [null, newItem.status ? 'available' : 'unavailable'],
           },
         }),
+        null,
         req.user?.id ?? null
       )
     } catch (logErr) {
@@ -46,12 +47,12 @@ exports.createInventoryItem = async (req, res) => {
     res.json({
       toast: {
         type: 'success',
-        message: 'Inventory item created successfully',
+        message: 'Equipment item created successfully',
       },
       item: newItem,
     })
   } catch (e) {
-    console.error('Create Inventory Item Error:', e)
+    console.error('Create Equipment Item Error:', e)
     res
       .status(500)
       .json({ toast: { type: 'error', message: 'Internal server error' } })
@@ -64,7 +65,7 @@ exports.listInventory = async (_req, res) => {
     res.json({
       toast: {
         type: 'success',
-        message: 'Inventory items retrieved successfully',
+        message: 'Equipment items retrieved successfully',
       },
       items,
     })
@@ -84,7 +85,7 @@ exports.updateInventoryItem = async (req, res) => {
     if (!current) {
       return res
         .status(404)
-        .json({ toast: { type: 'error', message: 'Inventory item not found' } })
+        .json({ toast: { type: 'error', message: 'Equipment item not found' } })
     }
 
     const updated = await inventoryModel.updateInventory(inventoryID, updates)
@@ -113,10 +114,11 @@ exports.updateInventoryItem = async (req, res) => {
     if (Object.keys(diff).length) {
       try {
         await inventoryStatusLogModel.createStatusLog(
-          'Inventory',
+          'Equipments',
           Number(inventoryID),
           'updated',
           JSON.stringify({ changes: diff }),
+          null,
           req.user?.id ?? null
         )
       } catch (logErr) {
@@ -127,12 +129,12 @@ exports.updateInventoryItem = async (req, res) => {
     res.json({
       toast: {
         type: 'success',
-        message: 'Inventory item updated successfully',
+        message: 'Equipment item updated successfully',
       },
       item: updated,
     })
   } catch (e) {
-    console.error('Update Inventory Item Error:', e)
+    console.error('Update Equipment Item Error:', e)
     res
       .status(500)
       .json({ toast: { type: 'error', message: 'Internal server error' } })
@@ -146,11 +148,11 @@ exports.deleteInventoryItem = async (req, res) => {
     res.json({
       toast: {
         type: 'success',
-        message: 'Inventory item deleted successfully',
+        message: 'Equipment item deleted successfully',
       },
     })
   } catch (e) {
-    console.error('Delete Inventory Item Error:', e)
+    console.error('Delete Equipment Item Error:', e)
     res
       .status(500)
       .json({ toast: { type: 'error', message: 'Internal server error' } })
@@ -256,6 +258,7 @@ exports.createPackage = async (req, res) => {
             display: [null, newPackage.display ? 'visible' : 'hidden'],
           },
         }),
+        null,
         req.user?.id ?? null
       )
     } catch (logErr) {
@@ -416,6 +419,7 @@ exports.updatePackage = async (req, res) => {
         id,
         logStatus,
         JSON.stringify({ changes }),
+        null,
         req.user?.id ?? null
       )
     }
@@ -447,7 +451,7 @@ exports.deletePackage = async (req, res) => {
   }
 }
 
-// -------- Package Inventory Items -------- //
+// -------- Package Equipment Items -------- //
 exports.createPackageInventoryItem = async (req, res) => {
   try {
     const { package_id, inventory_id, quantity } = req.body
@@ -485,7 +489,7 @@ exports.createPackageInventoryItem = async (req, res) => {
     if (!inv) {
       return res
         .status(404)
-        .json({ toast: { type: 'error', message: 'Inventory item not found' } })
+        .json({ toast: { type: 'error', message: 'Equipment item not found' } })
     }
 
     const existingAssignment =
@@ -498,8 +502,8 @@ exports.createPackageInventoryItem = async (req, res) => {
         : 'another package'
       const message =
         Number(existingAssignment.package_id) === packageId
-          ? 'Inventory item is already assigned to this package.'
-          : `Inventory item is already assigned to ${assignedPackageName}.`
+          ? 'Equipment item is already assigned to this package.'
+          : `Equipment item is already assigned to ${assignedPackageName}.`
       return res.status(409).json({ toast: { type: 'error', message } })
     }
 
@@ -508,16 +512,16 @@ exports.createPackageInventoryItem = async (req, res) => {
     )
 
     res.status(201).json({
-      toast: { type: 'success', message: 'Package inventory item created' },
+      toast: { type: 'success', message: 'Package equipment item created' },
       packageInventoryItem: junction,
     })
   } catch (error) {
-    console.error('Create Package Inventory Item Error:', error)
+    console.error('Create Package Equipment Item Error:', error)
     if (error?.code === '23505') {
       return res.status(409).json({
         toast: {
           type: 'error',
-          message: 'Inventory item is already assigned to another package.',
+          message: 'Equipment item is already assigned to another package.',
         },
       })
     }
@@ -534,12 +538,12 @@ exports.listPackageInventoryItems = async (_req, res) => {
     res.json({
       toast: {
         type: 'success',
-        message: 'Package inventory items retrieved successfully',
+        message: 'Package equipment items retrieved successfully',
       },
       packageInventoryItems,
     })
   } catch (e) {
-    console.error('List Package Inventory Items Error:', e)
+    console.error('List Package Equipment Items Error:', e)
     res
       .status(500)
       .json({ toast: { type: 'error', message: 'Internal server error' } })
@@ -577,7 +581,7 @@ exports.updatePackageInventoryItem = async (req, res) => {
       )
     if (!currentItem) {
       return res.status(404).json({
-        toast: { type: 'error', message: 'Package inventory item not found' },
+        toast: { type: 'error', message: 'Package equipment item not found' },
       })
     }
 
@@ -644,7 +648,7 @@ exports.updatePackageInventoryItem = async (req, res) => {
         return res.status(409).json({
           toast: {
             type: 'error',
-            message: `Inventory item is already assigned to ${assignedPackageName}.`,
+            message: `Equipment item is already assigned to ${assignedPackageName}.`,
           },
         })
       }
@@ -656,24 +660,24 @@ exports.updatePackageInventoryItem = async (req, res) => {
     )
     if (!updated) {
       return res.status(404).json({
-        toast: { type: 'error', message: 'Package inventory item not found' },
+        toast: { type: 'error', message: 'Package equipment item not found' },
       })
     }
 
     res.json({
       toast: {
         type: 'success',
-        message: 'Package inventory item updated successfully',
+        message: 'Package equipment item updated successfully',
       },
       packageInventoryItem: updated,
     })
   } catch (e) {
-    console.error('Update Package Inventory Item Error:', e)
+    console.error('Update Package Equipment Item Error:', e)
     if (e?.code === '23505') {
       return res.status(409).json({
         toast: {
           type: 'error',
-          message: 'Inventory item is already assigned to another package.',
+          message: 'Equipment item is already assigned to another package.',
         },
       })
     }
@@ -692,17 +696,17 @@ exports.deletePackageInventoryItem = async (req, res) => {
     )
     if (!updated) {
       return res.status(404).json({
-        toast: { type: 'error', message: 'Package inventory item not found' },
+        toast: { type: 'error', message: 'Package equipment item not found' },
       })
     }
     res.json({
       toast: {
         type: 'success',
-        message: 'Package inventory item deleted successfully',
+        message: 'Package equipment item deleted successfully',
       },
     })
   } catch (e) {
-    console.error('Delete Package Inventory Item Error:', e)
+    console.error('Delete Package Equipment Item Error:', e)
     res
       .status(500)
       .json({ toast: { type: 'error', message: 'Internal server error' } })
@@ -713,17 +717,19 @@ exports.deletePackageInventoryItem = async (req, res) => {
 exports.createInventoryStatusLog = async (req, res) => {
   try {
     const { entity_type, entity_id, status, notes, additional_notes } = req.body
-    if (!entity_type || entity_id == null || !status) {
+    if (entity_id == null || !status) {
       return res
         .status(400)
         .json({ toast: { type: 'error', message: 'Missing required fields' } })
     }
+    const entityType = String(entity_type ?? 'Equipments')
     const updater = req.user?.id ?? null
     await inventoryStatusLogModel.createStatusLog(
-      String(entity_type),
+      entityType,
       Number(entity_id),
       String(status),
       notes ?? null,
+      additional_notes ?? null,
       updater
     )
     res.json({
@@ -761,16 +767,17 @@ exports.listInventoryStatusLogs = async (_req, res) => {
 exports.listInventoryStatusLogsByEntity = async (req, res) => {
   try {
     const { entity_type, entity_id } = req.query
-    if (!entity_type || !entity_id) {
+    if (!entity_id) {
       return res.status(400).json({
         toast: {
           type: 'error',
-          message: 'entity_type and entity_id required',
+          message: 'entity_id required',
         },
       })
     }
+    const entityType = String(entity_type ?? 'Equipments')
     const rows = await inventoryStatusLogModel.findLogsByEntity(
-      String(entity_type),
+      entityType,
       Number(entity_id)
     )
     res.json({
@@ -790,25 +797,28 @@ exports.listInventoryStatusLogsByEntity = async (req, res) => {
 
 exports.updateInventoryStatusLog = async (req, res) => {
   try {
-    const { log_id } = req.params
+    const { inventory_log_id } = req.params
     const { entity_type, entity_id, status, notes, additional_notes } = req.body
-    if (!log_id) {
+    if (!inventory_log_id) {
       return res
         .status(400)
-        .json({ toast: { type: 'error', message: 'log_id is required' } })
+        .json({
+          toast: { type: 'error', message: 'inventory_log_id is required' },
+        })
     }
-    if (!entity_type || entity_id == null || !status) {
+    if (entity_id == null || !status) {
       return res.status(400).json({
         toast: {
           type: 'error',
-          message: 'entity_type, entity_id, and status are required',
+          message: 'entity_id and status are required',
         },
       })
     }
+    const entityType = String(entity_type ?? 'Equipments')
     const updater = req.user?.id ?? null
     await inventoryStatusLogModel.updateLog(
-      Number(log_id),
-      String(entity_type),
+      Number(inventory_log_id),
+      entityType,
       Number(entity_id),
       String(status),
       notes ?? null,
@@ -831,8 +841,8 @@ exports.updateInventoryStatusLog = async (req, res) => {
 
 exports.deleteInventoryStatusLog = async (req, res) => {
   try {
-    const { log_id } = req.params
-    await inventoryStatusLogModel.softDeleteLog(log_id)
+    const { inventory_log_id } = req.params
+    await inventoryStatusLogModel.softDeleteLog(Number(inventory_log_id))
     res.json({
       toast: {
         type: 'success',
@@ -940,7 +950,7 @@ exports.replacePackageItems = async (req, res) => {
         return res.status(400).json({
           toast: {
             type: 'error',
-            message: 'Duplicate inventory items provided',
+            message: 'Duplicate equipment items provided',
           },
         })
       }
@@ -948,7 +958,7 @@ exports.replacePackageItems = async (req, res) => {
       const inv = await inventoryModel.findInventoryById(inventoryId)
       if (!inv) {
         return res.status(404).json({
-          toast: { type: 'error', message: 'Inventory item not found' },
+          toast: { type: 'error', message: 'Equipment item not found' },
         })
       }
 
@@ -963,7 +973,7 @@ exports.replacePackageItems = async (req, res) => {
         return res.status(409).json({
           toast: {
             type: 'error',
-            message: `Inventory item is already assigned to ${assignedPackageName}.`,
+            message: `Equipment item is already assigned to ${assignedPackageName}.`,
           },
         })
       }

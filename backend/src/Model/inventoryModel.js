@@ -1,12 +1,27 @@
 const { pool } = require('../Config/db')
 const { initMaterialTypesTable } = require('./materialTypesModel')
 
-// Create inventory table if not exists
+// Create equipments table if not exists
 async function initInventoryTable() {
   // ensure material types table exists first (independent but used logically)
   await initMaterialTypesTable()
+  // rename legacy table to new equipments name if needed
   await pool.query(`
-    CREATE TABLE IF NOT EXISTS inventory (
+    DO $$
+    BEGIN
+      IF EXISTS (
+        SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'inventory'
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'equipments'
+      ) THEN
+        EXECUTE 'ALTER TABLE inventory RENAME TO equipments';
+      END IF;
+    END
+    $$;
+  `)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS equipments (
       id SERIAL PRIMARY KEY,
       material_name VARCHAR(100) NOT NULL,
       material_type VARCHAR(50),
@@ -20,7 +35,7 @@ async function initInventoryTable() {
   `)
 }
 
-// Create inventory item
+// Create equipment item
 async function createInventoryItem(
   materialName,
   materialType,
@@ -40,7 +55,7 @@ async function createInventoryItem(
 
   const result = await pool.query(
     `
-      INSERT INTO inventory (
+      INSERT INTO equipments (
         material_name,
         material_type,
         condition,
@@ -59,7 +74,7 @@ async function createInventoryItem(
 // Find by id
 async function findInventoryById(id) {
   const result = await pool.query(
-    `SELECT * FROM inventory WHERE id = $1 AND display = TRUE`,
+    `SELECT * FROM equipments WHERE id = $1 AND display = TRUE`,
     [id]
   )
   return result.rows[0]
@@ -68,7 +83,7 @@ async function findInventoryById(id) {
 // List visible items
 async function getAllInventory() {
   const result = await pool.query(
-    `SELECT * FROM inventory WHERE display = TRUE ORDER BY material_name ASC`
+    `SELECT * FROM equipments WHERE display = TRUE ORDER BY material_name ASC`
   )
   return result.rows
 }
@@ -101,7 +116,7 @@ async function updateInventory(id, updates) {
   fields.push(`last_updated = CURRENT_TIMESTAMP`)
 
   const query = `
-    UPDATE inventory
+    UPDATE equipments
     SET ${fields.join(', ')}
     WHERE id = $${idx}
     RETURNING *

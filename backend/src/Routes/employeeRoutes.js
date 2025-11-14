@@ -106,7 +106,7 @@ router.post(
 
       // ensure assignment
       const { rows } = await pool.query(
-        `SELECT 1 FROM confirmed_booking_staff WHERE bookingid = $1 AND staff_userid = $2 LIMIT 1`,
+        `SELECT 1 FROM assigned_staff WHERE bookingid = $1 AND staff_userid = $2 LIMIT 1`,
         [id, uid]
       )
       if (!rows[0]) {

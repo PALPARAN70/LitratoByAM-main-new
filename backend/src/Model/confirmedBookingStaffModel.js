@@ -3,7 +3,21 @@ const { pool } = require('../Config/db')
 // Create staff assignment table (1..2 employees per confirmed booking)
 async function initConfirmedBookingStaffTable() {
   await pool.query(`
-    CREATE TABLE IF NOT EXISTS confirmed_booking_staff (
+    DO $$
+    BEGIN
+      IF EXISTS (
+        SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'confirmed_booking_staff'
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'assigned_staff'
+      ) THEN
+        EXECUTE 'ALTER TABLE confirmed_booking_staff RENAME TO assigned_staff';
+      END IF;
+    END
+    $$;
+  `)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS assigned_staff (
       id SERIAL PRIMARY KEY,
       bookingid INTEGER NOT NULL REFERENCES confirmed_bookings(id) ON DELETE CASCADE,
       staff_userid INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -31,7 +45,7 @@ async function assignStaff(bookingid, staffUserIds = []) {
 
   // current count
   const { rows: cntRows } = await pool.query(
-    `SELECT COUNT(*)::int AS c FROM confirmed_booking_staff WHERE bookingid = $1`,
+    `SELECT COUNT(*)::int AS c FROM assigned_staff WHERE bookingid = $1`,
     [bookingid]
   )
   const currentCount = cntRows[0]?.c ?? 0
@@ -53,7 +67,7 @@ async function assignStaff(bookingid, staffUserIds = []) {
   for (const staffId of uniqueIds) {
     await pool.query(
       `
-      INSERT INTO confirmed_booking_staff (bookingid, staff_userid)
+      INSERT INTO assigned_staff (bookingid, staff_userid)
       VALUES ($1, $2)
       ON CONFLICT (bookingid, staff_userid) DO NOTHING
       `,
@@ -66,7 +80,7 @@ async function assignStaff(bookingid, staffUserIds = []) {
 // Remove a staff from a booking
 async function removeStaff(bookingid, staffUserId) {
   await pool.query(
-    `DELETE FROM confirmed_booking_staff WHERE bookingid = $1 AND staff_userid = $2`,
+    `DELETE FROM assigned_staff WHERE bookingid = $1 AND staff_userid = $2`,
     [bookingid, staffUserId]
   )
   return getStaffForBooking(bookingid)
@@ -77,10 +91,10 @@ async function getStaffForBooking(bookingid) {
   const { rows } = await pool.query(
     `
     SELECT u.id, u.username, u.firstname, u.lastname, u.contact
-    FROM confirmed_booking_staff cbs
-    JOIN users u ON u.id = cbs.staff_userid
-    WHERE cbs.bookingid = $1
-    ORDER BY cbs.assigned_at ASC
+    FROM assigned_staff ast
+    JOIN users u ON u.id = ast.staff_userid
+    WHERE ast.bookingid = $1
+    ORDER BY ast.assigned_at ASC
     `,
     [bookingid]
   )
@@ -122,13 +136,12 @@ async function setStaff(bookingid, staffUserIds = []) {
   const client = await pool.connect()
   try {
     await client.query('BEGIN')
-    await client.query(
-      `DELETE FROM confirmed_booking_staff WHERE bookingid = $1`,
-      [bookingid]
-    )
+    await client.query(`DELETE FROM assigned_staff WHERE bookingid = $1`, [
+      bookingid,
+    ])
     for (const staffId of uniqueIds) {
       await client.query(
-        `INSERT INTO confirmed_booking_staff (bookingid, staff_userid) VALUES ($1, $2)`,
+        `INSERT INTO assigned_staff (bookingid, staff_userid) VALUES ($1, $2)`,
         [bookingid, staffId]
       )
     }
@@ -158,7 +171,7 @@ module.exports = {
         TO_CHAR(br.event_time, 'HH24:MI') AS event_time,
         COALESCE(cb.event_end_time, br.event_end_time) AS event_end_time,
         COALESCE(cb.extension_duration, br.extension_duration) AS extension_duration,
-        COALESCE(cb.grid, br.grid) AS grid,
+        br.grid,
         br.event_address,
         br.contact_info,
         br.contact_person,
@@ -172,12 +185,12 @@ module.exports = {
         u.username,
         u.firstname,
         u.lastname
-      FROM confirmed_booking_staff cbs
-      JOIN confirmed_bookings cb ON cb.id = cbs.bookingid
+      FROM assigned_staff ast
+      JOIN confirmed_bookings cb ON cb.id = ast.bookingid
       JOIN booking_requests br ON br.requestid = cb.requestid
       JOIN packages p ON p.id = br.packageid
       JOIN users u ON u.id = cb.userid
-      WHERE cbs.staff_userid = $1
+      WHERE ast.staff_userid = $1
       ORDER BY cb.created_at DESC
       `,
       [staffUserId]

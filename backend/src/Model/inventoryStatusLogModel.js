@@ -3,8 +3,47 @@ const { pool } = require('../Config/db')
 
 async function initInventoryStatusLogTable() {
   await pool.query(`
-  CREATE TABLE IF NOT EXISTS status_log (
-    log_id SERIAL PRIMARY KEY,
+  DO $$
+  BEGIN
+    IF EXISTS (
+      SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'status_log'
+    )
+    AND NOT EXISTS (
+      SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'inventory_log'
+    ) THEN
+      EXECUTE 'ALTER TABLE status_log RENAME TO inventory_log';
+    END IF;
+
+    IF EXISTS (
+      SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'inventory_log' AND column_name = 'log_id'
+    ) THEN
+      EXECUTE 'ALTER TABLE inventory_log RENAME COLUMN log_id TO inventory_log_id';
+    END IF;
+
+    IF NOT EXISTS (
+      SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'inventory_log' AND column_name = 'last_updated'
+    ) THEN
+      EXECUTE 'ALTER TABLE inventory_log ADD COLUMN last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP';
+      EXECUTE 'UPDATE inventory_log SET last_updated = CURRENT_TIMESTAMP WHERE last_updated IS NULL';
+    END IF;
+
+    IF EXISTS (
+      SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'inventory_log' AND column_name = 'updated_at'
+    ) THEN
+      EXECUTE 'ALTER TABLE inventory_log DROP COLUMN updated_at';
+    END IF;
+
+    IF EXISTS (
+      SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'inventory_log' AND column_name = 'last_updated'
+    ) THEN
+      EXECUTE 'ALTER TABLE inventory_log ALTER COLUMN last_updated SET DEFAULT CURRENT_TIMESTAMP';
+    END IF;
+  END
+  $$;
+  `)
+  await pool.query(`
+  CREATE TABLE IF NOT EXISTS inventory_log (
+    inventory_log_id SERIAL PRIMARY KEY,
     entity_type VARCHAR(50) NOT NULL,
     entity_id INT NOT NULL,
     status VARCHAR(50) NOT NULL,
@@ -13,7 +52,7 @@ async function initInventoryStatusLogTable() {
     updated_by INT REFERENCES users(id) ON DELETE SET NULL,
     display BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   )
   `)
 }
@@ -23,14 +62,15 @@ async function createStatusLog(
   entity_id,
   status,
   notes,
+  additional_notes,
   updated_by
 ) {
   await pool.query(
     `
-    INSERT INTO status_log (entity_type, entity_id, status, notes, updated_by)
-    VALUES ($1, $2, $3, $4, $5)
+    INSERT INTO inventory_log (entity_type, entity_id, status, notes, additional_notes, updated_by)
+    VALUES ($1, $2, $3, $4, $5, $6)
   `,
-    [entity_type, entity_id, status, notes, updated_by]
+    [entity_type, entity_id, status, notes, additional_notes, updated_by]
   )
 }
 //find logs by entity
@@ -40,10 +80,10 @@ async function findLogsByEntity(entity_type, entity_id) {
     SELECT s.*,
            COALESCE(NULLIF(TRIM(CONCAT(u.firstname, ' ', u.lastname)), ''), u.username) AS updated_by_name,
            u.username AS updated_by_username
-    FROM status_log s
+    FROM inventory_log s
     LEFT JOIN users u ON u.id = s.updated_by
     WHERE s.entity_type = $1 AND s.entity_id = $2 AND s.display = TRUE
-    ORDER BY s.updated_at DESC, s.log_id DESC
+    ORDER BY s.last_updated DESC, s.inventory_log_id DESC
   `,
     [entity_type, entity_id]
   )
@@ -56,10 +96,10 @@ async function getAllLogs() {
     SELECT s.*,
            COALESCE(NULLIF(TRIM(CONCAT(u.firstname, ' ', u.lastname)), ''), u.username) AS updated_by_name,
            u.username AS updated_by_username
-    FROM status_log s
+    FROM inventory_log s
     LEFT JOIN users u ON u.id = s.updated_by
     WHERE s.display = TRUE
-    ORDER BY s.updated_at DESC, s.log_id DESC
+    ORDER BY s.last_updated DESC, s.inventory_log_id DESC
     `
   )
   return result.rows
@@ -67,7 +107,7 @@ async function getAllLogs() {
 
 //update log
 async function updateLog(
-  log_id,
+  inventory_log_id,
   entity_type,
   entity_id,
   status,
@@ -77,15 +117,15 @@ async function updateLog(
 ) {
   await pool.query(
     `
-    UPDATE status_log
+    UPDATE inventory_log
     SET entity_type = $1,
         entity_id = $2,
         status = $3,
         notes = $4,
         additional_notes = $5,
         updated_by = $6,
-        updated_at = NOW()
-    WHERE log_id = $7
+        last_updated = NOW()
+    WHERE inventory_log_id = $7
   `,
     [
       entity_type,
@@ -94,20 +134,20 @@ async function updateLog(
       notes,
       additional_notes,
       updated_by,
-      log_id,
+      inventory_log_id,
     ]
   )
 }
 
 // NEW: soft delete a log
-async function softDeleteLog(log_id) {
+async function softDeleteLog(inventory_log_id) {
   await pool.query(
     `
-      UPDATE status_log
-      SET display = FALSE, updated_at = NOW()
-      WHERE log_id = $1
+      UPDATE inventory_log
+      SET display = FALSE, last_updated = NOW()
+      WHERE inventory_log_id = $1
     `,
-    [log_id]
+    [inventory_log_id]
   )
 }
 

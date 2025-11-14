@@ -28,7 +28,7 @@ async function initConfirmedBookingTable() {
     )
     .catch(() => {})
   await pool
-    .query('ALTER TABLE confirmed_bookings ADD COLUMN IF NOT EXISTS grid TEXT')
+    .query('ALTER TABLE confirmed_bookings DROP COLUMN IF EXISTS grid')
     .catch(() => {})
 
   // Ensure CHECK constraint allows 'failed' as a payment_status for existing DBs
@@ -103,8 +103,8 @@ async function createConfirmedBooking(requestid, options = {}) {
   const ins = await pool.query(
     `
     INSERT INTO confirmed_bookings
-      (requestid, userid, contract_signed, payment_status, booking_status, total_booking_price, event_end_time, extension_duration, grid)
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      (requestid, userid, contract_signed, payment_status, booking_status, total_booking_price, event_end_time, extension_duration)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
     RETURNING *
     `,
     [
@@ -116,7 +116,6 @@ async function createConfirmedBooking(requestid, options = {}) {
       total,
       reqRow.event_end_time || null,
       reqRow.extension_duration || null,
-      reqRow.grid || null,
     ]
   )
   return ins.rows[0]
@@ -132,7 +131,7 @@ async function getConfirmedBookingById(bookingid) {
       TO_CHAR(br.event_time, 'HH24:MI') AS event_time,
       COALESCE(cb.event_end_time, br.event_end_time) AS event_end_time,
       COALESCE(cb.extension_duration, br.extension_duration) AS extension_duration,
-      COALESCE(cb.grid, br.grid) AS grid,
+      br.grid,
       br.event_address,
       br.contact_person,
       br.contact_person_number,
@@ -174,7 +173,7 @@ async function listConfirmedBookings() {
       TO_CHAR(br.event_time, 'HH24:MI') AS event_time,
       COALESCE(cb.event_end_time, br.event_end_time) AS event_end_time,
       COALESCE(cb.extension_duration, br.extension_duration) AS extension_duration,
-      COALESCE(cb.grid, br.grid) AS grid,
+      br.grid,
       br.event_address,
       br.contact_person,
       br.contact_person_number,

@@ -1,12 +1,43 @@
 const { pool } = require('../Config/db')
 
-// Junction table between packages and inventory items
+// Junction table between packages and equipment items
 async function initPackageInventoryItemsTable() {
+  await pool.query(
+    'DROP INDEX IF EXISTS package_inventory_items_unique_inventory'
+  )
   await pool.query(`
-    CREATE TABLE IF NOT EXISTS package_inventory_items (
+    DO $$
+    DECLARE
+      fk_name text;
+    BEGIN
+      IF EXISTS (
+        SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'package_inventory_items'
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'package_equipment_items'
+      ) THEN
+        EXECUTE 'ALTER TABLE package_inventory_items RENAME TO package_equipment_items';
+      END IF;
+
+      SELECT c.conname INTO fk_name
+      FROM pg_constraint c
+      JOIN pg_class t ON c.conrelid = t.oid
+      WHERE t.relname = 'package_equipment_items'
+        AND c.contype = 'f'
+        AND pg_get_constraintdef(c.oid) ILIKE '%REFERENCES inventory(%';
+
+      IF fk_name IS NOT NULL THEN
+        EXECUTE format('ALTER TABLE package_equipment_items DROP CONSTRAINT %I', fk_name);
+        EXECUTE 'ALTER TABLE package_equipment_items ADD CONSTRAINT package_equipment_items_inventory_id_fkey FOREIGN KEY (inventory_id) REFERENCES equipments(id) ON DELETE CASCADE';
+      END IF;
+    END
+    $$;
+  `)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS package_equipment_items (
       id SERIAL PRIMARY KEY,
       package_id INT NOT NULL REFERENCES packages(id) ON DELETE CASCADE,
-      inventory_id INT NOT NULL REFERENCES inventory(id) ON DELETE CASCADE,
+      inventory_id INT NOT NULL REFERENCES equipments(id) ON DELETE CASCADE,
       quantity INT NOT NULL,
       display BOOLEAN DEFAULT TRUE,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -15,8 +46,8 @@ async function initPackageInventoryItemsTable() {
   `)
   try {
     await pool.query(`
-      CREATE UNIQUE INDEX IF NOT EXISTS package_inventory_items_unique_inventory
-      ON package_inventory_items (inventory_id)
+      CREATE UNIQUE INDEX IF NOT EXISTS package_equipment_items_unique_inventory
+      ON package_equipment_items (inventory_id)
       WHERE display IS TRUE
     `)
   } catch (error) {
@@ -26,7 +57,7 @@ async function initPackageInventoryItemsTable() {
     )
   }
 }
-//create package inventory item
+//create package equipment item
 async function createPackageInventoryItem({
   package_id,
   inventory_id,
@@ -34,7 +65,7 @@ async function createPackageInventoryItem({
 }) {
   const result = await pool.query(
     `
-      INSERT INTO package_inventory_items (package_id, inventory_id, quantity)
+      INSERT INTO package_equipment_items (package_id, inventory_id, quantity)
       VALUES ($1,$2,$3)
       RETURNING *
     `,
@@ -42,24 +73,24 @@ async function createPackageInventoryItem({
   )
   return result.rows[0]
 }
-//get all package inventory items with package name and inventory material name
+//get all package equipment items with package name and equipment material name
 async function getAllPackageInventoryItems() {
   const result = await pool.query(`
     SELECT pii.*,
       p.package_name,
-      i.material_name,
-      i.condition,
-      i.status,
-      i.notes AS inventory_notes
-    FROM package_inventory_items pii
+      e.material_name,
+      e.condition,
+      e.status,
+      e.notes AS equipment_notes
+    FROM package_equipment_items pii
     JOIN packages p ON p.id = pii.package_id
-    JOIN inventory i ON i.id = pii.inventory_id
+    JOIN equipments e ON e.id = pii.inventory_id
     WHERE pii.display = TRUE
-    ORDER BY p.package_name ASC, i.material_name ASC
+    ORDER BY p.package_name ASC, e.material_name ASC
   `)
   return result.rows
 }
-//update package inventory item
+//update package equipment item
 async function updatePackageInventoryItem(id, updates) {
   const allowed = {
     package_id: true,
@@ -79,7 +110,7 @@ async function updatePackageInventoryItem(id, updates) {
   if (!sets.length) return null
   sets.push(`last_updated = CURRENT_TIMESTAMP`)
   const q = `
-    UPDATE package_inventory_items
+    UPDATE package_equipment_items
     SET ${sets.join(', ')}
     WHERE id = $${i}
     RETURNING *
@@ -93,7 +124,7 @@ async function getPackageInventoryItemById(id) {
   const result = await pool.query(
     `
       SELECT *
-      FROM package_inventory_items
+      FROM package_equipment_items
       WHERE id = $1
     `,
     [id]
@@ -105,7 +136,7 @@ async function getActivePackageInventoryItemByInventoryId(inventory_id) {
   const result = await pool.query(
     `
       SELECT pii.*, p.package_name
-      FROM package_inventory_items pii
+      FROM package_equipment_items pii
       JOIN packages p ON p.id = pii.package_id
       WHERE pii.inventory_id = $1 AND pii.display = TRUE
       LIMIT 1
@@ -121,14 +152,14 @@ async function getPackageInventoryItemsByPackage(package_id) {
     `
       SELECT
         pii.*,
-        i.material_name,
-        i.condition,
-        i.status,
-        i.notes AS inventory_notes
-      FROM package_inventory_items pii
-      JOIN inventory i ON i.id = pii.inventory_id
+        e.material_name,
+        e.condition,
+        e.status,
+        e.notes AS equipment_notes
+      FROM package_equipment_items pii
+      JOIN equipments e ON e.id = pii.inventory_id
       WHERE pii.package_id = $1 AND pii.display = TRUE
-      ORDER BY i.material_name ASC
+      ORDER BY e.material_name ASC
     `,
     [package_id]
   )
