@@ -1,10 +1,9 @@
 'use client'
 import { useEffect, useState } from 'react'
+import type { MouseEvent as ReactMouseEvent } from 'react'
 import {
   startOfMonth,
-  endOfMonth,
   startOfWeek,
-  endOfWeek,
   addDays,
   addMonths,
   subMonths,
@@ -20,6 +19,12 @@ type CalendarProps = {
   initialMonth?: Date | null
   value?: Date | null
   onDateChangeAction?: (date: Date) => void
+  onDateClickAction?: (
+    date: Date,
+    meta: {
+      boundingRect: DOMRect
+    }
+  ) => void
   // Optional: per-date markers for custom highlighting (key = 'YYYY-MM-DD')
   // Use 'yellow' for single approved booking, 'red' for 2 or more
   markers?: Record<string, 'yellow' | 'red'>
@@ -32,6 +37,7 @@ export default function Calendar({
   initialMonth = null,
   value = null,
   onDateChangeAction,
+  onDateClickAction,
   markers = {},
   pendingOutline = {},
 }: CalendarProps) {
@@ -83,16 +89,14 @@ export default function Calendar({
 
   const renderCells = () => {
     const monthStart = startOfMonth(currentMonth)
-    const monthEnd = endOfMonth(monthStart)
     const startDate = startOfWeek(monthStart, { weekStartsOn: 0 })
-    const endDate = endOfWeek(monthEnd, { weekStartsOn: 0 })
     const todayStart = startOfDay(new Date())
 
     const rows = []
-    let days = []
     let day = startDate
 
-    while (day <= endDate) {
+    for (let week = 0; week < 6; week++) {
+      const days = []
       for (let i = 0; i < 7; i++) {
         const cloneDay = day
         const formattedDate = format(day, 'd')
@@ -149,9 +153,13 @@ export default function Calendar({
         days.push(
           <div
             className={cellClass}
-            key={day.toString()}
+            key={isoKey}
             aria-disabled={!isClickable}
-            onClick={() => isClickable && onDateClick(cloneDay)}
+            onClick={(event: ReactMouseEvent<HTMLDivElement>) => {
+              if (!isClickable) return
+              const rect = event.currentTarget.getBoundingClientRect()
+              onDateClick(cloneDay, rect)
+            }}
           >
             {formattedDate}
           </div>
@@ -160,19 +168,22 @@ export default function Calendar({
       }
 
       rows.push(
-        <div className="grid grid-cols-7 px-2" key={day.toString()}>
+        <div className="grid grid-cols-7 px-2" key={`week-${week}`}>
           {days}
         </div>
       )
-      days = []
     }
 
     return <div className="space-y-2">{rows}</div>
   }
 
-  const onDateClick = (day: Date) => {
+  const onDateClick = (day: Date, rect?: DOMRect) => {
     setSelectedDate(day)
     onDateChangeAction?.(day)
+    if (onDateClickAction) {
+      const metaRect = rect ?? new DOMRect()
+      onDateClickAction(day, { boundingRect: metaRect })
+    }
   }
 
   const nextMonth = () => {

@@ -29,6 +29,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import {
+  listPackageItemsForPackageEmployee,
+  type PackageItem,
+} from '../../../../schemas/functions/EventCards/api'
 import { Ellipsis } from 'lucide-react'
 import {
   fetchAssignedConfirmedBookings,
@@ -38,6 +42,9 @@ import type { StaffBookingStatus } from '../../../../schemas/functions/Confirmed
 
 type EventStatus = 'ongoing' | 'standby' | 'finished'
 type PaymentStatus = 'paid' | 'unpaid' | 'partially-paid'
+
+type ItemSummary = { name: string; qty: number }
+type ItemsBreakdown = { good: ItemSummary[]; damaged: ItemSummary[] }
 
 type EventLogRow = {
   id: string
@@ -53,10 +60,8 @@ type EventLogRow = {
   notes?: string
   status: EventStatus
   payment: PaymentStatus
-  items: {
-    damaged: Array<{ name: string; qty?: number }>
-    missing: Array<{ name: string; qty?: number }>
-  }
+  packageId?: number
+  items: ItemsBreakdown
 }
 
 // simple pagination window like in ManageBooking master list
@@ -65,6 +70,26 @@ function pageWindow(current: number, total: number, size = 3): number[] {
   const start = Math.floor((Math.max(1, current) - 1) / size) * size + 1
   const end = Math.min(total, start + size - 1)
   return Array.from({ length: end - start + 1 }, (_, i) => start + i)
+}
+
+const summarizePackageItems = (items: PackageItem[]): ItemsBreakdown => {
+  const good = new Map<string, number>()
+  const damaged = new Map<string, number>()
+  items.forEach((item) => {
+    const label = String(item.material_name || '').trim() || 'Equipment'
+    const qty = Math.max(1, Number(item.quantity) || 1)
+    const condition = String(item.condition || '').toLowerCase()
+    const flaggedAsDamaged =
+      item.status === false ||
+      condition === 'damaged' ||
+      condition === 'missing' ||
+      condition === 'lost'
+    const bucket = flaggedAsDamaged ? damaged : good
+    bucket.set(label, (bucket.get(label) || 0) + qty)
+  })
+  const mapToList = (m: Map<string, number>): ItemSummary[] =>
+    Array.from(m.entries()).map(([name, qty]) => ({ name, qty }))
+  return { good: mapToList(good), damaged: mapToList(damaged) }
 }
 
 // badge helpers (match customer dashboard look)
@@ -169,12 +194,16 @@ export default function StaffEventLogsPage() {
                 ? String(r.event_end_time as unknown as string).slice(0, 5)
                 : undefined,
               packageName: String(r.package_name || ''),
+              packageId:
+                typeof r.package_id === 'number'
+                  ? (r.package_id as number)
+                  : undefined,
               contactPerson: clientName,
               contactNumber: contactNumber || undefined,
               notes: '',
               status: mapBookingStatus(String(r.booking_status || '')),
               payment: mapPaymentStatus(String(r.payment_status || '')),
-              items: { damaged: [], missing: [] },
+              items: { good: [], damaged: [] },
             }
           })
         if (active) setRows(mapped)
@@ -225,7 +254,9 @@ export default function StaffEventLogsPage() {
     return rows.filter((r) => {
       const statusOk = statusFilter === 'all' ? true : r.status === statusFilter
       const itemsCount =
-        (r.items?.damaged?.length || 0) + (r.items?.missing?.length || 0)
+        r.items?.damaged?.reduce((sum, item) => {
+          return sum + (typeof item.qty === 'number' ? item.qty : 1)
+        }, 0) ?? 0
       const itemsOk =
         itemsFilter === 'all'
           ? true
@@ -276,12 +307,49 @@ export default function StaffEventLogsPage() {
   // Items modal state
   const [itemsOpen, setItemsOpen] = useState(false)
   const [itemsTarget, setItemsTarget] = useState<EventLogRow | null>(null)
+  const [itemsReport, setItemsReport] = useState<ItemsBreakdown | null>(null)
+  const [itemsReportLoading, setItemsReportLoading] = useState(false)
+  const [itemsReportError, setItemsReportError] = useState<string | null>(null)
 
   // Optional: update function if you later wire PATCH to backend
   const updateRow = (id: string, patch: Partial<EventLogRow>) => {
     setRows((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch } : r)))
     // ...existing code... persist via API
   }
+
+  const openItemsModal = async (row: EventLogRow) => {
+    setItemsTarget(row)
+    setItemsOpen(true)
+    setItemsReportError(null)
+
+    const cached = row.items
+    if (cached && (cached.good.length || cached.damaged.length)) {
+      setItemsReport(cached)
+      return
+    }
+    if (!row.packageId) {
+      setItemsReport(null)
+      setItemsReportError('No package information available for this booking.')
+      return
+    }
+    setItemsReport(null)
+    setItemsReportLoading(true)
+    try {
+      const pkgItems = await listPackageItemsForPackageEmployee(row.packageId)
+      const breakdown = summarizePackageItems(pkgItems)
+      setItemsReport(breakdown)
+      updateRow(row.id, { items: breakdown })
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : 'Failed to load items summary'
+      setItemsReportError(message)
+    } finally {
+      setItemsReportLoading(false)
+    }
+  }
+
+  const totalQty = (list?: ItemSummary[]) =>
+    list?.reduce((sum, item) => sum + Number(item.qty || 0), 0) ?? 0
 
   return (
     <div className="p-4 flex flex-col min-h-screen w-full overflow-x-hidden">
@@ -492,8 +560,7 @@ export default function StaffEventLogsPage() {
                         <button
                           className="px-2 py-1.5 rounded border text-sm"
                           onClick={() => {
-                            setItemsTarget(row)
-                            setItemsOpen(true)
+                            void openItemsModal(row)
                           }}
                         >
                           View
@@ -568,6 +635,9 @@ export default function StaffEventLogsPage() {
           if (!o) {
             setItemsOpen(false)
             setItemsTarget(null)
+            setItemsReport(null)
+            setItemsReportError(null)
+            setItemsReportLoading(false)
           }
         }}
       >
@@ -575,42 +645,65 @@ export default function StaffEventLogsPage() {
           <DialogHeader>
             <DialogTitle>Items report</DialogTitle>
             <DialogDescription>
-              Damaged and missing items for this event
+              Equipment condition summary for this event
             </DialogDescription>
           </DialogHeader>
-
-          <div className="grid grid-cols-2 gap-6">
-            <div>
-              <div className="font-semibold mb-2">Damaged</div>
-              {itemsTarget?.items.damaged?.length ? (
-                <ul className="list-disc list-inside space-y-1 text-sm">
-                  {itemsTarget.items.damaged.map((it, idx) => (
-                    <li key={`d-${idx}`}>
-                      {it.name}
-                      {it.qty ? ` × ${it.qty}` : ''}
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <div className="text-sm text-gray-500">None</div>
-              )}
+          {itemsReportLoading ? (
+            <div className="text-sm text-gray-600">Loading items…</div>
+          ) : itemsReportError ? (
+            <div className="text-sm text-red-600">{itemsReportError}</div>
+          ) : itemsReport ? (
+            <div className="space-y-5">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="rounded border p-3 bg-gray-50">
+                  <div className="text-xs uppercase text-gray-500">Good</div>
+                  <div className="text-2xl font-semibold text-emerald-600">
+                    {totalQty(itemsReport.good)}
+                  </div>
+                </div>
+                <div className="rounded border p-3 bg-gray-50">
+                  <div className="text-xs uppercase text-gray-500">Damaged</div>
+                  <div className="text-2xl font-semibold text-red-600">
+                    {totalQty(itemsReport.damaged)}
+                  </div>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+                <div>
+                  <div className="font-semibold mb-2">Good</div>
+                  {itemsReport.good.length ? (
+                    <ul className="list-disc list-inside space-y-1 text-sm">
+                      {itemsReport.good.map((it, idx) => (
+                        <li key={`good-${idx}`}>
+                          {it.name} × {it.qty}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <div className="text-sm text-gray-500">None</div>
+                  )}
+                </div>
+                <div>
+                  <div className="font-semibold mb-2">Damaged</div>
+                  {itemsReport.damaged.length ? (
+                    <ul className="list-disc list-inside space-y-1 text-sm">
+                      {itemsReport.damaged.map((it, idx) => (
+                        <li key={`dam-${idx}`}>
+                          {it.name} × {it.qty}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <div className="text-sm text-gray-500">None</div>
+                  )}
+                </div>
+              </div>
             </div>
-            <div>
-              <div className="font-semibold mb-2">Missing</div>
-              {itemsTarget?.items.missing?.length ? (
-                <ul className="list-disc list-inside space-y-1 text-sm">
-                  {itemsTarget.items.missing.map((it, idx) => (
-                    <li key={`m-${idx}`}>
-                      {it.name}
-                      {it.qty ? ` × ${it.qty}` : ''}
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <div className="text-sm text-gray-500">None</div>
-              )}
+          ) : (
+            <div className="text-sm text-gray-500">
+              Select an event to load its equipment list.
             </div>
-          </div>
+          )}
 
           <DialogFooter>
             <button
@@ -619,6 +712,9 @@ export default function StaffEventLogsPage() {
               onClick={() => {
                 setItemsOpen(false)
                 setItemsTarget(null)
+                setItemsReport(null)
+                setItemsReportError(null)
+                setItemsReportLoading(false)
               }}
             >
               Close

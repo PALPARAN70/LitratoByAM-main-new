@@ -45,6 +45,13 @@ router.get(
   employeeController.getAssignedBookingPaymentSummary
 )
 
+router.patch(
+  '/assigned-confirmed-bookings/:id/extension',
+  authMiddleware,
+  roleMiddleware('employee'),
+  employeeController.setAssignedExtensionDuration
+)
+
 module.exports = router
 
 // NEW: staff can read package items list for viewing equipment in event cards

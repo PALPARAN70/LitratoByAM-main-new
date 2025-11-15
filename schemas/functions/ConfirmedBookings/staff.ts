@@ -42,3 +42,35 @@ export async function updateAssignedBookingStatus(
   const data = await res.json().catch(() => ({}))
   return data?.booking ?? null
 }
+
+export async function setAssignedExtensionDuration(
+  bookingId: number | string,
+  extensionHours: number,
+  bufferHours = 2
+): Promise<{ booking: any; paymentSummary?: any }> {
+  const sanitizedHours = Math.max(0, Math.min(2, Number(extensionHours) || 0))
+  const url = `${apiBase()}/api/employee/assigned-confirmed-bookings/${encodeURIComponent(
+    String(bookingId)
+  )}/extension?bufferHours=${encodeURIComponent(String(bufferHours))}`
+  const res = await fetch(url, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify({ extension_duration: sanitizedHours }),
+  })
+  const text = await res.text()
+  if (!res.ok) {
+    let message = 'Failed to update extension duration'
+    try {
+      const parsed = JSON.parse(text)
+      message = parsed?.message || message
+    } catch (_) {
+      if (text) message = text
+    }
+    throw new Error(message)
+  }
+  const data = text ? JSON.parse(text) : {}
+  return {
+    booking: data?.booking ?? null,
+    paymentSummary: data?.paymentSummary,
+  }
+}

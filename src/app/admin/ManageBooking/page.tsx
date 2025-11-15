@@ -1,4 +1,4 @@
-"use client";
+'use client'
 import {
   useEffect,
   useMemo,
@@ -6,10 +6,10 @@ import {
   useRef,
   useCallback,
   Fragment,
-} from "react";
-import type { ChangeEventHandler, ReactNode } from "react";
-import { useRouter } from "next/navigation";
-import Calendar from "../../../../Litratocomponents/LitratoCalendar";
+} from 'react'
+import type { ChangeEventHandler, ReactNode } from 'react'
+import { useRouter } from 'next/navigation'
+import Calendar from '../../../../Litratocomponents/LitratoCalendar'
 import {
   Pagination,
   PaginationContent,
@@ -17,24 +17,24 @@ import {
   PaginationItem,
   PaginationPrevious,
   PaginationNext,
-} from "@/components/ui/pagination";
+} from '@/components/ui/pagination'
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from "@/components/ui/popover";
-import { ChevronDown, Check, Ellipsis } from "lucide-react";
+} from '@/components/ui/popover'
+import { ChevronDown, Check, Ellipsis } from 'lucide-react'
 import {
   readBookings,
   type BookingRequestRow,
-} from "../../../../schemas/functions/BookingRequest/readBookings";
+} from '../../../../schemas/functions/BookingRequest/readBookings'
 import {
   approveBookingRequest,
   rejectBookingRequest,
-} from "../../../../schemas/functions/BookingRequest/evaluateBookingRequest";
-import { cancelConfirmedBooking } from "../../../../schemas/functions/BookingRequest/cancelBooking";
-import { updateConfirmedBooking } from "../../../../schemas/functions/BookingRequest/updateBooking";
-import { toast } from "sonner";
+} from '../../../../schemas/functions/BookingRequest/evaluateBookingRequest'
+import { cancelConfirmedBooking } from '../../../../schemas/functions/BookingRequest/cancelBooking'
+import { updateConfirmedBooking } from '../../../../schemas/functions/BookingRequest/updateBooking'
+import { toast } from 'sonner'
 import {
   Dialog,
   DialogContent,
@@ -43,103 +43,104 @@ import {
   DialogDescription,
   DialogFooter,
   DialogClose,
-} from "@/components/ui/dialog";
+} from '@/components/ui/dialog'
 import {
   listEmployees,
   getConfirmedBookingIdByRequest,
   listAssignedStaff,
   replaceAssignedStaff,
   type StaffUser,
-} from "../../../../schemas/functions/staffFunctions/staffAssignment";
-import EventCard from "../../../../Litratocomponents/EventCard";
-import AdminContractSection from "../../../../Litratocomponents/AdminContractSection";
+} from '../../../../schemas/functions/staffFunctions/staffAssignment'
+import EventCard from '../../../../Litratocomponents/EventCard'
+import AdminContractSection from '../../../../Litratocomponents/AdminContractSection'
 import {
   getAdminContract,
   verifyAdminContract,
   type ContractStatus,
-} from "../../../../schemas/functions/Contracts/api";
+} from '../../../../schemas/functions/Contracts/api'
 import {
   fetchPaymentSummaryForBooking,
   listPackageItemsForPackage,
   listStaffLogsForBooking,
-} from "../../../../schemas/functions/EventCards/api";
+} from '../../../../schemas/functions/EventCards/api'
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
+} from '@/components/ui/select'
 import {
   formatDisplayDate,
   formatDisplayDateTime,
   formatDisplayTime,
-} from "@/lib/datetime";
+} from '@/lib/datetime'
 
 // Add shared item type for items overview
-type Item = { name: string; qty?: number };
+type Item = { name: string; qty?: number }
 
-type TabKey = "bookings" | "masterlist" | "eventcards"; // + eventcards
-type BookingStatus = "pending" | "approved" | "declined" | "cancelled";
-type SortMode = "nearest" | "recent";
+type TabKey = 'bookings' | 'masterlist' | 'eventcards' // + eventcards
+type BookingStatus = 'pending' | 'approved' | 'declined' | 'cancelled'
+type SortMode = 'nearest' | 'recent'
 type BookingRow = {
-  id: string;
-  requestid?: number | null;
-  confirmedid?: number | null;
-  eventName: string;
-  date: string; // ISO or display string
-  startTime: string;
-  endTime: string;
-  package: string;
-  packageId?: number | null;
-  grid: string; // now showing actual value, comma-joined
-  place: string;
-  status: BookingStatus;
-  contact_info?: string | null;
-  contact_person?: string | null;
-  contact_person_number?: string | null;
-  strongest_signal?: string | null;
-  booth_placement?: string | null;
-  extension_duration?: number | null;
-  username?: string | null;
-  firstname?: string | null;
-  lastname?: string | null;
+  id: string
+  requestid?: number | null
+  confirmedid?: number | null
+  eventName: string
+  date: string // ISO or display string
+  startTime: string
+  endTime: string
+  package: string
+  packageId?: number | null
+  grid: string // now showing actual value, comma-joined
+  place: string
+  status: BookingStatus
+  contact_info?: string | null
+  contact_person?: string | null
+  contact_person_number?: string | null
+  strongest_signal?: string | null
+  booth_placement?: string | null
+  extension_duration?: number | null
+  username?: string | null
+  firstname?: string | null
+  lastname?: string | null
   // Pricing summary (base + extension) for quick reference
-  baseTotal?: number | null;
-  extHours?: number | null;
-  amountDue?: number | null;
+  baseTotal?: number | null
+  extHours?: number | null
+  amountDue?: number | null
 
   // NEW: integrated event logs data
-  clientName: string;
-  eventStatus: "ongoing" | "standby" | "finished";
-  payment: "paid" | "unpaid" | "partially-paid";
-  items: { damaged: Item[] };
+  clientName: string
+  eventStatus: 'ongoing' | 'standby' | 'finished'
+  payment: 'paid' | 'unpaid' | 'partially-paid'
+  items: { damaged: Item[] }
   // NEW: contract status for admin view
-  contractStatus?: ContractStatus | null;
-  createdAt?: string | null;
-  lastUpdated?: string | null;
-};
+  contractStatus?: ContractStatus | null
+  createdAt?: string | null
+  lastUpdated?: string | null
+}
 export default function ManageBookingPage() {
-  const [active, setActive] = useState<TabKey>("masterlist");
+  const [active, setActive] = useState<TabKey>('masterlist')
   const [selectedForBooking, setSelectedForBooking] = useState<{
-    requestid?: number | null;
-    eventName?: string;
-    date?: string;
-    startTime?: string;
-    endTime?: string;
-    package?: string;
-    grid?: string | null;
-    place?: string;
-    contact_info?: string | null;
-    contact_person?: string | null;
-    contact_person_number?: string | null;
-    strongest_signal?: string | null;
-    booth_placement?: string | null;
-    extension_duration?: number | null;
-    username?: string | null;
-    firstname?: string | null;
-    lastname?: string | null;
-  } | null>(null);
+    requestid?: number | null
+    eventName?: string
+    date?: string
+    startTime?: string
+    endTime?: string
+    package?: string
+    grid?: string | null
+    place?: string
+    contact_info?: string | null
+    contact_person?: string | null
+    contact_person_number?: string | null
+    strongest_signal?: string | null
+    booth_placement?: string | null
+    extension_duration?: number | null
+    username?: string | null
+    firstname?: string | null
+    lastname?: string | null
+  } | null>(null)
+  const [pendingFocusDate, setPendingFocusDate] = useState<string | null>(null)
   return (
     <div className="p-4 flex flex-col">
       <header className="flex items-center justify-between mb-4">
@@ -147,29 +148,32 @@ export default function ManageBookingPage() {
       </header>
       <nav className="flex gap-2 mb-6">
         <TabButton
-          active={active === "masterlist"}
-          onClick={() => setActive("masterlist")}
+          active={active === 'masterlist'}
+          onClick={() => setActive('masterlist')}
         >
           Master List
         </TabButton>
         <TabButton
-          active={active === "eventcards"}
-          onClick={() => setActive("eventcards")}
+          active={active === 'eventcards'}
+          onClick={() => setActive('eventcards')}
         >
           Events
         </TabButton>
         <TabButton
-          active={active === "bookings"}
-          onClick={() => setActive("bookings")}
+          active={active === 'bookings'}
+          onClick={() => setActive('bookings')}
         >
           Bookings
         </TabButton>
       </nav>
       <section className="bg-white rounded-xl shadow p-2">
-        {active === "bookings" && (
-          <BookingsPanel selected={selectedForBooking} />
+        {active === 'bookings' && (
+          <BookingsPanel
+            selected={selectedForBooking}
+            focusDateISO={pendingFocusDate}
+          />
         )}
-        {active === "masterlist" && (
+        {active === 'masterlist' && (
           <MasterListPanel
             onSelectPending={(row) => {
               setSelectedForBooking({
@@ -190,102 +194,106 @@ export default function ManageBookingPage() {
                 username: row.username ?? null,
                 firstname: row.firstname ?? null,
                 lastname: row.lastname ?? null,
-              });
-              setActive("bookings");
+              })
+              const iso = toISODateString(row.date)
+              setPendingFocusDate(iso !== '—' ? iso : null)
+              setActive('bookings')
             }}
           />
         )}
-        {active === "eventcards" && <EventCardsPanel />} {/* new */}
+        {active === 'eventcards' && <EventCardsPanel />} {/* new */}
       </section>
     </div>
-  );
+  )
 }
 // Safely extract an ISO-like YYYY-MM-DD string from various date shapes
 function toISODateString(value: unknown): string {
-  if (!value) return "—";
-  if (typeof value === "string") {
+  if (!value) return '—'
+  if (typeof value === 'string') {
     // If already ISO-like, take first 10 chars or part before 'T'
-    const m = value.match(/^(\d{4}-\d{2}-\d{2})/);
-    if (m) return m[1];
-    const d = new Date(value);
-    if (!Number.isNaN(d.getTime())) return d.toISOString().slice(0, 10);
-    return value.slice(0, 10);
+    const m = value.match(/^(\d{4}-\d{2}-\d{2})/)
+    if (m) return m[1]
+    const d = new Date(value)
+    if (!Number.isNaN(d.getTime())) return d.toISOString().slice(0, 10)
+    return value.slice(0, 10)
   }
   if (value instanceof Date) {
     // Normalize to calendar date (no tz shift)
-    const y = value.getFullYear();
-    const m = value.getMonth();
-    const d = value.getDate();
-    const iso = new Date(Date.UTC(y, m, d)).toISOString();
-    return iso.slice(0, 10);
+    const y = value.getFullYear()
+    const m = value.getMonth()
+    const d = value.getDate()
+    const iso = new Date(Date.UTC(y, m, d)).toISOString()
+    return iso.slice(0, 10)
   }
-  const s = String(value);
-  const m = s.match(/^(\d{4}-\d{2}-\d{2})/);
-  return m ? m[1] : s.slice(0, 10);
+  const s = String(value)
+  const m = s.match(/^(\d{4}-\d{2}-\d{2})/)
+  return m ? m[1] : s.slice(0, 10)
 }
 function BookingsPanel({
   selected,
+  focusDateISO,
 }: {
   selected: {
-    requestid?: number | null;
-    eventName?: string;
-    date?: string;
-    startTime?: string;
-    endTime?: string;
-    package?: string;
-    grid?: string | null;
-    place?: string;
-    contact_info?: string | null;
-    contact_person?: string | null;
-    contact_person_number?: string | null;
-    strongest_signal?: string | null;
-    booth_placement?: string | null;
-    extension_duration?: number | null;
-    username?: string | null;
-    firstname?: string | null;
-    lastname?: string | null;
-  } | null;
+    requestid?: number | null
+    eventName?: string
+    date?: string
+    startTime?: string
+    endTime?: string
+    package?: string
+    grid?: string | null
+    place?: string
+    contact_info?: string | null
+    contact_person?: string | null
+    contact_person_number?: string | null
+    strongest_signal?: string | null
+    booth_placement?: string | null
+    extension_duration?: number | null
+    username?: string | null
+    firstname?: string | null
+    lastname?: string | null
+  } | null
+  focusDateISO?: string | null
 }) {
   // All values as strings for text-only placeholders
   const defaultForm = {
-    email: "",
-    completeName: "",
-    contactNumber: "",
-    contactPersonAndNumber: "",
-    eventName: "",
-    eventLocation: "",
-    extensionHours: "", // text
-    booth_placement: "", // text
-    signal: "",
-    boothPlacementRaw: "",
-    package: "", // text
-    eventDate: "",
-    eventTime: "",
-  };
-  const [form, setForm] = useState(defaultForm);
+    email: '',
+    completeName: '',
+    contactNumber: '',
+    contactPersonAndNumber: '',
+    eventName: '',
+    eventLocation: '',
+    extensionHours: '', // text
+    booth_placement: '', // text
+    signal: '',
+    boothPlacementRaw: '',
+    package: '', // text
+    eventDate: '',
+    eventTime: '',
+  }
+  const [form, setForm] = useState(defaultForm)
   const [readonlyKeys, setReadonlyKeys] = useState<
     Set<keyof typeof defaultForm>
-  >(new Set());
-  const [submitting, setSubmitting] = useState<null | "approve" | "reject">(
+  >(new Set())
+  const [submitting, setSubmitting] = useState<null | 'approve' | 'reject'>(
     null
-  );
-  const [approveOpen, setApproveOpen] = useState(false);
-  const [rejectOpen, setRejectOpen] = useState(false);
+  )
+  const [approveOpen, setApproveOpen] = useState(false)
+  const [rejectOpen, setRejectOpen] = useState(false)
   // When a selection arrives, prefill the form
   useEffect(() => {
     if (!selected) {
-      setReadonlyKeys(new Set());
-      return;
+      setReadonlyKeys(new Set())
+      return
     }
     const contactPersonCombo = [
       selected.contact_person,
       selected.contact_person_number,
     ]
       .filter(Boolean)
-      .join(" | ");
+      .join(' | ')
     const fullName = [selected.firstname, selected.lastname]
       .filter(Boolean)
-      .join(" ");
+      .join(' ')
     setForm((p) => ({
       ...p,
       email: selected.username || p.email,
@@ -310,48 +318,48 @@ function BookingsPanel({
         : p.eventTime,
       booth_placement: selected.booth_placement || p.booth_placement,
       boothPlacementRaw: selected.booth_placement || p.boothPlacementRaw,
-    }));
+    }))
     // Mark all prefilled user booking fields as read-only (copyable)
     const ro = new Set<keyof typeof defaultForm>([
-      "email",
-      "completeName",
-      "contactNumber",
-      "contactPersonAndNumber",
-      "eventName",
-      "eventLocation",
-      "extensionHours",
-      "booth_placement",
-      "signal",
-      "package",
-      "eventDate",
-      "eventTime",
-    ]);
-    setReadonlyKeys(ro);
-  }, [selected]);
+      'email',
+      'completeName',
+      'contactNumber',
+      'contactPersonAndNumber',
+      'eventName',
+      'eventLocation',
+      'extensionHours',
+      'booth_placement',
+      'signal',
+      'package',
+      'eventDate',
+      'eventTime',
+    ])
+    setReadonlyKeys(ro)
+  }, [selected])
 
   // Simple config: all fields render as text inputs
   const fields: Array<{ key: keyof typeof defaultForm; label: string }> = [
-    { key: "email", label: "Email:" },
-    { key: "completeName", label: "Complete name:" },
-    { key: "contactNumber", label: "Contact #:" },
-    { key: "contactPersonAndNumber", label: "Contact Person & Number:" },
-    { key: "eventName", label: "Name of event (Ex. Maria & Jose Wedding):" },
-    { key: "eventLocation", label: "Location of event:" },
+    { key: 'email', label: 'Email:' },
+    { key: 'completeName', label: 'Complete name:' },
+    { key: 'contactNumber', label: 'Contact #:' },
+    { key: 'contactPersonAndNumber', label: 'Contact Person & Number:' },
+    { key: 'eventName', label: 'Name of event (Ex. Maria & Jose Wedding):' },
+    { key: 'eventLocation', label: 'Location of event:' },
     {
-      key: "extensionHours",
-      label: "Extension? (Minimum 2hrs. Additional hour is Php2000):",
+      key: 'extensionHours',
+      label: 'Extension? (Minimum 2hrs. Additional hour is Php2000):',
     },
-    { key: "booth_placement", label: "Placement of booth:" },
+    { key: 'booth_placement', label: 'Placement of booth:' },
     {
-      key: "signal",
-      label: "What signal is currently strong in the event area?:",
+      key: 'signal',
+      label: 'What signal is currently strong in the event area?:',
     },
-    { key: "package", label: "Package:" },
-    { key: "eventDate", label: "Event date:" },
-    { key: "eventTime", label: "Event start time:" },
+    { key: 'package', label: 'Package:' },
+    { key: 'eventDate', label: 'Event date:' },
+    { key: 'eventTime', label: 'Event start time:' },
     // Hidden raw value (useful if you later convert to radios)
     // { key: 'boothPlacementRaw', label: 'Booth placement (raw):' },
-  ];
+  ]
 
   const renderField = (f: { key: keyof typeof defaultForm; label: string }) => (
     <div key={String(f.key)}>
@@ -365,69 +373,74 @@ function BookingsPanel({
         placeholder="Enter here:"
       />
     </div>
-  );
+  )
 
   // Parse selected date for calendar marking
   const markedDate = useMemo(() => {
-    if (!selected?.date) return null;
-    const m = selected.date.match(/^(\d{4})-(\d{2})-(\d{2})/);
-    if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
-    const d = new Date(selected.date);
-    return Number.isNaN(d.getTime()) ? null : d;
-  }, [selected?.date]);
+    if (!selected?.date) return null
+    const m = selected.date.match(/^(\d{4})-(\d{2})-(\d{2})/)
+    if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
+    const d = new Date(selected.date)
+    return Number.isNaN(d.getTime()) ? null : d
+  }, [selected?.date])
 
   // Load approved bookings and build markers for the calendar
   const [calendarMarkers, setCalendarMarkers] = useState<
-    Record<string, "yellow" | "red">
-  >({});
-  const [pendingOutline, setPendingOutline] = useState<Record<string, true>>(
-    {}
-  );
-  const [allBookings, setAllBookings] = useState<BookingRequestRow[]>([]);
-  const [selectedISODate, setSelectedISODate] = useState<string | null>(null);
-  const [actionBusy, setActionBusy] = useState<
-    Record<number, "approve" | "reject" | null>
-  >({});
-  const [confirmApproveOpen, setConfirmApproveOpen] = useState(false);
-  const [confirmRejectOpen, setConfirmRejectOpen] = useState(false);
-  const [evaluateTarget, setEvaluateTarget] =
-    useState<BookingRequestRow | null>(null);
+    Record<string, 'yellow' | 'red'>
+  >({})
+  const [pendingOutline, setPendingOutline] = useState<Record<string, true>>({})
+  const [allBookings, setAllBookings] = useState<BookingRequestRow[]>([])
+  const [selectedISODate, setSelectedISODate] = useState<string | null>(null)
+
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
+    if (!focusDateISO) return
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(focusDateISO)) return
+    setSelectedISODate((prev) => (prev === focusDateISO ? prev : focusDateISO))
+  }, [focusDateISO])
+
+  const [actionBusy, setActionBusy] = useState<
+    Record<number, 'approve' | 'reject' | null>
+  >({})
+  const [confirmApproveOpen, setConfirmApproveOpen] = useState(false)
+  const [confirmRejectOpen, setConfirmRejectOpen] = useState(false)
+  const [evaluateTarget, setEvaluateTarget] =
+    useState<BookingRequestRow | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
       try {
-        const list = await readBookings();
-        if (cancelled) return;
-        setAllBookings(list);
+        const list = await readBookings()
+        if (cancelled) return
+        setAllBookings(list)
         // Count approved bookings by date (confirmed and not cancelled)
-        const counts = new Map<string, number>();
-        const pending = new Set<string>();
+        const counts = new Map<string, number>()
+        const pending = new Set<string>()
         for (const r of list) {
-          if (r.kind === "confirmed" && r.booking_status !== "cancelled") {
-            const iso = toISODateString(r.event_date);
-            if (!iso || iso === "—") continue;
-            counts.set(iso, (counts.get(iso) || 0) + 1);
-          } else if (r.kind !== "confirmed") {
+          if (r.kind === 'confirmed' && r.booking_status !== 'cancelled') {
+            const iso = toISODateString(r.event_date)
+            if (!iso || iso === '—') continue
+            counts.set(iso, (counts.get(iso) || 0) + 1)
+          } else if (r.kind !== 'confirmed') {
             // For booking requests, mark dates with pending status
-            const status = String((r as any).status || "").toLowerCase();
-            if (status === "pending") {
-              const iso = toISODateString((r as any).event_date);
-              if (!iso || iso === "—") continue;
-              pending.add(iso);
+            const status = String((r as any).status || '').toLowerCase()
+            if (status === 'pending') {
+              const iso = toISODateString((r as any).event_date)
+              if (!iso || iso === '—') continue
+              pending.add(iso)
             }
           }
         }
-        const markers: Record<string, "yellow" | "red"> = {};
+        const markers: Record<string, 'yellow' | 'red'> = {}
         counts.forEach((cnt, iso) => {
-          if (cnt >= 2) markers[iso] = "red";
-          else if (cnt === 1) markers[iso] = "yellow";
-        });
-        setCalendarMarkers(markers);
-        const pendingMap: Record<string, true> = {};
+          if (cnt >= 2) markers[iso] = 'red'
+          else if (cnt === 1) markers[iso] = 'yellow'
+        })
+        setCalendarMarkers(markers)
+        const pendingMap: Record<string, true> = {}
         pending.forEach((iso) => {
-          pendingMap[iso] = true;
-        });
-        setPendingOutline(pendingMap);
+          pendingMap[iso] = true
+        })
+        setPendingOutline(pendingMap)
 
         // Auto-select a helpful date on first open: today if it has bookings,
         // otherwise the nearest upcoming date with any pending/approved, else most recent past
@@ -436,113 +449,111 @@ function BookingsPanel({
             ...Array.from(counts.keys()),
             ...Array.from(pending.values()),
           ])
-        ).sort();
-        const todayIso = toISODateString(new Date());
-        let pick: string | null = null;
+        ).sort()
+        const todayIso = toISODateString(new Date())
+        let pick: string | null = null
         if (allIsos.includes(todayIso)) {
-          pick = todayIso;
+          pick = todayIso
         } else if (allIsos.length) {
-          const future = allIsos.filter((d) => d >= todayIso);
-          pick = future.length ? future[0] : allIsos[allIsos.length - 1];
+          const future = allIsos.filter((d) => d >= todayIso)
+          pick = future.length ? future[0] : allIsos[allIsos.length - 1]
         }
-        if (pick) setSelectedISODate((prev) => prev ?? pick);
+        if (pick) setSelectedISODate((prev) => prev ?? pick)
       } catch {
-        setCalendarMarkers({});
-        setPendingOutline({});
-        setAllBookings([]);
+        setCalendarMarkers({})
+        setPendingOutline({})
+        setAllBookings([])
       }
-    })();
+    })()
     return () => {
-      cancelled = true;
-    };
-  }, []);
+      cancelled = true
+    }
+  }, [])
 
   // Compute the list of bookings (pending and approved) for the selected date
   const bookingsForDate = useMemo(() => {
-    if (!selectedISODate) return [] as BookingRequestRow[];
+    if (!selectedISODate) return [] as BookingRequestRow[]
     return allBookings.filter((r) => {
-      const iso = toISODateString((r as any).event_date);
-      if (iso !== selectedISODate) return false;
-      if (r.kind === "confirmed") {
-        return r.booking_status !== "cancelled";
+      const iso = toISODateString((r as any).event_date)
+      if (iso !== selectedISODate) return false
+      if (r.kind === 'confirmed') {
+        return r.booking_status !== 'cancelled'
       }
-      const status = String((r as any).status || "").toLowerCase();
-      return status === "pending";
-    });
-  }, [selectedISODate, allBookings]);
+      const status = String((r as any).status || '').toLowerCase()
+      return status === 'pending'
+    })
+  }, [selectedISODate, allBookings])
 
   // Helper to refresh bookings and calendar markers after an action
   const refreshCalendarData = useCallback(async () => {
     try {
-      const list = await readBookings();
-      setAllBookings(list);
-      const counts = new Map<string, number>();
-      const pending = new Set<string>();
+      const list = await readBookings()
+      setAllBookings(list)
+      const counts = new Map<string, number>()
+      const pending = new Set<string>()
       for (const r of list) {
-        if (r.kind === "confirmed" && r.booking_status !== "cancelled") {
-          const iso = toISODateString(r.event_date);
-          if (!iso || iso === "—") continue;
-          counts.set(iso, (counts.get(iso) || 0) + 1);
-        } else if (r.kind !== "confirmed") {
-          const status = String((r as any).status || "").toLowerCase();
-          if (status === "pending") {
-            const iso = toISODateString((r as any).event_date);
-            if (!iso || iso === "—") continue;
-            pending.add(iso);
+        if (r.kind === 'confirmed' && r.booking_status !== 'cancelled') {
+          const iso = toISODateString(r.event_date)
+          if (!iso || iso === '—') continue
+          counts.set(iso, (counts.get(iso) || 0) + 1)
+        } else if (r.kind !== 'confirmed') {
+          const status = String((r as any).status || '').toLowerCase()
+          if (status === 'pending') {
+            const iso = toISODateString((r as any).event_date)
+            if (!iso || iso === '—') continue
+            pending.add(iso)
           }
         }
       }
-      const markers: Record<string, "yellow" | "red"> = {};
+      const markers: Record<string, 'yellow' | 'red'> = {}
       counts.forEach((cnt, iso) => {
-        if (cnt >= 2) markers[iso] = "red";
-        else if (cnt === 1) markers[iso] = "yellow";
-      });
-      setCalendarMarkers(markers);
-      const pendingMap: Record<string, true> = {};
+        if (cnt >= 2) markers[iso] = 'red'
+        else if (cnt === 1) markers[iso] = 'yellow'
+      })
+      setCalendarMarkers(markers)
+      const pendingMap: Record<string, true> = {}
       pending.forEach((iso) => {
-        pendingMap[iso] = true;
-      });
-      setPendingOutline(pendingMap);
+        pendingMap[iso] = true
+      })
+      setPendingOutline(pendingMap)
     } catch {
       // leave previous state if refresh fails
     }
-  }, []);
+  }, [])
 
   const approveOne = useCallback(
     async (requestid: number) => {
-      setActionBusy((p) => ({ ...p, [requestid]: "approve" }));
+      setActionBusy((p) => ({ ...p, [requestid]: 'approve' }))
       try {
-        await approveBookingRequest(requestid);
-        toast.success("Booking approved");
-        await refreshCalendarData();
+        await approveBookingRequest(requestid)
+        toast.success('Booking approved')
+        await refreshCalendarData()
       } catch (e: unknown) {
-        const msg =
-          e instanceof Error ? e.message : "Failed to approve booking";
-        toast.error(msg);
+        const msg = e instanceof Error ? e.message : 'Failed to approve booking'
+        toast.error(msg)
       } finally {
-        setActionBusy((p) => ({ ...p, [requestid]: null }));
+        setActionBusy((p) => ({ ...p, [requestid]: null }))
       }
     },
     [refreshCalendarData]
-  );
+  )
 
   const rejectOne = useCallback(
     async (requestid: number) => {
-      setActionBusy((p) => ({ ...p, [requestid]: "reject" }));
+      setActionBusy((p) => ({ ...p, [requestid]: 'reject' }))
       try {
-        await rejectBookingRequest(requestid);
-        toast.success("Booking declined");
-        await refreshCalendarData();
+        await rejectBookingRequest(requestid)
+        toast.success('Booking declined')
+        await refreshCalendarData()
       } catch (e: unknown) {
-        const msg =
-          e instanceof Error ? e.message : "Failed to decline booking";
-        toast.error(msg);
+        const msg = e instanceof Error ? e.message : 'Failed to decline booking'
+        toast.error(msg)
       } finally {
-        setActionBusy((p) => ({ ...p, [requestid]: null }));
+        setActionBusy((p) => ({ ...p, [requestid]: null }))
       }
     },
     [refreshCalendarData]
-  );
+  )
 
   return (
     <div className="flex gap-2 p-2">
@@ -555,20 +566,20 @@ function BookingsPanel({
           value={
             selectedISODate
               ? (() => {
-                  const m = selectedISODate.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+                  const m = selectedISODate.match(/^(\d{4})-(\d{2})-(\d{2})$/)
                   if (m)
                     return new Date(
                       Number(m[1]),
                       Number(m[2]) - 1,
                       Number(m[3])
-                    );
-                  return new Date(selectedISODate);
+                    )
+                  return new Date(selectedISODate)
                 })()
               : undefined
           }
           onDateChangeAction={(d) => {
-            const iso = toISODateString(d);
-            setSelectedISODate(iso);
+            const iso = toISODateString(d)
+            setSelectedISODate(iso)
           }}
         />
         {/* Legend for calendar markers */}
@@ -612,24 +623,24 @@ function BookingsPanel({
                 bookingsForDate.map((r, idx) => {
                   const fullName = [r.firstname, r.lastname]
                     .filter(Boolean)
-                    .join(" ");
+                    .join(' ')
                   const contactPersonCombo = [
                     r.contact_person,
                     r.contact_person_number,
                   ]
                     .filter(Boolean)
-                    .join(" | ");
-                  const timeStart = (r.event_time || "").toString().slice(0, 5);
-                  const timeEnd = (r.event_end_time || "")
+                    .join(' | ')
+                  const timeStart = (r.event_time || '').toString().slice(0, 5)
+                  const timeEnd = (r.event_end_time || '')
                     .toString()
-                    .slice(0, 5);
+                    .slice(0, 5)
                   const isApproved =
-                    r.kind === "confirmed" && r.booking_status !== "cancelled";
+                    r.kind === 'confirmed' && r.booking_status !== 'cancelled'
                   const badgeClass = isApproved
-                    ? "bg-green-700 text-white"
-                    : "bg-gray-700 text-white";
-                  const reqId = Number((r as any).requestid || 0);
-                  const busy = reqId ? actionBusy[reqId] : null;
+                    ? 'bg-green-700 text-white'
+                    : 'bg-gray-700 text-white'
+                  const reqId = Number((r as any).requestid || 0)
+                  const busy = reqId ? actionBusy[reqId] : null
                   return (
                     <div
                       key={
@@ -639,12 +650,12 @@ function BookingsPanel({
                     >
                       <div className="flex items-center  justify-between mb-4">
                         <div className="font-semibold text-lg">
-                          {r.event_name || "—"}
+                          {r.event_name || '—'}
                         </div>
                         <span
                           className={`inline-block px-3 py-1.5 rounded-full text-sm font-medium ${badgeClass}`}
                         >
-                          {isApproved ? "Approved" : "Pending"}
+                          {isApproved ? 'Approved' : 'Pending'}
                         </span>
                       </div>
                       <div className="flex flex-col gap-3 text-base">
@@ -653,7 +664,7 @@ function BookingsPanel({
                             Email:
                           </div>
                           <div className="text-gray-700 mt-1">
-                            {r.username || "—"}
+                            {r.username || '—'}
                           </div>
                         </div>
                         <div>
@@ -661,7 +672,7 @@ function BookingsPanel({
                             Complete name:
                           </div>
                           <div className="text-gray-700 mt-1">
-                            {fullName || "—"}
+                            {fullName || '—'}
                           </div>
                         </div>
                         <div>
@@ -669,7 +680,7 @@ function BookingsPanel({
                             Contact #:
                           </div>
                           <div className="text-gray-700 mt-1">
-                            {r.contact_info || "—"}
+                            {r.contact_info || '—'}
                           </div>
                         </div>
                         <div>
@@ -677,7 +688,7 @@ function BookingsPanel({
                             Contact Person & Number:
                           </div>
                           <div className="text-gray-700 mt-1">
-                            {contactPersonCombo || "—"}
+                            {contactPersonCombo || '—'}
                           </div>
                         </div>
                         <div>
@@ -685,7 +696,7 @@ function BookingsPanel({
                             Location:
                           </div>
                           <div className="text-gray-700 mt-1">
-                            {r.event_address || "—"}
+                            {r.event_address || '—'}
                           </div>
                         </div>
                         <div>
@@ -693,7 +704,7 @@ function BookingsPanel({
                             Package:
                           </div>
                           <div className="text-gray-700 mt-1">
-                            {r.package_name || "—"}
+                            {r.package_name || '—'}
                           </div>
                         </div>
                         <div>
@@ -715,7 +726,7 @@ function BookingsPanel({
                                     timeStart
                                   )} - ${formatDisplayTime(timeEnd)}`
                                 : formatDisplayTime(timeStart)
-                              : "—"}
+                              : '—'}
                           </div>
                         </div>
                         <div>
@@ -723,7 +734,7 @@ function BookingsPanel({
                             Extension (hrs):
                           </div>
                           <div className="text-gray-700 mt-1">
-                            {(r.extension_duration as any) ?? "—"}
+                            {(r.extension_duration as any) ?? '—'}
                           </div>
                         </div>
                         <div>
@@ -731,7 +742,7 @@ function BookingsPanel({
                             Signal:
                           </div>
                           <div className="text-gray-700 mt-1">
-                            {r.strongest_signal || "—"}
+                            {r.strongest_signal || '—'}
                           </div>
                         </div>
                         <div>
@@ -741,7 +752,7 @@ function BookingsPanel({
                           <div className="text-gray-700 mt-1">
                             {(r as any).booth_placement ||
                               (r as any).boothPlacement ||
-                              "—"}
+                              '—'}
                           </div>
                         </div>
                         {/* Actions for pending requests on selected date - moved to end */}
@@ -750,30 +761,30 @@ function BookingsPanel({
                             <button
                               type="button"
                               className="px-5 py-2.5 rounded bg-litratored text-white text-base font-medium disabled:opacity-50 hover:bg-red-700 transition"
-                              disabled={busy === "reject"}
+                              disabled={busy === 'reject'}
                               onClick={() => {
-                                setEvaluateTarget(r);
-                                setConfirmRejectOpen(true);
+                                setEvaluateTarget(r)
+                                setConfirmRejectOpen(true)
                               }}
                             >
-                              {busy === "reject" ? "Declining…" : "Decline"}
+                              {busy === 'reject' ? 'Declining…' : 'Decline'}
                             </button>
                             <button
                               type="button"
                               className="px-5 py-2.5 rounded bg-litratoblack text-white text-base font-medium disabled:opacity-50 hover:bg-black transition"
-                              disabled={busy === "approve"}
+                              disabled={busy === 'approve'}
                               onClick={() => {
-                                setEvaluateTarget(r);
-                                setConfirmApproveOpen(true);
+                                setEvaluateTarget(r)
+                                setConfirmApproveOpen(true)
                               }}
                             >
-                              {busy === "approve" ? "Approving…" : "Approve"}
+                              {busy === 'approve' ? 'Approving…' : 'Approve'}
                             </button>
                           </div>
                         ) : null}
                       </div>
                     </div>
-                  );
+                  )
                 })
               )}
             </div>
@@ -790,8 +801,8 @@ function BookingsPanel({
         open={confirmApproveOpen}
         onOpenChange={(o) => {
           if (!o) {
-            setConfirmApproveOpen(false);
-            setEvaluateTarget(null);
+            setConfirmApproveOpen(false)
+            setEvaluateTarget(null)
           }
         }}
       >
@@ -804,29 +815,29 @@ function BookingsPanel({
           </DialogHeader>
           <div className="text-sm space-y-1">
             <div>
-              <span className="font-medium">Event:</span>{" "}
-              {evaluateTarget?.event_name || "—"}
+              <span className="font-medium">Event:</span>{' '}
+              {evaluateTarget?.event_name || '—'}
             </div>
             <div>
-              <span className="font-medium">Date:</span>{" "}
+              <span className="font-medium">Date:</span>{' '}
               {evaluateTarget?.event_date
                 ? formatDisplayDate(evaluateTarget.event_date as any)
-                : "—"}
+                : '—'}
             </div>
             <div>
-              <span className="font-medium">Time:</span>{" "}
+              <span className="font-medium">Time:</span>{' '}
               {(() => {
-                const s = (evaluateTarget?.event_time || "")
+                const s = (evaluateTarget?.event_time || '')
                   .toString()
-                  .slice(0, 5);
-                const e = (evaluateTarget?.event_end_time || "")
+                  .slice(0, 5)
+                const e = (evaluateTarget?.event_end_time || '')
                   .toString()
-                  .slice(0, 5);
+                  .slice(0, 5)
                 return s
                   ? e
                     ? `${formatDisplayTime(s)} - ${formatDisplayTime(e)}`
                     : formatDisplayTime(s)
-                  : "—";
+                  : '—'
               })()}
             </div>
           </div>
@@ -843,25 +854,25 @@ function BookingsPanel({
               type="button"
               className="px-4 py-2 rounded bg-litratoblack text-white text-sm disabled:opacity-50"
               disabled={(() => {
-                const id = Number((evaluateTarget as any)?.requestid || 0);
-                return id ? actionBusy[id] === "approve" : true;
+                const id = Number((evaluateTarget as any)?.requestid || 0)
+                return id ? actionBusy[id] === 'approve' : true
               })()}
               onClick={async () => {
-                const id = Number((evaluateTarget as any)?.requestid || 0);
-                if (!id) return;
+                const id = Number((evaluateTarget as any)?.requestid || 0)
+                if (!id) return
                 try {
-                  await approveOne(id);
+                  await approveOne(id)
                 } finally {
-                  setConfirmApproveOpen(false);
-                  setEvaluateTarget(null);
+                  setConfirmApproveOpen(false)
+                  setEvaluateTarget(null)
                 }
               }}
             >
               {(() => {
-                const id = Number((evaluateTarget as any)?.requestid || 0);
-                return id && actionBusy[id] === "approve"
-                  ? "Approving…"
-                  : "Approve";
+                const id = Number((evaluateTarget as any)?.requestid || 0)
+                return id && actionBusy[id] === 'approve'
+                  ? 'Approving…'
+                  : 'Approve'
               })()}
             </button>
           </DialogFooter>
@@ -872,8 +883,8 @@ function BookingsPanel({
         open={confirmRejectOpen}
         onOpenChange={(o) => {
           if (!o) {
-            setConfirmRejectOpen(false);
-            setEvaluateTarget(null);
+            setConfirmRejectOpen(false)
+            setEvaluateTarget(null)
           }
         }}
       >
@@ -886,29 +897,29 @@ function BookingsPanel({
           </DialogHeader>
           <div className="text-sm space-y-1">
             <div>
-              <span className="font-medium">Event:</span>{" "}
-              {evaluateTarget?.event_name || "—"}
+              <span className="font-medium">Event:</span>{' '}
+              {evaluateTarget?.event_name || '—'}
             </div>
             <div>
-              <span className="font-medium">Date:</span>{" "}
+              <span className="font-medium">Date:</span>{' '}
               {evaluateTarget?.event_date
                 ? formatDisplayDate(evaluateTarget.event_date as any)
-                : "—"}
+                : '—'}
             </div>
             <div>
-              <span className="font-medium">Time:</span>{" "}
+              <span className="font-medium">Time:</span>{' '}
               {(() => {
-                const s = (evaluateTarget?.event_time || "")
+                const s = (evaluateTarget?.event_time || '')
                   .toString()
-                  .slice(0, 5);
-                const e = (evaluateTarget?.event_end_time || "")
+                  .slice(0, 5)
+                const e = (evaluateTarget?.event_end_time || '')
                   .toString()
-                  .slice(0, 5);
+                  .slice(0, 5)
                 return s
                   ? e
                     ? `${formatDisplayTime(s)} - ${formatDisplayTime(e)}`
                     : formatDisplayTime(s)
-                  : "—";
+                  : '—'
               })()}
             </div>
           </div>
@@ -925,202 +936,200 @@ function BookingsPanel({
               type="button"
               className="px-4 py-2 rounded bg-litratored text-white text-sm disabled:opacity-50"
               disabled={(() => {
-                const id = Number((evaluateTarget as any)?.requestid || 0);
-                return id ? actionBusy[id] === "reject" : true;
+                const id = Number((evaluateTarget as any)?.requestid || 0)
+                return id ? actionBusy[id] === 'reject' : true
               })()}
               onClick={async () => {
-                const id = Number((evaluateTarget as any)?.requestid || 0);
-                if (!id) return;
+                const id = Number((evaluateTarget as any)?.requestid || 0)
+                if (!id) return
                 try {
-                  await rejectOne(id);
+                  await rejectOne(id)
                 } finally {
-                  setConfirmRejectOpen(false);
-                  setEvaluateTarget(null);
+                  setConfirmRejectOpen(false)
+                  setEvaluateTarget(null)
                 }
               }}
             >
               {(() => {
-                const id = Number((evaluateTarget as any)?.requestid || 0);
-                return id && actionBusy[id] === "reject"
-                  ? "Declining…"
-                  : "Decline";
+                const id = Number((evaluateTarget as any)?.requestid || 0)
+                return id && actionBusy[id] === 'reject'
+                  ? 'Declining…'
+                  : 'Decline'
               })()}
             </button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
-  );
+  )
 }
 
 function pageWindow(current: number, total: number, size = 3): number[] {
-  if (total <= 0) return [];
-  const start = Math.floor((Math.max(1, current) - 1) / size) * size + 1;
-  const end = Math.min(total, start + size - 1);
-  return Array.from({ length: end - start + 1 }, (_, i) => start + i);
+  if (total <= 0) return []
+  const start = Math.floor((Math.max(1, current) - 1) / size) * size + 1
+  const end = Math.min(total, start + size - 1)
+  return Array.from({ length: end - start + 1 }, (_, i) => start + i)
 }
 
 function MasterListPanel({
   onSelectPending,
 }: {
-  onSelectPending: (row: BookingRow) => void;
+  onSelectPending: (row: BookingRow) => void
 }) {
-  const router = useRouter();
-  const pageSize = 5;
-  const [statusFilter, setStatusFilter] = useState<BookingStatus | "all">(
-    "all"
-  );
-  const [page, setPage] = useState(1);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [rows, setRows] = useState<BookingRow[]>([]);
-  const [search, setSearch] = useState("");
-  const [sortMode, setSortMode] = useState<SortMode>("nearest");
+  const router = useRouter()
+  const pageSize = 5
+  const [statusFilter, setStatusFilter] = useState<BookingStatus | 'all'>('all')
+  const [page, setPage] = useState(1)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [rows, setRows] = useState<BookingRow[]>([])
+  const [search, setSearch] = useState('')
+  const [sortMode, setSortMode] = useState<SortMode>('nearest')
 
   // Assign staff dialog state
-  const [assignOpen, setAssignOpen] = useState(false);
-  const [assignTarget, setAssignTarget] = useState<BookingRow | null>(null);
-  const [staffList, setStaffList] = useState<StaffUser[]>([]);
-  const [selectedStaff, setSelectedStaff] = useState<Set<number>>(new Set());
-  const [assignBusy, setAssignBusy] = useState(false);
+  const [assignOpen, setAssignOpen] = useState(false)
+  const [assignTarget, setAssignTarget] = useState<BookingRow | null>(null)
+  const [staffList, setStaffList] = useState<StaffUser[]>([])
+  const [selectedStaff, setSelectedStaff] = useState<Set<number>>(new Set())
+  const [assignBusy, setAssignBusy] = useState(false)
 
   // ADD: dialog state for cancel/undo cancel confirmations
-  const [cancelOpen, setCancelOpen] = useState(false);
-  const [undoOpen, setUndoOpen] = useState(false);
-  const [targetRow, setTargetRow] = useState<BookingRow | null>(null);
-  const [busy, setBusy] = useState<null | "cancel" | "undo">(null);
+  const [cancelOpen, setCancelOpen] = useState(false)
+  const [undoOpen, setUndoOpen] = useState(false)
+  const [targetRow, setTargetRow] = useState<BookingRow | null>(null)
+  const [busy, setBusy] = useState<null | 'cancel' | 'undo'>(null)
 
   // NEW: Event Report modal state
-  const [reportOpen, setReportOpen] = useState(false);
-  const [reportTarget, setReportTarget] = useState<BookingRow | null>(null);
-  const [reportLoading, setReportLoading] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false)
+  const [reportTarget, setReportTarget] = useState<BookingRow | null>(null)
+  const [reportLoading, setReportLoading] = useState(false)
   const [reportPayment, setReportPayment] = useState<{
-    paidTotal: number | null;
-    amountDue: number | null;
-    status: "paid" | "partial" | "unpaid";
-  } | null>(null);
+    paidTotal: number | null
+    amountDue: number | null
+    status: 'paid' | 'partial' | 'unpaid'
+  } | null>(null)
   const [reportItems, setReportItems] = useState<{
-    total: number;
-    good: number;
-    damaged: number;
-  } | null>(null);
+    total: number
+    good: number
+    damaged: number
+  } | null>(null)
   const [reportStaff, setReportStaff] = useState<
     Array<{ id: number; firstname?: string; lastname?: string }>
-  >([]);
+  >([])
   const [reportStaffLogs, setReportStaffLogs] = useState<
     Array<{
-      id?: number;
-      staff_userid: number;
-      firstname?: string;
-      lastname?: string;
-      username?: string;
-      arrived_at?: string | null;
-      setup_finished_at?: string | null;
-      started_at?: string | null;
-      ended_at?: string | null;
-      picked_up_at?: string | null;
+      id?: number
+      staff_userid: number
+      firstname?: string
+      lastname?: string
+      username?: string
+      arrived_at?: string | null
+      setup_finished_at?: string | null
+      started_at?: string | null
+      ended_at?: string | null
+      picked_up_at?: string | null
     }>
-  >([]);
+  >([])
   const [reportStaffTimeline, setReportStaffTimeline] = useState<{
-    arrived_at: string | null;
-    setup_finished_at: string | null;
-    started_at: string | null;
-    ended_at: string | null;
-    picked_up_at: string | null;
-  } | null>(null);
+    arrived_at: string | null
+    setup_finished_at: string | null
+    started_at: string | null
+    ended_at: string | null
+    picked_up_at: string | null
+  } | null>(null)
   const [reportItemLists, setReportItemLists] = useState<{
-    good: Array<{ name: string; qty: number }>;
-    damaged: Array<{ name: string; qty: number }>;
-  } | null>(null);
+    good: Array<{ name: string; qty: number }>
+    damaged: Array<{ name: string; qty: number }>
+  } | null>(null)
 
   const openReport = async (row: BookingRow) => {
-    setReportTarget(row);
-    setReportOpen(true);
-    setReportLoading(true);
-    setReportPayment(null);
-    setReportItems(null);
-    setReportStaff([]);
-    setReportStaffLogs([]);
-    setReportStaffTimeline(null);
-    setReportItemLists(null);
+    setReportTarget(row)
+    setReportOpen(true)
+    setReportLoading(true)
+    setReportPayment(null)
+    setReportItems(null)
+    setReportStaff([])
+    setReportStaffLogs([])
+    setReportStaffTimeline(null)
+    setReportItemLists(null)
     try {
-      const cid = await ensureConfirmedId(row);
+      const cid = await ensureConfirmedId(row)
       // Payment summary (admin)
       if (cid) {
         try {
           const sum: any = await fetchPaymentSummaryForBooking(
             cid as number,
-            "admin" as any
-          );
+            'admin' as any
+          )
           if (sum) {
             setReportPayment({
               paidTotal: Number(sum.paidTotal ?? 0),
               amountDue: Number(sum.amountDue ?? 0),
               status:
-                (sum.computedStatus as "paid" | "partial" | "unpaid") ??
-                "unpaid",
-            });
+                (sum.computedStatus as 'paid' | 'partial' | 'unpaid') ??
+                'unpaid',
+            })
           }
         } catch {}
       }
       // Staff list (best-effort)
       if (cid) {
         try {
-          const staff = await listAssignedStaff(cid);
+          const staff = await listAssignedStaff(cid)
           setReportStaff(
             (staff || []).map((s) => ({
               id: Number(s.id),
-              firstname: String((s as any).firstname || ""),
-              lastname: String((s as any).lastname || ""),
+              firstname: String((s as any).firstname || ''),
+              lastname: String((s as any).lastname || ''),
             }))
-          );
+          )
           // fetch staff logs (admin)
           try {
-            const logs = await listStaffLogsForBooking(cid, "admin");
+            const logs = await listStaffLogsForBooking(cid, 'admin')
             const mapped = (logs || []).map((l: any) => ({
               id: Number(l.id) || undefined,
               staff_userid: Number(l.staff_userid),
-              firstname: String(l.firstname || ""),
-              lastname: String(l.lastname || ""),
-              username: String(l.username || ""),
+              firstname: String(l.firstname || ''),
+              lastname: String(l.lastname || ''),
+              username: String(l.username || ''),
               arrived_at: l.arrived_at || null,
               setup_finished_at: l.setup_finished_at || null,
               started_at: l.started_at || null,
               ended_at: l.ended_at || null,
               picked_up_at: l.picked_up_at || null,
-            }));
-            setReportStaffLogs(mapped);
+            }))
+            setReportStaffLogs(mapped)
             // Build aggregated timeline: earliest for Arrived/Started; latest for Setup finished/Ended/Picked up
             const pick = (
               arr: Array<Record<string, any>>,
               key: keyof (typeof mapped)[number],
-              mode: "min" | "max"
+              mode: 'min' | 'max'
             ): string | null => {
               const vals = arr
                 .map((x) => x[key] as string | null | undefined)
-                .filter((v): v is string => !!v);
-              if (!vals.length) return null;
-              let bestV = vals[0];
-              let bestT = new Date(vals[0]).getTime();
+                .filter((v): v is string => !!v)
+              if (!vals.length) return null
+              let bestV = vals[0]
+              let bestT = new Date(vals[0]).getTime()
               for (let i = 1; i < vals.length; i++) {
-                const t = new Date(vals[i]).getTime();
+                const t = new Date(vals[i]).getTime()
                 if (
-                  (mode === "min" && t < bestT) ||
-                  (mode === "max" && t > bestT)
+                  (mode === 'min' && t < bestT) ||
+                  (mode === 'max' && t > bestT)
                 ) {
-                  bestT = t;
-                  bestV = vals[i];
+                  bestT = t
+                  bestV = vals[i]
                 }
               }
-              return bestV;
-            };
+              return bestV
+            }
             setReportStaffTimeline({
-              arrived_at: pick(mapped, "arrived_at", "min"),
-              setup_finished_at: pick(mapped, "setup_finished_at", "max"),
-              started_at: pick(mapped, "started_at", "min"),
-              ended_at: pick(mapped, "ended_at", "max"),
-              picked_up_at: pick(mapped, "picked_up_at", "max"),
-            });
+              arrived_at: pick(mapped, 'arrived_at', 'min'),
+              setup_finished_at: pick(mapped, 'setup_finished_at', 'max'),
+              started_at: pick(mapped, 'started_at', 'min'),
+              ended_at: pick(mapped, 'ended_at', 'max'),
+              picked_up_at: pick(mapped, 'picked_up_at', 'max'),
+            })
           } catch {}
         } catch {}
       }
@@ -1129,261 +1138,258 @@ function MasterListPanel({
         try {
           const items: any[] = await listPackageItemsForPackage(
             Number(row.packageId)
-          );
+          )
           let total = 0,
             damaged = 0,
-            good = 0;
-          const goodAgg = new Map<string, number>();
-          const damagedAgg = new Map<string, number>();
+            good = 0
+          const goodAgg = new Map<string, number>()
+          const damagedAgg = new Map<string, number>()
           for (const it of items) {
-            const q = Math.max(1, Number((it as any).quantity || 1));
-            total += q;
-            const stat = (it as any).status;
-            const cond = String((it as any).condition || "").toLowerCase();
-            const name = String((it as any).material_name || "Item");
-            if (stat === false || cond === "damaged") {
-              damaged += q;
-              damagedAgg.set(name, (damagedAgg.get(name) || 0) + q);
+            const q = Math.max(1, Number((it as any).quantity || 1))
+            total += q
+            const stat = (it as any).status
+            const cond = String((it as any).condition || '').toLowerCase()
+            const name = String((it as any).material_name || 'Item')
+            if (stat === false || cond === 'damaged') {
+              damaged += q
+              damagedAgg.set(name, (damagedAgg.get(name) || 0) + q)
             } else {
-              good += q;
-              goodAgg.set(name, (goodAgg.get(name) || 0) + q);
+              good += q
+              goodAgg.set(name, (goodAgg.get(name) || 0) + q)
             }
           }
-          setReportItems({ total, good, damaged });
+          setReportItems({ total, good, damaged })
           const toArray = (m: Map<string, number>) =>
-            Array.from(m.entries()).map(([name, qty]) => ({ name, qty }));
+            Array.from(m.entries()).map(([name, qty]) => ({ name, qty }))
           setReportItemLists({
             good: toArray(goodAgg),
             damaged: toArray(damagedAgg),
-          });
+          })
         } catch {}
       }
     } finally {
-      setReportLoading(false);
+      setReportLoading(false)
     }
-  };
+  }
 
   // Extend hours dialog state
-  const [extendOpen, setExtendOpen] = useState(false);
+  const [extendOpen, setExtendOpen] = useState(false)
   const [extendTarget, setExtendTarget] = useState<{
-    row: BookingRow;
-    cid: number;
-  } | null>(null);
-  const [extendHours, setExtendHours] = useState<string>("1");
-  const [extendBusy, setExtendBusy] = useState(false);
+    row: BookingRow
+    cid: number
+  } | null>(null)
+  const [extendHours, setExtendHours] = useState<string>('1')
+  const [extendBusy, setExtendBusy] = useState(false)
   const [extendConflict, setExtendConflict] = useState<null | {
-    requestid: number;
-    event_date: string;
-    event_time: string;
-  }>(null);
+    requestid: number
+    event_date: string
+    event_time: string
+  }>(null)
 
   // NEW: Contract dialog state (inline, no separate page)
-  const [contractOpen, setContractOpen] = useState(false);
+  const [contractOpen, setContractOpen] = useState(false)
   const [contractTargetId, setContractTargetId] = useState<
     number | string | null
-  >(null);
-  const [contractRowId, setContractRowId] = useState<BookingRow["id"] | null>(
+  >(null)
+  const [contractRowId, setContractRowId] = useState<BookingRow['id'] | null>(
     null
-  );
+  )
   const openContractDialog = (row: BookingRow) => {
-    const id = row.requestid ?? row.confirmedid ?? row.id;
-    setContractTargetId(id as number | string);
-    setContractRowId(row.id);
-    setContractOpen(true);
-  };
+    const id = row.requestid ?? row.confirmedid ?? row.id
+    setContractTargetId(id as number | string)
+    setContractRowId(row.id)
+    setContractOpen(true)
+  }
 
   const quickVerifyContract = async (row: BookingRow) => {
     try {
-      const id = (row.requestid ?? row.confirmedid ?? row.id) as
-        | number
-        | string;
-      const ctr = await getAdminContract(id);
+      const id = (row.requestid ?? row.confirmedid ?? row.id) as number | string
+      const ctr = await getAdminContract(id)
       if (!ctr) {
-        toast.error("No contract record found.");
-        return;
+        toast.error('No contract record found.')
+        return
       }
       if (!ctr.signed_url) {
-        toast.error("No signed contract uploaded yet.");
+        toast.error('No signed contract uploaded yet.')
         // Offer to open the modal so admin can review
-        setContractTargetId(id);
-        setContractOpen(true);
-        return;
+        setContractTargetId(id)
+        setContractOpen(true)
+        return
       }
-      const ok = await verifyAdminContract(id);
+      const ok = await verifyAdminContract(id)
       if (ok) {
-        toast.success("Contract marked as Verified");
+        toast.success('Contract marked as Verified')
         // Optimistically update the row so the UI disables the Verify button immediately
         setRows((prev) =>
           prev.map((r) =>
-            r.id === row.id ? { ...r, contractStatus: "Verified" } : r
+            r.id === row.id ? { ...r, contractStatus: 'Verified' } : r
           )
-        );
+        )
       } else {
-        toast.error("Failed to verify contract");
+        toast.error('Failed to verify contract')
       }
     } catch (e) {
-      console.error("quickVerifyContract error:", e);
-      toast.error("Verification failed");
+      console.error('quickVerifyContract error:', e)
+      toast.error('Verification failed')
     }
-  };
+  }
 
   // ADD: helpers for event status and payment badges/labels
-  const eventStatusLabel = (s: BookingRow["eventStatus"]) =>
-    s === "standby" ? "Standby" : s === "ongoing" ? "Ongoing" : "Finished";
-  const eventStatusBadgeClass = (s: BookingRow["eventStatus"]) => {
-    if (s === "ongoing") return "bg-yellow-700 text-white";
-    if (s === "finished") return "bg-green-700 text-white";
-    return "bg-gray-700 text-white"; // standby
-  };
-  const paymentLabel = (p: BookingRow["payment"]) =>
-    p === "paid" ? "Paid" : p === "unpaid" ? "Unpaid" : "Partially Paid";
-  const paymentBadgeClass = (p: BookingRow["payment"]) => {
-    if (p === "paid") return "bg-green-700 text-white";
-    if (p === "partially-paid") return "bg-yellow-700 text-white";
-    return "bg-red-700 text-white"; // unpaid
-  };
+  const eventStatusLabel = (s: BookingRow['eventStatus']) =>
+    s === 'standby' ? 'Standby' : s === 'ongoing' ? 'Ongoing' : 'Finished'
+  const eventStatusBadgeClass = (s: BookingRow['eventStatus']) => {
+    if (s === 'ongoing') return 'bg-yellow-700 text-white'
+    if (s === 'finished') return 'bg-green-700 text-white'
+    return 'bg-gray-700 text-white' // standby
+  }
+  const paymentLabel = (p: BookingRow['payment']) =>
+    p === 'paid' ? 'Paid' : p === 'unpaid' ? 'Unpaid' : 'Partially Paid'
+  const paymentBadgeClass = (p: BookingRow['payment']) => {
+    if (p === 'paid') return 'bg-green-700 text-white'
+    if (p === 'partially-paid') return 'bg-yellow-700 text-white'
+    return 'bg-red-700 text-white' // unpaid
+  }
   // NEW: contract status helpers
   const contractBadgeClass = (s: ContractStatus | null | undefined) => {
     switch (s) {
-      case "Verified":
-        return "bg-green-700 text-white";
-      case "Under Review":
-        return "bg-yellow-700 text-white";
-      case "Signed":
-        return "bg-blue-700 text-white";
-      case "Pending Signature":
+      case 'Verified':
+        return 'bg-green-700 text-white'
+      case 'Under Review':
+        return 'bg-yellow-700 text-white'
+      case 'Signed':
+        return 'bg-blue-700 text-white'
+      case 'Pending Signature':
       default:
-        return "bg-gray-700 text-white";
+        return 'bg-gray-700 text-white'
     }
-  };
+  }
 
   useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-    (async () => {
+    let cancelled = false
+    setLoading(true)
+    setError(null)
+    ;(async () => {
       try {
-        const list = await readBookings();
-        if (cancelled) return;
+        const list = await readBookings()
+        if (cancelled) return
 
         // Map master list + event logs fields
         const mapBookingStatusToEvent = (
           s?: string
-        ): BookingRow["eventStatus"] => {
-          switch ((s || "").toLowerCase()) {
-            case "in_progress":
-              return "ongoing";
-            case "completed":
-            case "cancelled":
-              return "finished";
-            case "scheduled":
+        ): BookingRow['eventStatus'] => {
+          switch ((s || '').toLowerCase()) {
+            case 'in_progress':
+              return 'ongoing'
+            case 'completed':
+            case 'cancelled':
+              return 'finished'
+            case 'scheduled':
             default:
-              return "standby";
+              return 'standby'
           }
-        };
-        const mapPaymentStatus = (s?: string): BookingRow["payment"] => {
-          switch ((s || "").toLowerCase()) {
-            case "paid":
-              return "paid";
-            case "partial":
-              return "partially-paid";
-            case "unpaid":
-            case "refunded":
-            case "failed":
+        }
+        const mapPaymentStatus = (s?: string): BookingRow['payment'] => {
+          switch ((s || '').toLowerCase()) {
+            case 'paid':
+              return 'paid'
+            case 'partial':
+              return 'partially-paid'
+            case 'unpaid':
+            case 'refunded':
+            case 'failed':
             default:
-              return "unpaid";
+              return 'unpaid'
           }
-        };
+        }
 
         const toRow = (r: BookingRequestRow): BookingRow => {
           // Derive UI status. For confirmed bookings, reflect booking_status
           // (cancelled -> 'cancelled', others -> 'approved'). For requests, map DB status.
-          let status: BookingStatus;
-          if (r.kind === "confirmed") {
-            status =
-              r.booking_status === "cancelled" ? "cancelled" : "approved";
+          let status: BookingStatus
+          if (r.kind === 'confirmed') {
+            status = r.booking_status === 'cancelled' ? 'cancelled' : 'approved'
           } else {
             const statusMap: Record<string, BookingStatus> = {
-              pending: "pending",
-              accepted: "approved",
-              rejected: "declined",
-              cancelled: "cancelled",
-            };
-            status = statusMap[(r.status as string) || "pending"] ?? "pending";
+              pending: 'pending',
+              accepted: 'approved',
+              rejected: 'declined',
+              cancelled: 'cancelled',
+            }
+            status = statusMap[(r.status as string) || 'pending'] ?? 'pending'
           }
 
-          const date = toISODateString(r.event_date);
-          const startTime = (r.event_time || "").toString().slice(0, 5);
-          const endTime = (r.event_end_time || "").toString().slice(0, 5);
-          const rx = r as Record<string, unknown>;
+          const date = toISODateString(r.event_date)
+          const startTime = (r.event_time || '').toString().slice(0, 5)
+          const endTime = (r.event_end_time || '').toString().slice(0, 5)
+          const rx = r as Record<string, unknown>
           const baseCandidate =
-            (typeof rx["total_booking_price"] === "number"
-              ? (rx["total_booking_price"] as number)
+            (typeof rx['total_booking_price'] === 'number'
+              ? (rx['total_booking_price'] as number)
               : undefined) ??
-            (typeof rx["package_price"] === "number"
-              ? (rx["package_price"] as number)
+            (typeof rx['package_price'] === 'number'
+              ? (rx['package_price'] as number)
               : undefined) ??
-            (typeof rx["price"] === "number"
-              ? (rx["price"] as number)
+            (typeof rx['price'] === 'number'
+              ? (rx['price'] as number)
               : undefined) ??
-            0;
-          const baseTotal = Number(baseCandidate);
-          const extHoursNum = Number(r.extension_duration ?? 0);
+            0
+          const baseTotal = Number(baseCandidate)
+          const extHoursNum = Number(r.extension_duration ?? 0)
           const extHours = Number.isFinite(extHoursNum)
             ? Math.max(0, extHoursNum)
-            : 0;
+            : 0
           const amountDue = Number.isFinite(baseTotal)
             ? Math.max(0, Number(baseTotal) + extHours * 2000)
-            : null;
+            : null
 
           // NEW: derive client name, event status, payment and items
           const clientName =
-            [r.firstname, r.lastname].filter(Boolean).join(" ").trim() ||
-            String(r.username || "");
+            [r.firstname, r.lastname].filter(Boolean).join(' ').trim() ||
+            String(r.username || '')
           const bookingStatusRaw =
-            typeof rx["booking_status"] === "string"
-              ? (rx["booking_status"] as string)
-              : undefined;
+            typeof rx['booking_status'] === 'string'
+              ? (rx['booking_status'] as string)
+              : undefined
           const paymentStatusRaw =
-            typeof rx["payment_status"] === "string"
-              ? (rx["payment_status"] as string)
-              : undefined;
+            typeof rx['payment_status'] === 'string'
+              ? (rx['payment_status'] as string)
+              : undefined
           const eventStatus =
-            r.kind === "confirmed"
+            r.kind === 'confirmed'
               ? mapBookingStatusToEvent(bookingStatusRaw)
-              : "standby";
+              : 'standby'
           const payment =
-            r.kind === "confirmed"
+            r.kind === 'confirmed'
               ? mapPaymentStatus(paymentStatusRaw)
-              : "unpaid";
-          const items = { damaged: [] as Item[] };
+              : 'unpaid'
+          const items = { damaged: [] as Item[] }
 
           // NEW: capture package id when available (from confirmed bookings select)
           const packageId =
-            typeof (rx["package_id"] as unknown) === "number"
-              ? (rx["package_id"] as number)
-              : null;
+            typeof (rx['package_id'] as unknown) === 'number'
+              ? (rx['package_id'] as number)
+              : null
           // Booth placement may arrive as snake_case from API; fallback to camel
           const boothPlacement =
-            typeof rx["booth_placement"] === "string"
-              ? (rx["booth_placement"] as string)
-              : (r as any).boothPlacement || (r as any).booth_placement || null;
+            typeof rx['booth_placement'] === 'string'
+              ? (rx['booth_placement'] as string)
+              : (r as any).boothPlacement || (r as any).booth_placement || null
 
           return {
             id: String(r.requestid || r.confirmed_id || Math.random()),
             requestid: r.requestid ?? null,
             confirmedid:
-              typeof rx["confirmed_id"] === "number"
-                ? (rx["confirmed_id"] as number)
+              typeof rx['confirmed_id'] === 'number'
+                ? (rx['confirmed_id'] as number)
                 : null,
-            eventName: r.event_name || "—",
+            eventName: r.event_name || '—',
             date,
             startTime,
             endTime,
-            package: r.package_name || "—",
+            package: r.package_name || '—',
             packageId,
-            grid: r.grid || "—",
-            place: r.event_address || "—",
+            grid: r.grid || '—',
+            place: r.event_address || '—',
             status,
             contact_info: r.contact_info ?? null,
             contact_person: r.contact_person ?? null,
@@ -1398,16 +1404,16 @@ function MasterListPanel({
             extHours,
             amountDue,
             createdAt:
-              typeof rx["created_at"] === "string"
-                ? (rx["created_at"] as string)
-                : typeof rx["createdAt"] === "string"
-                ? (rx["createdAt"] as string)
+              typeof rx['created_at'] === 'string'
+                ? (rx['created_at'] as string)
+                : typeof rx['createdAt'] === 'string'
+                ? (rx['createdAt'] as string)
                 : null,
             lastUpdated:
-              typeof rx["last_updated"] === "string"
-                ? (rx["last_updated"] as string)
-                : typeof rx["lastUpdated"] === "string"
-                ? (rx["lastUpdated"] as string)
+              typeof rx['last_updated'] === 'string'
+                ? (rx['last_updated'] as string)
+                : typeof rx['lastUpdated'] === 'string'
+                ? (rx['lastUpdated'] as string)
                 : null,
 
             // NEW: integrated fields
@@ -1415,394 +1421,394 @@ function MasterListPanel({
             eventStatus,
             payment,
             items,
-          };
-        };
+          }
+        }
 
-        const mapped = list.map(toRow);
-        setRows(mapped);
-        setPage(1);
+        const mapped = list.map(toRow)
+        setRows(mapped)
+        setPage(1)
 
         // Post-load: fetch contract status for each booking (best-effort)
         try {
           const results = await Promise.all(
             mapped.map(async (r) => {
-              const id = r.requestid ?? r.confirmedid ?? r.id;
+              const id = r.requestid ?? r.confirmedid ?? r.id
               try {
-                const ctr = await getAdminContract(id as number | string);
+                const ctr = await getAdminContract(id as number | string)
                 return {
                   rowId: r.id,
                   status: (ctr?.status ?? null) as ContractStatus | null,
-                };
+                }
               } catch {
-                return { rowId: r.id, status: null as ContractStatus | null };
+                return { rowId: r.id, status: null as ContractStatus | null }
               }
             })
-          );
+          )
           setRows((prev) =>
             prev.map((r) => {
-              const hit = results.find((x) => x.rowId === r.id);
-              return hit ? { ...r, contractStatus: hit.status } : r;
+              const hit = results.find((x) => x.rowId === r.id)
+              return hit ? { ...r, contractStatus: hit.status } : r
             })
-          );
+          )
         } catch {
           // ignore failures
         }
       } catch (e: unknown) {
-        if (cancelled) return;
-        const msg = e instanceof Error ? e.message : "Failed to load bookings";
-        setError(msg);
+        if (cancelled) return
+        const msg = e instanceof Error ? e.message : 'Failed to load bookings'
+        setError(msg)
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) setLoading(false)
       }
-    })();
+    })()
     return () => {
-      cancelled = true;
-    };
-  }, []);
+      cancelled = true
+    }
+  }, [])
 
   const filtered = useMemo(() => {
     // First, filter by status
     const byStatus =
-      statusFilter === "all"
+      statusFilter === 'all'
         ? rows
-        : rows.filter((d) => d.status === statusFilter);
+        : rows.filter((d) => d.status === statusFilter)
     // Then, apply search tokens (AND over tokens)
-    const q = search.trim().toLowerCase();
-    if (!q) return byStatus;
-    const tokens = q.split(/\s+/).filter(Boolean);
-    if (!tokens.length) return byStatus;
+    const q = search.trim().toLowerCase()
+    if (!q) return byStatus
+    const tokens = q.split(/\s+/).filter(Boolean)
+    if (!tokens.length) return byStatus
     // Restrict search strictly to the event name only (per requirement)
     // We previously searched across many concatenated fields; now we only
     // match tokens against r.eventName. This keeps semantics simple and
     // guarantees no accidental matches on other metadata.
     return byStatus.filter((r) => {
-      const eventName = (r.eventName || "").toLowerCase();
-      return tokens.every((t) => eventName.includes(t));
-    });
-  }, [statusFilter, rows, search]);
+      const eventName = (r.eventName || '').toLowerCase()
+      return tokens.every((t) => eventName.includes(t))
+    })
+  }, [statusFilter, rows, search])
   const sorted = useMemo(() => {
-    const now = Date.now();
-    const items = [...filtered];
+    const now = Date.now()
+    const items = [...filtered]
     const statusRank = (row: BookingRow) =>
-      row.status === "cancelled" || row.status === "declined" ? 1 : 0;
+      row.status === 'cancelled' || row.status === 'declined' ? 1 : 0
     const toStartMs = (row: BookingRow): number | null => {
-      const date = row.date;
-      if (!date || date === "—") return null;
+      const date = row.date
+      if (!date || date === '—') return null
       const time =
         row.startTime && /^\d{2}:\d{2}$/.test(row.startTime)
           ? row.startTime
-          : "00:00";
-      const ms = Date.parse(`${date}T${time}`);
-      return Number.isNaN(ms) ? null : ms;
-    };
+          : '00:00'
+      const ms = Date.parse(`${date}T${time}`)
+      return Number.isNaN(ms) ? null : ms
+    }
     const toCreatedMs = (row: BookingRow): number => {
       const timePart =
         row.startTime && /^\d{2}:\d{2}$/.test(row.startTime)
           ? row.startTime
-          : null;
+          : null
       const eventCandidate = row.date
         ? timePart
           ? `${row.date}T${timePart}`
           : row.date
-        : null;
+        : null
       const candidates: Array<string | null | undefined> = [
         row.createdAt,
         row.lastUpdated,
         eventCandidate,
-      ];
+      ]
       for (const candidate of candidates) {
-        if (!candidate) continue;
-        const ms = Date.parse(candidate);
-        if (!Number.isNaN(ms)) return ms;
+        if (!candidate) continue
+        const ms = Date.parse(candidate)
+        if (!Number.isNaN(ms)) return ms
       }
-      return 0;
-    };
+      return 0
+    }
     items.sort((a, b) => {
-      const statusDiff = statusRank(a) - statusRank(b);
-      if (statusDiff !== 0) return statusDiff;
+      const statusDiff = statusRank(a) - statusRank(b)
+      if (statusDiff !== 0) return statusDiff
 
-      if (sortMode === "recent") {
-        return toCreatedMs(b) - toCreatedMs(a);
+      if (sortMode === 'recent') {
+        return toCreatedMs(b) - toCreatedMs(a)
       }
 
-      const aStart = toStartMs(a);
-      const bStart = toStartMs(b);
-      const aFuture = typeof aStart === "number" && aStart >= now;
-      const bFuture = typeof bStart === "number" && bStart >= now;
-      if (aFuture !== bFuture) return aFuture ? -1 : 1;
+      const aStart = toStartMs(a)
+      const bStart = toStartMs(b)
+      const aFuture = typeof aStart === 'number' && aStart >= now
+      const bFuture = typeof bStart === 'number' && bStart >= now
+      if (aFuture !== bFuture) return aFuture ? -1 : 1
 
       const aDist =
-        typeof aStart === "number"
+        typeof aStart === 'number'
           ? Math.abs(aStart - now)
-          : Number.POSITIVE_INFINITY;
+          : Number.POSITIVE_INFINITY
       const bDist =
-        typeof bStart === "number"
+        typeof bStart === 'number'
           ? Math.abs(bStart - now)
-          : Number.POSITIVE_INFINITY;
-      if (aDist !== bDist) return aDist - bDist;
+          : Number.POSITIVE_INFINITY
+      if (aDist !== bDist) return aDist - bDist
 
-      return toCreatedMs(b) - toCreatedMs(a);
-    });
-    return items;
-  }, [filtered, sortMode]);
-  const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
+      return toCreatedMs(b) - toCreatedMs(a)
+    })
+    return items
+  }, [filtered, sortMode])
+  const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize))
   useEffect(() => {
-    setPage((prev) => Math.max(1, Math.min(prev, totalPages)));
-  }, [totalPages]);
-  const startIdx = (page - 1) * pageSize;
-  const pageRows = sorted.slice(startIdx, startIdx + pageSize);
+    setPage((prev) => Math.max(1, Math.min(prev, totalPages)))
+  }, [totalPages])
+  const startIdx = (page - 1) * pageSize
+  const pageRows = sorted.slice(startIdx, startIdx + pageSize)
   const windowPages = useMemo(
     () => pageWindow(page, totalPages, 3),
     [page, totalPages]
-  );
+  )
 
   const statusBadgeClasses: Record<BookingStatus, string> = {
-    pending: "bg-gray-700 text-white",
-    approved: "bg-green-700 text-white ",
-    declined: "bg-red-700 text-white ",
-    cancelled: "bg-orange-700 text-white",
-  };
+    pending: 'bg-gray-700 text-white',
+    approved: 'bg-green-700 text-white ',
+    declined: 'bg-red-700 text-white ',
+    cancelled: 'bg-orange-700 text-white',
+  }
 
-  const statusOptions: Array<{ value: BookingStatus | "all"; label: string }> =
+  const statusOptions: Array<{ value: BookingStatus | 'all'; label: string }> =
     [
-      { value: "all", label: "All" },
-      { value: "pending", label: "Pending" },
-      { value: "approved", label: "Approved" },
-      { value: "declined", label: "Declined" },
-      { value: "cancelled", label: "Cancelled" },
-    ];
+      { value: 'all', label: 'All' },
+      { value: 'pending', label: 'Pending' },
+      { value: 'approved', label: 'Approved' },
+      { value: 'declined', label: 'Declined' },
+      { value: 'cancelled', label: 'Cancelled' },
+    ]
   const sortOptions: Array<{ value: SortMode; label: string }> = [
-    { value: "nearest", label: "Nearest date" },
-    { value: "recent", label: "Newest created" },
-  ];
+    { value: 'nearest', label: 'Nearest date' },
+    { value: 'recent', label: 'Newest created' },
+  ]
   const currentLabel =
-    statusOptions.find((o) => o.value === statusFilter)?.label ?? "All";
+    statusOptions.find((o) => o.value === statusFilter)?.label ?? 'All'
   const sortLabel =
-    sortOptions.find((o) => o.value === sortMode)?.label ?? "Nearest date";
+    sortOptions.find((o) => o.value === sortMode)?.label ?? 'Nearest date'
 
   // Handlers for actions menu
   const handleEdit = (row: BookingRow) => {
     try {
       // Derive contact person fields with robust fallbacks
-      const byFieldName = (row.contact_person || "").trim();
+      const byFieldName = (row.contact_person || '').trim()
       const byName = [row.firstname, row.lastname]
         .filter(Boolean)
-        .join(" ")
-        .trim();
-      const contactPersonName = byFieldName || byName || "";
+        .join(' ')
+        .trim()
+      const contactPersonName = byFieldName || byName || ''
 
-      const directNum = (row.contact_person_number || "").trim();
-      let contactPersonNumber = directNum;
+      const directNum = (row.contact_person_number || '').trim()
+      let contactPersonNumber = directNum
       if (!contactPersonNumber) {
-        const info = (row.contact_info || "").toString();
-        const m = info.match(/(\+?\d[\d\s-]{6,}\d)/);
-        contactPersonNumber = (m?.[1] || "").trim();
+        const info = (row.contact_info || '').toString()
+        const m = info.match(/(\+?\d[\d\s-]{6,}\d)/)
+        contactPersonNumber = (m?.[1] || '').trim()
       }
       // Always build a normalized combined string so the edit page can split reliably
-      const combinedContact = `${contactPersonName} | ${contactPersonNumber}`;
+      const combinedContact = `${contactPersonName} | ${contactPersonNumber}`
       const extensionHours = (() => {
-        if (row.extension_duration == null) return 0;
-        const parsed = Number(row.extension_duration);
-        return Number.isFinite(parsed) ? parsed : 0;
-      })();
+        if (row.extension_duration == null) return 0
+        const parsed = Number(row.extension_duration)
+        return Number.isFinite(parsed) ? parsed : 0
+      })()
       // Build prefill payload for createBooking page
       const prefill = {
-        email: row.username || "",
-        completeName: [row.firstname, row.lastname].filter(Boolean).join(" "),
-        contactNumber: row.contact_info || "",
+        email: row.username || '',
+        completeName: [row.firstname, row.lastname].filter(Boolean).join(' '),
+        contactNumber: row.contact_info || '',
         contactPersonAndNumber: combinedContact,
-        eventName: row.eventName || "",
-        eventLocation: row.place || "",
+        eventName: row.eventName || '',
+        eventLocation: row.place || '',
         extensionHours,
-        booth_placement: "Indoor",
-        signal: row.strongest_signal || "",
-        package: row.package || "The Hanz",
-        selectedGrids: (row.grid || "")
-          .split(",")
+        booth_placement: 'Indoor',
+        signal: row.strongest_signal || '',
+        package: row.package || 'The Hanz',
+        selectedGrids: (row.grid || '')
+          .split(',')
           .map((s) => s.trim())
           .filter(Boolean),
         eventDate: row.date ? new Date(row.date) : new Date(),
-        eventTime: row.startTime || "12:00",
-        eventEndTime: row.endTime || "14:00",
+        eventTime: row.startTime || '12:00',
+        eventEndTime: row.endTime || '14:00',
         // Attach the requestid for reference if needed during save
         __requestid: row.requestid ?? null,
-      };
-      if (typeof window !== "undefined") {
-        sessionStorage.setItem("edit_booking_prefill", JSON.stringify(prefill));
       }
-      router.push("/admin/createBooking?prefill=1");
+      if (typeof window !== 'undefined') {
+        sessionStorage.setItem('edit_booking_prefill', JSON.stringify(prefill))
+      }
+      router.push('/admin/createBooking?prefill=1')
     } catch {
       // no-op; optionally toast an error
     }
-  };
+  }
 
   // Helpers for Assign Staff
   const ensureConfirmedId = async (row: BookingRow): Promise<number | null> => {
     if (row.confirmedid && Number.isFinite(row.confirmedid)) {
-      return Number(row.confirmedid);
+      return Number(row.confirmedid)
     }
-    if (!row.requestid) return null;
-    return getConfirmedBookingIdByRequest(row.requestid);
-  };
+    if (!row.requestid) return null
+    return getConfirmedBookingIdByRequest(row.requestid)
+  }
 
   const openAssign = async (row: BookingRow) => {
-    setAssignTarget(row);
-    setAssignOpen(true);
+    setAssignTarget(row)
+    setAssignOpen(true)
     try {
-      const employees = await listEmployees();
-      setStaffList(employees);
-      const cid = await ensureConfirmedId(row);
+      const employees = await listEmployees()
+      setStaffList(employees)
+      const cid = await ensureConfirmedId(row)
       if (cid) {
-        const assigned = await listAssignedStaff(cid);
-        const ids = assigned.map((s) => s.id).filter(Boolean);
-        setSelectedStaff(new Set(ids));
+        const assigned = await listAssignedStaff(cid)
+        const ids = assigned.map((s) => s.id).filter(Boolean)
+        setSelectedStaff(new Set(ids))
       } else {
-        setSelectedStaff(new Set());
+        setSelectedStaff(new Set())
       }
     } catch {
-      setStaffList([]);
-      setSelectedStaff(new Set());
+      setStaffList([])
+      setSelectedStaff(new Set())
     }
-  };
+  }
 
   // Open extend modal for approved/confirmed bookings
   const openExtend = async (row: BookingRow) => {
     try {
-      const cid = await ensureConfirmedId(row);
+      const cid = await ensureConfirmedId(row)
       if (!cid) {
-        toast.error("Confirmed booking not found for this row");
-        return;
+        toast.error('Confirmed booking not found for this row')
+        return
       }
-      setExtendTarget({ row, cid });
-      setExtendHours("1");
-      setExtendConflict(null);
-      setExtendOpen(true);
+      setExtendTarget({ row, cid })
+      setExtendHours('1')
+      setExtendConflict(null)
+      setExtendOpen(true)
     } catch (e) {
-      toast.error("Unable to open extension dialog");
+      toast.error('Unable to open extension dialog')
     }
-  };
+  }
 
   const toggleStaff = (id: number) => {
     setSelectedStaff((prev) => {
-      const next = new Set(prev);
+      const next = new Set(prev)
       if (next.has(id)) {
-        next.delete(id);
+        next.delete(id)
       } else {
-        if (next.size >= 2) return next; // enforce max 2
-        next.add(id);
+        if (next.size >= 2) return next // enforce max 2
+        next.add(id)
       }
-      return next;
-    });
-  };
+      return next
+    })
+  }
 
   const confirmAssign = async () => {
-    if (!assignTarget) return;
-    const ids = Array.from(selectedStaff);
+    if (!assignTarget) return
+    const ids = Array.from(selectedStaff)
     if (!ids.length) {
-      toast.error("Please select at least one staff");
-      return;
+      toast.error('Please select at least one staff')
+      return
     }
-    const cid = await ensureConfirmedId(assignTarget);
+    const cid = await ensureConfirmedId(assignTarget)
     if (!cid) {
-      toast.error("Confirmed booking not found for this row");
-      return;
+      toast.error('Confirmed booking not found for this row')
+      return
     }
     try {
-      setAssignBusy(true);
+      setAssignBusy(true)
       // Replace the current assigned staff set with the newly selected ones
-      await replaceAssignedStaff(cid, ids);
-      toast.success("Staff assignment updated");
-      setAssignOpen(false);
-      setAssignTarget(null);
+      await replaceAssignedStaff(cid, ids)
+      toast.success('Staff assignment updated')
+      setAssignOpen(false)
+      setAssignTarget(null)
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : "Failed to assign staff";
-      toast.error(msg);
+      const msg = e instanceof Error ? e.message : 'Failed to assign staff'
+      toast.error(msg)
     } finally {
-      setAssignBusy(false);
+      setAssignBusy(false)
     }
-  };
+  }
 
   // CHANGED: remove window.confirm, just perform the action
   const handleCancel = async (row: BookingRow) => {
-    if (!(row.requestid && row.status === "approved")) return;
+    if (!(row.requestid && row.status === 'approved')) return
     try {
-      setBusy("cancel");
+      setBusy('cancel')
       await cancelConfirmedBooking({
         requestid: row.requestid,
-        reason: "Admin cancel via ManageBooking",
-      });
+        reason: 'Admin cancel via ManageBooking',
+      })
       setRows((prev) =>
         prev.map((r) =>
-          r.requestid === row.requestid ? { ...r, status: "cancelled" } : r
+          r.requestid === row.requestid ? { ...r, status: 'cancelled' } : r
         )
-      );
-      toast.success("Booking cancelled");
+      )
+      toast.success('Booking cancelled')
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : "Failed to cancel booking";
-      toast.error(msg);
+      const msg = e instanceof Error ? e.message : 'Failed to cancel booking'
+      toast.error(msg)
     } finally {
-      setBusy(null);
-      setCancelOpen(false);
-      setTargetRow(null);
+      setBusy(null)
+      setCancelOpen(false)
+      setTargetRow(null)
     }
-  };
+  }
 
   const handleUndoCancel = async (row: BookingRow) => {
-    if (!row.requestid || row.status !== "cancelled") return;
-    const targetDate = toISODateString(row.date);
+    if (!row.requestid || row.status !== 'cancelled') return
+    const targetDate = toISODateString(row.date)
     const normalizeTime = (value: string | null | undefined) =>
-      typeof value === "string" && value.trim() ? value.trim().slice(0, 5) : "";
-    const targetTime = normalizeTime(row.startTime);
+      typeof value === 'string' && value.trim() ? value.trim().slice(0, 5) : ''
+    const targetTime = normalizeTime(row.startTime)
     const targetPackageId =
-      typeof row.packageId === "number" && Number.isFinite(row.packageId)
+      typeof row.packageId === 'number' && Number.isFinite(row.packageId)
         ? row.packageId
-        : null;
+        : null
     const conflict = rows.some((other) => {
-      if (other.id === row.id) return false;
-      if (other.status !== "approved") return false;
-      const otherDate = toISODateString(other.date);
-      if (!targetDate || !otherDate || targetDate !== otherDate) return false;
-      const otherTime = normalizeTime(other.startTime);
-      if (targetTime && otherTime && targetTime !== otherTime) return false;
+      if (other.id === row.id) return false
+      if (other.status !== 'approved') return false
+      const otherDate = toISODateString(other.date)
+      if (!targetDate || !otherDate || targetDate !== otherDate) return false
+      const otherTime = normalizeTime(other.startTime)
+      if (targetTime && otherTime && targetTime !== otherTime) return false
       if (targetPackageId != null) {
         const otherPkgId =
-          typeof other.packageId === "number" &&
+          typeof other.packageId === 'number' &&
           Number.isFinite(other.packageId)
             ? other.packageId
-            : null;
+            : null
         if (otherPkgId != null && otherPkgId !== targetPackageId) {
-          return false;
+          return false
         }
       }
-      return true;
-    });
+      return true
+    })
     if (conflict) {
       toast.error(
-        "Cannot undo cancellation: another approved booking already exists for this schedule."
-      );
-      return;
+        'Cannot undo cancellation: another approved booking already exists for this schedule.'
+      )
+      return
     }
     try {
-      setBusy("undo");
+      setBusy('undo')
       await updateConfirmedBooking({
         requestid: row.requestid,
-        updates: { bookingStatus: "scheduled" },
-      });
+        updates: { bookingStatus: 'scheduled' },
+      })
       setRows((prev) =>
         prev.map((r) =>
-          r.requestid === row.requestid ? { ...r, status: "approved" } : r
+          r.requestid === row.requestid ? { ...r, status: 'approved' } : r
         )
-      );
-      toast.success("Booking restored to scheduled");
+      )
+      toast.success('Booking restored to scheduled')
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : "Failed to undo cancel";
-      toast.error(msg);
+      const msg = e instanceof Error ? e.message : 'Failed to undo cancel'
+      toast.error(msg)
     } finally {
-      setBusy(null);
-      setUndoOpen(false);
-      setTargetRow(null);
+      setBusy(null)
+      setUndoOpen(false)
+      setTargetRow(null)
     }
-  };
+  }
 
   return (
     <div className="p-2 flex flex-col min-h-[65vh]">
@@ -1823,17 +1829,17 @@ function MasterListPanel({
           <PopoverContent className="w-32 p-1" align="end">
             <div className="flex flex-col">
               {statusOptions.map((opt) => {
-                const selected = opt.value === statusFilter;
+                const selected = opt.value === statusFilter
                 return (
                   <button
                     key={opt.value}
                     type="button"
                     className={`flex items-center justify-between w-full text-left px-2 py-1.5 rounded text-sm hover:bg-gray-100 ${
-                      selected ? "bg-gray-50" : ""
+                      selected ? 'bg-gray-50' : ''
                     }`}
                     onClick={() => {
-                      setStatusFilter(opt.value as BookingStatus | "all");
-                      setPage(1);
+                      setStatusFilter(opt.value as BookingStatus | 'all')
+                      setPage(1)
                     }}
                   >
                     <span>{opt.label}</span>
@@ -1843,7 +1849,7 @@ function MasterListPanel({
                       <span className="w-4 h-4" />
                     )}
                   </button>
-                );
+                )
               })}
             </div>
           </PopoverContent>
@@ -1865,17 +1871,17 @@ function MasterListPanel({
             <PopoverContent className="w-40 p-1" align="end">
               <div className="flex flex-col">
                 {sortOptions.map((option) => {
-                  const selected = option.value === sortMode;
+                  const selected = option.value === sortMode
                   return (
                     <button
                       key={option.value}
                       type="button"
                       onClick={() => {
-                        setSortMode(option.value);
-                        setPage(1);
+                        setSortMode(option.value)
+                        setPage(1)
                       }}
                       className={`flex items-center justify-between w-full text-left px-2 py-1.5 rounded text-sm hover:bg-gray-100 ${
-                        selected ? "bg-gray-50" : ""
+                        selected ? 'bg-gray-50' : ''
                       }`}
                     >
                       <span>{option.label}</span>
@@ -1885,7 +1891,7 @@ function MasterListPanel({
                         <span className="w-4 h-4" />
                       )}
                     </button>
-                  );
+                  )
                 })}
               </div>
             </PopoverContent>
@@ -1894,8 +1900,8 @@ function MasterListPanel({
             type="text"
             value={search}
             onChange={(e) => {
-              setSearch(e.target.value);
-              setPage(1);
+              setSearch(e.target.value)
+              setPage(1)
             }}
             placeholder="Search event name…"
             className="h-9 w-64 max-w-[50vw] px-3 rounded-full outline-none bg-gray-400 text-sm "
@@ -1905,8 +1911,8 @@ function MasterListPanel({
             <button
               type="button"
               onClick={() => {
-                setSearch("");
-                setPage(1);
+                setSearch('')
+                setPage(1)
               }}
               className="h-9 px-3 rounded border border-gray-300 bg-white text-sm hover:bg-gray-100"
               aria-label="Clear search"
@@ -1975,74 +1981,74 @@ function MasterListPanel({
                           {(() => {
                             const sanitizedContactNumber = (() => {
                               const direct = (
-                                row.contact_person_number || ""
-                              ).trim();
-                              if (direct) return direct;
-                              const info = (row.contact_info || "").toString();
-                              const match = info.match(/(\+?\d[\d\s-]{6,}\d)/);
-                              const extracted = (match?.[1] || "").trim();
-                              return extracted || "—";
-                            })();
+                                row.contact_person_number || ''
+                              ).trim()
+                              if (direct) return direct
+                              const info = (row.contact_info || '').toString()
+                              const match = info.match(/(\+?\d[\d\s-]{6,}\d)/)
+                              const extracted = (match?.[1] || '').trim()
+                              return extracted || '—'
+                            })()
 
-                            const gridNames = (row.grid || "")
-                              .split(",")
+                            const gridNames = (row.grid || '')
+                              .split(',')
                               .map((s) => s.trim())
-                              .filter((s) => s && s !== "—");
+                              .filter((s) => s && s !== '—')
 
                             const detailItems: Array<{
-                              label: string;
-                              value: ReactNode;
+                              label: string
+                              value: ReactNode
                             }> = [
                               {
-                                label: "Contact info",
+                                label: 'Contact info',
                                 value: (
                                   <span className="whitespace-pre-wrap break-words">
-                                    {row.contact_info || "—"}
+                                    {row.contact_info || '—'}
                                   </span>
                                 ),
                               },
                               {
-                                label: "Contact name",
-                                value: (row.contact_person || "").trim() || "—",
+                                label: 'Contact name',
+                                value: (row.contact_person || '').trim() || '—',
                               },
                               {
-                                label: "Contact number",
+                                label: 'Contact number',
                                 value: sanitizedContactNumber,
                               },
                               {
-                                label: "Address",
-                                value: row.place || "—",
+                                label: 'Address',
+                                value: row.place || '—',
                               },
                               {
-                                label: "Booth placement",
-                                value: row.booth_placement || "—",
+                                label: 'Booth placement',
+                                value: row.booth_placement || '—',
                               },
                               {
-                                label: "Strongest signal",
-                                value: row.strongest_signal || "—",
+                                label: 'Strongest signal',
+                                value: row.strongest_signal || '—',
                               },
                               {
-                                label: "Extension duration",
+                                label: 'Extension duration',
                                 value:
                                   row.extension_duration != null
                                     ? `${row.extension_duration} hr`
-                                    : "—",
+                                    : '—',
                               },
                               {
-                                label: "Total price (incl. extension)",
+                                label: 'Total price (incl. extension)',
                                 value:
-                                  typeof row.amountDue === "number"
+                                  typeof row.amountDue === 'number'
                                     ? `₱${row.amountDue.toLocaleString(
-                                        "en-PH",
+                                        'en-PH',
                                         {
                                           minimumFractionDigits: 2,
                                           maximumFractionDigits: 2,
                                         }
                                       )}`
-                                    : "—",
+                                    : '—',
                               },
                               {
-                                label: "Grids",
+                                label: 'Grids',
                                 value: gridNames.length ? (
                                   <ul className="list-disc list-inside space-y-1">
                                     {gridNames.map((n) => (
@@ -2050,10 +2056,10 @@ function MasterListPanel({
                                     ))}
                                   </ul>
                                 ) : (
-                                  "—"
+                                  '—'
                                 ),
                               },
-                            ];
+                            ]
 
                             return (
                               <div className="text-sm">
@@ -2070,7 +2076,7 @@ function MasterListPanel({
                                   ))}
                                 </div>
                               </div>
-                            );
+                            )
                           })()}
                         </PopoverContent>
                       </Popover>
@@ -2128,14 +2134,14 @@ function MasterListPanel({
                           row.contractStatus ?? null
                         )}`}
                       >
-                        {row.contractStatus ?? "—"}
+                        {row.contractStatus ?? '—'}
                       </span>
                     </td>
 
                     {/* Actions */}
                     <td className="px-3 py-2">
                       {/* If declined, hide the Actions button entirely */}
-                      {row.status === "declined" ? null : (
+                      {row.status === 'declined' ? null : (
                         <Popover>
                           <PopoverTrigger asChild>
                             <button
@@ -2149,20 +2155,20 @@ function MasterListPanel({
                           </PopoverTrigger>
                           <PopoverContent className="w-40 p-1" align="end">
                             {(() => {
-                              const isPending = row.status === "pending";
-                              const isApproved = row.status === "approved";
-                              const isCancelled = row.status === "cancelled";
+                              const isPending = row.status === 'pending'
+                              const isApproved = row.status === 'approved'
+                              const isCancelled = row.status === 'cancelled'
 
-                              const showViewContract = !isCancelled;
-                              const showUploadContract = isPending; // hide for approved and cancelled
-                              const showVerifyContract = isPending; // hide for approved and cancelled
-                              const showReview = isPending;
+                              const showViewContract = !isCancelled
+                              const showUploadContract = isPending // hide for approved and cancelled
+                              const showVerifyContract = isPending // hide for approved and cancelled
+                              const showReview = isPending
                               // Edit should not be available for pending or cancelled requests
-                              const showEdit = !isCancelled && !isPending;
-                              const showCancel = isApproved;
-                              const showUndoCancel = isCancelled;
-                              const showAssignStaff = isApproved;
-                              const showExtend = isApproved;
+                              const showEdit = !isCancelled && !isPending
+                              const showCancel = isApproved
+                              const showUndoCancel = isCancelled
+                              const showAssignStaff = isApproved
+                              const showExtend = isApproved
 
                               return (
                                 <div className="flex flex-col">
@@ -2189,12 +2195,12 @@ function MasterListPanel({
                                     <button
                                       type="button"
                                       className={`text-left px-2 py-1.5 rounded text-sm hover:bg-gray-100 ${
-                                        row.contractStatus === "Verified"
-                                          ? "opacity-50 cursor-not-allowed"
-                                          : ""
+                                        row.contractStatus === 'Verified'
+                                          ? 'opacity-50 cursor-not-allowed'
+                                          : ''
                                       }`}
                                       disabled={
-                                        row.contractStatus === "Verified"
+                                        row.contractStatus === 'Verified'
                                       }
                                       onClick={() => quickVerifyContract(row)}
                                     >
@@ -2230,9 +2236,9 @@ function MasterListPanel({
                                       type="button"
                                       className="text-left px-2 py-1.5 rounded text-sm hover:bg-gray-100"
                                       onClick={() => {
-                                        if (!row.requestid) return;
-                                        setTargetRow(row);
-                                        setCancelOpen(true);
+                                        if (!row.requestid) return
+                                        setTargetRow(row)
+                                        setCancelOpen(true)
                                       }}
                                     >
                                       Cancel
@@ -2245,9 +2251,9 @@ function MasterListPanel({
                                       type="button"
                                       className="text-left px-2 py-1.5 rounded text-sm hover:bg-gray-100"
                                       onClick={() => {
-                                        if (!row.requestid) return;
-                                        setTargetRow(row);
-                                        setUndoOpen(true);
+                                        if (!row.requestid) return
+                                        setTargetRow(row)
+                                        setUndoOpen(true)
                                       }}
                                     >
                                       Undo Cancel
@@ -2276,7 +2282,7 @@ function MasterListPanel({
                                     </button>
                                   )}
                                 </div>
-                              );
+                              )
                             })()}
                           </PopoverContent>
                         </Popover>
@@ -2297,10 +2303,10 @@ function MasterListPanel({
               <PaginationPrevious
                 href="#"
                 className="text-black no-underline hover:no-underline hover:text-black"
-                style={{ textDecoration: "none" }}
+                style={{ textDecoration: 'none' }}
                 onClick={(e) => {
-                  e.preventDefault();
-                  setPage((p) => Math.max(1, p - 1));
+                  e.preventDefault()
+                  setPage((p) => Math.max(1, p - 1))
                 }}
               />
             </PaginationItem>
@@ -2310,10 +2316,10 @@ function MasterListPanel({
                   href="#"
                   isActive={n === page}
                   className="text-black no-underline hover:no-underline hover:text-black"
-                  style={{ textDecoration: "none" }}
+                  style={{ textDecoration: 'none' }}
                   onClick={(e) => {
-                    e.preventDefault();
-                    setPage(n);
+                    e.preventDefault()
+                    setPage(n)
                   }}
                 >
                   {n}
@@ -2324,10 +2330,10 @@ function MasterListPanel({
               <PaginationNext
                 href="#"
                 className="text-black no-underline hover:no-underline hover:text-black"
-                style={{ textDecoration: "none" }}
+                style={{ textDecoration: 'none' }}
                 onClick={(e) => {
-                  e.preventDefault();
-                  setPage((p) => Math.min(totalPages, p + 1));
+                  e.preventDefault()
+                  setPage((p) => Math.min(totalPages, p + 1))
                 }}
               />
             </PaginationItem>
@@ -2340,8 +2346,8 @@ function MasterListPanel({
         open={cancelOpen}
         onOpenChange={(o) => {
           if (!o) {
-            setCancelOpen(false);
-            setTargetRow(null);
+            setCancelOpen(false)
+            setTargetRow(null)
           }
         }}
       >
@@ -2354,21 +2360,21 @@ function MasterListPanel({
           </DialogHeader>
           <div className="text-sm space-y-1">
             <div>
-              <span className="font-medium">Event:</span>{" "}
-              {targetRow?.eventName || "—"}
+              <span className="font-medium">Event:</span>{' '}
+              {targetRow?.eventName || '—'}
             </div>
             <div>
-              <span className="font-medium">Date:</span>{" "}
-              {targetRow?.date ? formatDisplayDate(targetRow.date) : "—"}
+              <span className="font-medium">Date:</span>{' '}
+              {targetRow?.date ? formatDisplayDate(targetRow.date) : '—'}
             </div>
             <div>
-              <span className="font-medium">Time:</span>{" "}
+              <span className="font-medium">Time:</span>{' '}
               {targetRow?.startTime
                 ? formatDisplayTime(targetRow.startTime)
-                : "—"}
+                : '—'}
               {targetRow?.endTime
                 ? ` - ${formatDisplayTime(targetRow.endTime)}`
-                : ""}
+                : ''}
             </div>
           </div>
           <DialogFooter>
@@ -2383,12 +2389,12 @@ function MasterListPanel({
             <button
               type="button"
               className="px-4 py-2 rounded bg-litratored text-white text-sm disabled:opacity-50"
-              disabled={busy === "cancel"}
+              disabled={busy === 'cancel'}
               onClick={() => {
-                if (targetRow) handleCancel(targetRow);
+                if (targetRow) handleCancel(targetRow)
               }}
             >
-              {busy === "cancel" ? "Cancelling…" : "Yes, cancel"}
+              {busy === 'cancel' ? 'Cancelling…' : 'Yes, cancel'}
             </button>
           </DialogFooter>
         </DialogContent>
@@ -2399,10 +2405,10 @@ function MasterListPanel({
         open={extendOpen}
         onOpenChange={(o) => {
           if (!o) {
-            setExtendOpen(false);
-            setExtendTarget(null);
-            setExtendConflict(null);
-            setExtendBusy(false);
+            setExtendOpen(false)
+            setExtendTarget(null)
+            setExtendConflict(null)
+            setExtendBusy(false)
           }
         }}
       >
@@ -2428,7 +2434,7 @@ function MasterListPanel({
             </label>
             {extendConflict ? (
               <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded p-2">
-                This extension overlaps another accepted booking on{" "}
+                This extension overlaps another accepted booking on{' '}
                 {extendConflict.event_date} at {extendConflict.event_time} (with
                 buffer).
               </div>
@@ -2439,9 +2445,9 @@ function MasterListPanel({
               type="button"
               className="px-4 py-2 rounded border text-sm"
               onClick={() => {
-                setExtendOpen(false);
-                setExtendTarget(null);
-                setExtendConflict(null);
+                setExtendOpen(false)
+                setExtendTarget(null)
+                setExtendConflict(null)
               }}
               disabled={extendBusy}
             >
@@ -2451,70 +2457,70 @@ function MasterListPanel({
               type="button"
               className="px-4 py-2 rounded bg-litratoblack text-white text-sm disabled:opacity-50"
               onClick={async () => {
-                if (!extendTarget) return;
-                const add = Math.max(0, Number(extendHours) || 0);
-                if (!Number.isFinite(add)) return;
-                setExtendBusy(true);
+                if (!extendTarget) return
+                const add = Math.max(0, Number(extendHours) || 0)
+                if (!Number.isFinite(add)) return
+                setExtendBusy(true)
                 try {
                   // Lazy import to avoid top-level coupling
                   const {
                     preflightAdminExtensionConflicts,
                     setAdminExtensionDuration,
                   } = await import(
-                    "../../../../schemas/functions/ConfirmedBookings/admin"
-                  );
+                    '../../../../schemas/functions/ConfirmedBookings/admin'
+                  )
                   if (extendConflict) {
                     await setAdminExtensionDuration(extendTarget.cid, {
                       add_hours: add,
                       force: true,
-                    });
+                    })
                   } else {
                     const { conflicts } =
                       await preflightAdminExtensionConflicts(extendTarget.cid, {
                         add_hours: add,
                         bufferHours: 2,
-                      });
+                      })
                     if (Array.isArray(conflicts) && conflicts.length) {
-                      setExtendConflict(conflicts[0]);
-                      return;
+                      setExtendConflict(conflicts[0])
+                      return
                     }
                     await setAdminExtensionDuration(extendTarget.cid, {
                       add_hours: add,
-                    });
+                    })
                   }
                   // Optimistically update the row in-place
                   setRows((prev) =>
                     prev.map((r) => {
                       const same = r.requestid
                         ? r.requestid === extendTarget.row.requestid
-                        : r.id === extendTarget.row.id;
-                      if (!same) return r;
-                      const base = Number(r.baseTotal || 0);
+                        : r.id === extendTarget.row.id
+                      if (!same) return r
+                      const base = Number(r.baseTotal || 0)
                       const currExt = Math.max(
                         0,
                         Number(r.extension_duration || 0)
-                      );
-                      const nextExt = currExt + add;
+                      )
+                      const nextExt = currExt + add
                       return {
                         ...r,
                         extension_duration: nextExt,
                         amountDue: base + nextExt * 2000,
-                      };
+                      }
                     })
-                  );
-                  setExtendOpen(false);
+                  )
+                  setExtendOpen(false)
                 } catch (e) {
-                  console.error("Extension failed:", e);
+                  console.error('Extension failed:', e)
                 } finally {
-                  setExtendBusy(false);
+                  setExtendBusy(false)
                 }
               }}
             >
               {extendConflict
-                ? "Proceed anyway"
+                ? 'Proceed anyway'
                 : extendBusy
-                ? "Saving…"
-                : "Save"}
+                ? 'Saving…'
+                : 'Save'}
             </button>
           </DialogFooter>
         </DialogContent>
@@ -2525,8 +2531,8 @@ function MasterListPanel({
         open={undoOpen}
         onOpenChange={(o) => {
           if (!o) {
-            setUndoOpen(false);
-            setTargetRow(null);
+            setUndoOpen(false)
+            setTargetRow(null)
           }
         }}
       >
@@ -2539,21 +2545,21 @@ function MasterListPanel({
           </DialogHeader>
           <div className="text-sm space-y-1">
             <div>
-              <span className="font-medium">Event:</span>{" "}
-              {targetRow?.eventName || "—"}
+              <span className="font-medium">Event:</span>{' '}
+              {targetRow?.eventName || '—'}
             </div>
             <div>
-              <span className="font-medium">Date:</span>{" "}
-              {targetRow?.date ? formatDisplayDate(targetRow.date) : "—"}
+              <span className="font-medium">Date:</span>{' '}
+              {targetRow?.date ? formatDisplayDate(targetRow.date) : '—'}
             </div>
             <div>
-              <span className="font-medium">Time:</span>{" "}
+              <span className="font-medium">Time:</span>{' '}
               {targetRow?.startTime
                 ? formatDisplayTime(targetRow.startTime)
-                : "—"}
+                : '—'}
               {targetRow?.endTime
                 ? ` - ${formatDisplayTime(targetRow.endTime)}`
-                : ""}
+                : ''}
             </div>
           </div>
           <DialogFooter>
@@ -2568,12 +2574,12 @@ function MasterListPanel({
             <button
               type="button"
               className="px-4 py-2 rounded bg-litratoblack text-white text-sm disabled:opacity-50"
-              disabled={busy === "undo"}
+              disabled={busy === 'undo'}
               onClick={() => {
-                if (targetRow) handleUndoCancel(targetRow);
+                if (targetRow) handleUndoCancel(targetRow)
               }}
             >
-              {busy === "undo" ? "Restoring…" : "Yes, restore"}
+              {busy === 'undo' ? 'Restoring…' : 'Yes, restore'}
             </button>
           </DialogFooter>
         </DialogContent>
@@ -2584,9 +2590,9 @@ function MasterListPanel({
         open={assignOpen}
         onOpenChange={(o) => {
           if (!o) {
-            setAssignOpen(false);
-            setAssignTarget(null);
-            setSelectedStaff(new Set());
+            setAssignOpen(false)
+            setAssignTarget(null)
+            setSelectedStaff(new Set())
           }
         }}
       >
@@ -2603,8 +2609,8 @@ function MasterListPanel({
             ) : (
               <ul>
                 {staffList.map((s) => {
-                  const checked = selectedStaff.has(s.id);
-                  const disabled = !checked && selectedStaff.size >= 2;
+                  const checked = selectedStaff.has(s.id)
+                  const disabled = !checked && selectedStaff.size >= 2
                   return (
                     <li
                       key={s.id}
@@ -2623,7 +2629,7 @@ function MasterListPanel({
                         <span className="text-xs text-gray-600">{s.email}</span>
                       </div>
                     </li>
-                  );
+                  )
                 })}
               </ul>
             )}
@@ -2643,7 +2649,7 @@ function MasterListPanel({
               disabled={assignBusy || selectedStaff.size === 0}
               onClick={confirmAssign}
             >
-              {assignBusy ? "Assigning…" : "Assign"}
+              {assignBusy ? 'Assigning…' : 'Assign'}
             </button>
           </DialogFooter>
         </DialogContent>
@@ -2654,12 +2660,12 @@ function MasterListPanel({
         open={reportOpen}
         onOpenChange={(o) => {
           if (!o) {
-            setReportOpen(false);
-            setReportTarget(null);
-            setReportPayment(null);
-            setReportItems(null);
-            setReportStaff([]);
-            setReportItemLists(null);
+            setReportOpen(false)
+            setReportTarget(null)
+            setReportPayment(null)
+            setReportItems(null)
+            setReportStaff([])
+            setReportItemLists(null)
           }
         }}
       >
@@ -2678,41 +2684,41 @@ function MasterListPanel({
               </div>
               <div className="space-y-1 text-gray-900">
                 <div>
-                  <span className="text-gray-600">Event:</span>{" "}
-                  {reportTarget?.eventName || "—"}
+                  <span className="text-gray-600">Event:</span>{' '}
+                  {reportTarget?.eventName || '—'}
                 </div>
                 <div>
-                  <span className="text-gray-600">Date:</span>{" "}
+                  <span className="text-gray-600">Date:</span>{' '}
                   {reportTarget?.date
                     ? formatDisplayDate(reportTarget.date)
-                    : "—"}
+                    : '—'}
                 </div>
                 <div>
-                  <span className="text-gray-600">Time:</span>{" "}
+                  <span className="text-gray-600">Time:</span>{' '}
                   {reportTarget?.startTime
                     ? formatDisplayTime(reportTarget.startTime)
-                    : "—"}
+                    : '—'}
                   {reportTarget?.endTime
                     ? ` - ${formatDisplayTime(reportTarget.endTime)}`
-                    : ""}
+                    : ''}
                 </div>
                 <div>
-                  <span className="text-gray-600">Location:</span>{" "}
-                  {reportTarget?.place || "—"}
+                  <span className="text-gray-600">Location:</span>{' '}
+                  {reportTarget?.place || '—'}
                 </div>
                 <div>
-                  <span className="text-gray-600">Package:</span>{" "}
-                  {reportTarget?.package || "—"}
+                  <span className="text-gray-600">Package:</span>{' '}
+                  {reportTarget?.package || '—'}
                 </div>
                 <div>
-                  <span className="text-gray-600">Grid:</span>{" "}
-                  {reportTarget?.grid || "—"}
+                  <span className="text-gray-600">Grid:</span>{' '}
+                  {reportTarget?.grid || '—'}
                 </div>
                 <div>
-                  <span className="text-gray-600">Event status:</span>{" "}
+                  <span className="text-gray-600">Event status:</span>{' '}
                   {reportTarget
                     ? eventStatusLabel(reportTarget.eventStatus)
-                    : "—"}
+                    : '—'}
                 </div>
               </div>
             </div>
@@ -2727,32 +2733,32 @@ function MasterListPanel({
               ) : (
                 <div className="space-y-1 text-gray-900">
                   <div>
-                    <span className="text-gray-600">Status:</span>{" "}
+                    <span className="text-gray-600">Status:</span>{' '}
                     {reportPayment
-                      ? reportPayment.status === "paid"
-                        ? "Paid"
-                        : reportPayment.status === "partial"
-                        ? "Partially Paid"
-                        : "Unpaid"
-                      : "—"}
+                      ? reportPayment.status === 'paid'
+                        ? 'Paid'
+                        : reportPayment.status === 'partial'
+                        ? 'Partially Paid'
+                        : 'Unpaid'
+                      : '—'}
                   </div>
                   <div>
-                    <span className="text-gray-600">Paid so far:</span>{" "}
-                    {typeof reportPayment?.paidTotal === "number"
-                      ? `₱${reportPayment.paidTotal.toLocaleString("en-PH", {
+                    <span className="text-gray-600">Paid so far:</span>{' '}
+                    {typeof reportPayment?.paidTotal === 'number'
+                      ? `₱${reportPayment.paidTotal.toLocaleString('en-PH', {
                           minimumFractionDigits: 2,
                           maximumFractionDigits: 2,
                         })}`
-                      : "—"}
+                      : '—'}
                   </div>
                   <div>
-                    <span className="text-gray-600">Amount due:</span>{" "}
-                    {typeof reportPayment?.amountDue === "number"
-                      ? `₱${reportPayment.amountDue.toLocaleString("en-PH", {
+                    <span className="text-gray-600">Amount due:</span>{' '}
+                    {typeof reportPayment?.amountDue === 'number'
+                      ? `₱${reportPayment.amountDue.toLocaleString('en-PH', {
                           minimumFractionDigits: 2,
                           maximumFractionDigits: 2,
                         })}`
-                      : "—"}
+                      : '—'}
                   </div>
                 </div>
               )}
@@ -2795,11 +2801,11 @@ function MasterListPanel({
                   </div>
                   <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                     <div className="max-h-44 overflow-y-auto pr-1">
-                      <div className="font-semibold mb-1">Damaged items</div>
-                      {reportItemLists && reportItemLists.damaged.length ? (
+                      <div className="font-semibold mb-1">Good items</div>
+                      {reportItemLists && reportItemLists.good.length ? (
                         <ul className="list-disc list-inside space-y-0.5">
-                          {reportItemLists.damaged.map((it, idx) => (
-                            <li key={`dam-${idx}`}>
+                          {reportItemLists.good.map((it, idx) => (
+                            <li key={`good-${idx}`}>
                               {it.name} × {it.qty}
                             </li>
                           ))}
@@ -2809,11 +2815,11 @@ function MasterListPanel({
                       )}
                     </div>
                     <div className="max-h-44 overflow-y-auto pr-1">
-                      <div className="font-semibold mb-1">Good items</div>
-                      {reportItemLists && reportItemLists.good.length ? (
+                      <div className="font-semibold mb-1">Damaged items</div>
+                      {reportItemLists && reportItemLists.damaged.length ? (
                         <ul className="list-disc list-inside space-y-0.5">
-                          {reportItemLists.good.map((it, idx) => (
-                            <li key={`good-${idx}`}>
+                          {reportItemLists.damaged.map((it, idx) => (
+                            <li key={`dam-${idx}`}>
                               {it.name} × {it.qty}
                             </li>
                           ))}
@@ -2840,15 +2846,15 @@ function MasterListPanel({
                 <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
                   {reportStaffLogs.map((log, idx) => {
                     const fmt = (v?: string | null) =>
-                      v ? formatDisplayDateTime(v) : "—";
+                      v ? formatDisplayDateTime(v) : '—'
                     const name =
-                      `${log.firstname || ""} ${log.lastname || ""}`.trim() ||
+                      `${log.firstname || ''} ${log.lastname || ''}`.trim() ||
                       log.username ||
-                      "Staff";
+                      'Staff'
                     const key =
                       log.id != null
                         ? `staff-log-${log.id}`
-                        : `staff-log-${log.staff_userid}-${idx}`;
+                        : `staff-log-${log.staff_userid}-${idx}`
                     return (
                       <div
                         key={key}
@@ -2857,30 +2863,30 @@ function MasterListPanel({
                         <div className="font-medium text-sm">{name}</div>
                         <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs mt-2 sm:text-sm">
                           <div>
-                            <span className="text-gray-600">Arrived:</span>{" "}
+                            <span className="text-gray-600">Arrived:</span>{' '}
                             {fmt(log.arrived_at)}
                           </div>
                           <div>
                             <span className="text-gray-600">
                               Setup finished:
-                            </span>{" "}
+                            </span>{' '}
                             {fmt(log.setup_finished_at)}
                           </div>
                           <div>
-                            <span className="text-gray-600">Started:</span>{" "}
+                            <span className="text-gray-600">Started:</span>{' '}
                             {fmt(log.started_at)}
                           </div>
                           <div>
-                            <span className="text-gray-600">Ended:</span>{" "}
+                            <span className="text-gray-600">Ended:</span>{' '}
                             {fmt(log.ended_at)}
                           </div>
                           <div>
-                            <span className="text-gray-600">Picked up:</span>{" "}
+                            <span className="text-gray-600">Picked up:</span>{' '}
                             {fmt(log.picked_up_at)}
                           </div>
                         </div>
                       </div>
-                    );
+                    )
                   })}
                 </div>
               ) : (
@@ -2893,8 +2899,8 @@ function MasterListPanel({
               type="button"
               className="px-4 py-2 rounded border text-sm"
               onClick={() => {
-                setReportOpen(false);
-                setReportTarget(null);
+                setReportOpen(false)
+                setReportTarget(null)
               }}
             >
               Close
@@ -2908,9 +2914,9 @@ function MasterListPanel({
         open={contractOpen}
         onOpenChange={(o) => {
           if (!o) {
-            setContractOpen(false);
-            setContractTargetId(null);
-            setContractRowId(null);
+            setContractOpen(false)
+            setContractTargetId(null)
+            setContractRowId(null)
           }
         }}
       >
@@ -2935,7 +2941,7 @@ function MasterListPanel({
                           }
                         : r
                     )
-                  );
+                  )
                 }
               }}
             />
@@ -2952,185 +2958,209 @@ function MasterListPanel({
         </DialogContent>
       </Dialog>
     </div>
-  );
+  )
 }
 
 // NOTE: Removed the duplicate `use client` block and default export for AdminEventCardsPage at the end of the file.
 // Replaced it with the panelized version below.
 function EventCardsPanel() {
   // Local types to avoid conflicts
-  type Status = "ongoing" | "standby" | "finished";
-  type Payment = "unpaid" | "partially-paid" | "paid";
-  type Item = { name: string; qty?: number };
+  type Status = 'ongoing' | 'standby' | 'finished'
+  type Payment = 'unpaid' | 'partially-paid' | 'paid'
+  type Item = { name: string; qty?: number }
   type AdminEvent = {
-    id: string | number;
-    title: string;
-    packageName?: string;
-    packageId?: number;
-    accountName?: string;
-    dateTime: string;
-    location: string;
-    status: Status;
-    payment: Payment;
-    basePrice?: number;
-    extensionHours?: number;
-    totalPrice?: number;
-    imageUrl?: string;
-    damagedItems?: Item[];
-    assignedStaff?: { id: number; firstname: string; lastname: string }[];
+    id: string | number
+    title: string
+    packageName?: string
+    packageId?: number
+    accountName?: string
+    dateTime: string
+    location: string
+    status: Status
+    payment: Payment
+    basePrice?: number
+    extensionHours?: number
+    totalPrice?: number
+    imageUrl?: string
+    damagedItems?: Item[]
+    assignedStaff?: { id: number; firstname: string; lastname: string }[]
     // extra details
-    strongestSignal?: string;
-    contactInfo?: string;
-    contactPerson?: string;
-    contactPersonNumber?: string;
-    grid?: string;
-    boothPlacement?: string;
-  };
+    strongestSignal?: string
+    contactInfo?: string
+    contactPerson?: string
+    contactPersonNumber?: string
+    grid?: string
+    boothPlacement?: string
+    rawEventDate?: string
+    rawEventTime?: string
+    rawEventEndTime?: string
+  }
 
-  const [events, setEvents] = useState<AdminEvent[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [events, setEvents] = useState<AdminEvent[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const EXT_RATE = 2000
 
   const API_BASE =
-    (process.env.NEXT_PUBLIC_API_BASE?.replace(/\/$/, "") ||
-      "http://localhost:5000") + "/api/admin/confirmed-bookings";
+    (process.env.NEXT_PUBLIC_API_BASE?.replace(/\/$/, '') ||
+      'http://localhost:5000') + '/api/admin/confirmed-bookings'
 
   const mapBookingStatus = useCallback((s?: string): Status => {
-    switch ((s || "").toLowerCase()) {
-      case "in_progress":
-        return "ongoing";
-      case "completed":
-      case "cancelled":
-        return "finished";
-      case "scheduled":
+    switch ((s || '').toLowerCase()) {
+      case 'in_progress':
+        return 'ongoing'
+      case 'completed':
+      case 'cancelled':
+        return 'finished'
+      case 'scheduled':
       default:
-        return "standby";
+        return 'standby'
     }
-  }, []);
+  }, [])
   const mapPaymentStatus = useCallback((s?: string): Payment => {
-    switch ((s || "").toLowerCase()) {
-      case "paid":
-        return "paid";
-      case "partial":
-        return "partially-paid";
-      case "unpaid":
-      case "refunded":
-      case "failed":
+    switch ((s || '').toLowerCase()) {
+      case 'paid':
+        return 'paid'
+      case 'partial':
+        return 'partially-paid'
+      case 'unpaid':
+      case 'refunded':
+      case 'failed':
       default:
-        return "unpaid";
+        return 'unpaid'
     }
-  }, []);
+  }, [])
+
+  const handleExtensionChange = useCallback(
+    (bookingId: AdminEvent['id'], hours: number) => {
+      setEvents((prev) =>
+        prev.map((ev) => {
+          if (ev.id !== bookingId) return ev
+          const safeBase =
+            typeof ev.basePrice === 'number' && Number.isFinite(ev.basePrice)
+              ? ev.basePrice
+              : 0
+          return {
+            ...ev,
+            extensionHours: hours,
+            totalPrice: safeBase + hours * EXT_RATE,
+          }
+        })
+      )
+    },
+    [EXT_RATE]
+  )
 
   useEffect(() => {
-    let mounted = true;
+    let mounted = true
     async function load() {
-      setLoading(true);
-      setError(null);
+      setLoading(true)
+      setError(null)
       try {
-        const token = localStorage.getItem("access_token");
+        const token = localStorage.getItem('access_token')
         const res = await fetch(API_BASE, {
           headers: token ? { Authorization: `Bearer ${token}` } : {},
-        });
-        if (!res.ok) throw new Error(`Failed: ${res.status}`);
-        const data = (await res.json()) as unknown;
+        })
+        if (!res.ok) throw new Error(`Failed: ${res.status}`)
+        const data = (await res.json()) as unknown
         type AdminBookingAPI = {
-          id?: number;
-          confirmed_id?: number;
-          event_name?: string;
-          package_name?: string;
-          package_id?: number;
-          event_date?: string;
-          event_time?: string;
-          event_end_time?: string | null;
-          event_address?: string;
-          extension_duration?: number | string | null;
-          total_booking_price?: number | string | null;
-          booking_status?: string;
-          payment_status?: string;
-          strongest_signal?: string;
-          contact_info?: string;
-          contact_person?: string;
-          contact_person_number?: string;
-          grid?: string;
-          booth_placement?: string | null;
-          firstname?: string;
-          lastname?: string;
-          username?: string;
-        };
+          id?: number
+          confirmed_id?: number
+          event_name?: string
+          package_name?: string
+          package_id?: number
+          event_date?: string
+          event_time?: string
+          event_end_time?: string | null
+          event_address?: string
+          extension_duration?: number | string | null
+          total_booking_price?: number | string | null
+          booking_status?: string
+          payment_status?: string
+          strongest_signal?: string
+          contact_info?: string
+          contact_person?: string
+          contact_person_number?: string
+          grid?: string
+          booth_placement?: string | null
+          firstname?: string
+          lastname?: string
+          username?: string
+        }
         const raw: unknown[] =
-          typeof data === "object" &&
+          typeof data === 'object' &&
           data !== null &&
-          "bookings" in (data as Record<string, unknown>) &&
+          'bookings' in (data as Record<string, unknown>) &&
           Array.isArray((data as Record<string, unknown>).bookings)
             ? ((data as Record<string, unknown>).bookings as unknown[])
-            : [];
-        const allowed = new Set(["scheduled", "in_progress", "completed"]);
+            : []
+        const allowed = new Set(['scheduled', 'in_progress', 'completed'])
         const mapped: AdminEvent[] = raw
           .filter(
-            (b): b is AdminBookingAPI => typeof b === "object" && b !== null
+            (b): b is AdminBookingAPI => typeof b === 'object' && b !== null
           )
           .filter((b) =>
-            allowed.has(String(b.booking_status ?? "").toLowerCase())
+            allowed.has(String(b.booking_status ?? '').toLowerCase())
           )
           .map((b) => {
-            const title = b.event_name || b.package_name || "Event";
-            const date = b.event_date || "";
-            const time = b.event_time || "";
+            const title = b.event_name || b.package_name || 'Event'
+            const date = b.event_date || ''
+            const time = b.event_time || ''
             const rawEnd =
-              typeof b.event_end_time === "string"
+              typeof b.event_end_time === 'string'
                 ? b.event_end_time
-                : undefined;
+                : undefined
             const prettyDate = date
               ? (() => {
-                  const out = formatDisplayDate(date, { long: true });
-                  return out === "—" ? "" : out;
+                  const out = formatDisplayDate(date, { long: true })
+                  return out === '—' ? '' : out
                 })()
-              : "";
+              : ''
             const prettyStart = time
               ? (() => {
-                  const out = formatDisplayTime(time);
-                  return out === "—" ? "" : out;
+                  const out = formatDisplayTime(time)
+                  return out === '—' ? '' : out
                 })()
-              : "";
+              : ''
             const prettyEnd = rawEnd
               ? (() => {
-                  const out = formatDisplayTime(rawEnd);
-                  return out === "—" ? "" : out;
+                  const out = formatDisplayTime(rawEnd)
+                  return out === '—' ? '' : out
                 })()
-              : "";
-            let dateTime = "";
+              : ''
+            let dateTime = ''
             if (prettyDate && prettyStart) {
               dateTime = `${prettyDate} • ${prettyStart}${
-                prettyEnd ? ` – ${prettyEnd}` : ""
-              }`;
+                prettyEnd ? ` – ${prettyEnd}` : ''
+              }`
             } else if (prettyDate) {
-              dateTime = prettyDate;
+              dateTime = prettyDate
             } else if (prettyStart) {
               dateTime = prettyEnd
                 ? `${prettyStart} – ${prettyEnd}`
-                : prettyStart;
+                : prettyStart
             }
             if (!dateTime) {
               const isoStart =
-                date && time ? `${date}T${time}` : date ? `${date}T00:00` : "";
+                date && time ? `${date}T${time}` : date ? `${date}T00:00` : ''
               dateTime = isoStart
                 ? formatDisplayDateTime(isoStart, { long: true })
-                : "—";
+                : '—'
             }
-            const location = b.event_address || "";
-            const extHours = Number(b.extension_duration ?? 0);
-            const base = Number(b.total_booking_price ?? 0);
-            const totalPrice = base + extHours * 2000;
+            const location = b.event_address || ''
+            const extHours = Number(b.extension_duration ?? 0)
+            const base = Number(b.total_booking_price ?? 0)
+            const totalPrice = base + extHours * 2000
             const accountName =
-              [b.firstname, b.lastname].filter(Boolean).join(" ").trim() ||
+              [b.firstname, b.lastname].filter(Boolean).join(' ').trim() ||
               b.username ||
-              undefined;
+              undefined
             return {
-              id: b.id ?? b.confirmed_id ?? "",
+              id: b.id ?? b.confirmed_id ?? '',
               title,
               packageName: b.package_name || undefined,
               packageId:
-                typeof b.package_id === "number" ? b.package_id : undefined,
+                typeof b.package_id === 'number' ? b.package_id : undefined,
               accountName,
               dateTime,
               location,
@@ -3148,147 +3178,149 @@ function EventCardsPanel() {
               contactPersonNumber: b.contact_person_number || undefined,
               grid: b.grid || undefined,
               boothPlacement: (() => {
-                if (typeof b.booth_placement === "string") {
-                  const trimmed = b.booth_placement.trim();
-                  if (trimmed.length) return trimmed;
+                if (typeof b.booth_placement === 'string') {
+                  const trimmed = b.booth_placement.trim()
+                  if (trimmed.length) return trimmed
                 }
-                const camel = (b as Record<string, unknown>)["boothPlacement"];
-                if (typeof camel === "string") {
-                  const trimmed = camel.trim();
-                  if (trimmed.length) return trimmed;
+                const camel = (b as Record<string, unknown>)['boothPlacement']
+                if (typeof camel === 'string') {
+                  const trimmed = camel.trim()
+                  if (trimmed.length) return trimmed
                 }
-                return undefined;
+                return undefined
               })(),
-            };
-          });
+              rawEventDate: date || undefined,
+              rawEventTime: time || undefined,
+              rawEventEndTime: rawEnd,
+            }
+          })
         if (mounted) {
-          setEvents(mapped);
+          setEvents(mapped)
           // Fetch assigned staff for each booking (best-effort)
           try {
             const { listAssignedStaff } = await import(
-              "../../../../schemas/functions/staffFunctions/staffAssignment"
-            );
+              '../../../../schemas/functions/staffFunctions/staffAssignment'
+            )
             const results = await Promise.all(
               mapped.map(async (ev) => {
-                const idNum = Number(ev.id);
-                if (!Number.isFinite(idNum)) return { id: ev.id, staff: [] };
-                const staff = await listAssignedStaff(idNum).catch(() => []);
-                return { id: ev.id, staff };
+                const idNum = Number(ev.id)
+                if (!Number.isFinite(idNum)) return { id: ev.id, staff: [] }
+                const staff = await listAssignedStaff(idNum).catch(() => [])
+                return { id: ev.id, staff }
               })
-            );
-            const byId = new Map<AdminEvent["id"], any[]>(
+            )
+            const byId = new Map<AdminEvent['id'], any[]>(
               results.map((r) => [r.id, r.staff])
-            );
+            )
             setEvents((prev) =>
               prev.map((ev) => ({
                 ...ev,
                 assignedStaff: (byId.get(ev.id) || []).map((s: any) => ({
                   id: Number(s.id),
-                  firstname: String(s.firstname || ""),
-                  lastname: String(s.lastname || ""),
+                  firstname: String(s.firstname || ''),
+                  lastname: String(s.lastname || ''),
                 })),
               }))
-            );
+            )
           } catch {
             // ignore if staff fetch fails; UI will show none
           }
         }
       } catch (e: unknown) {
         if (mounted)
-          setError(e instanceof Error ? e.message : "Failed to load events");
+          setError(e instanceof Error ? e.message : 'Failed to load events')
       } finally {
-        if (mounted) setLoading(false);
+        if (mounted) setLoading(false)
       }
     }
-    load();
+    load()
     return () => {
-      mounted = false;
-    };
-  }, [API_BASE, mapBookingStatus, mapPaymentStatus]);
+      mounted = false
+    }
+  }, [API_BASE, mapBookingStatus, mapPaymentStatus])
 
-  const [statusFilter, setStatusFilter] = useState<Status | "all">("all");
-  const [itemsFilter, setItemsFilter] = useState<"all" | "with" | "without">(
-    "all"
-  );
-  const [paymentFilter, setPaymentFilter] = useState<Payment | "all">("all");
-  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<Status | 'all'>('all')
+  const [itemsFilter, setItemsFilter] = useState<'all' | 'with' | 'without'>(
+    'all'
+  )
+  const [paymentFilter, setPaymentFilter] = useState<Payment | 'all'>('all')
+  const [search, setSearch] = useState('')
 
   useEffect(() => {
-    setPage(1);
-  }, [statusFilter, itemsFilter, paymentFilter, search]);
+    setPage(1)
+  }, [statusFilter, itemsFilter, paymentFilter, search])
 
   const filteredEvents = useMemo(() => {
-    const tokens = search.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    const tokens = search.trim().toLowerCase().split(/\s+/).filter(Boolean)
     return events.filter((e) => {
-      const statusOk =
-        statusFilter === "all" ? true : e.status === statusFilter;
-      const issues = e.damagedItems?.length || 0;
+      const statusOk = statusFilter === 'all' ? true : e.status === statusFilter
+      const issues = e.damagedItems?.length || 0
       const itemsOk =
-        itemsFilter === "all"
+        itemsFilter === 'all'
           ? true
-          : itemsFilter === "with"
+          : itemsFilter === 'with'
           ? issues > 0
-          : issues === 0;
+          : issues === 0
       const paymentOk =
-        paymentFilter === "all" ? true : e.payment === paymentFilter;
-      const hay = `${e.title} ${e.location} ${e.dateTime}`.toLowerCase();
+        paymentFilter === 'all' ? true : e.payment === paymentFilter
+      const hay = `${e.title} ${e.location} ${e.dateTime}`.toLowerCase()
       const searchOk = tokens.length
         ? tokens.every((t) => hay.includes(t))
-        : true;
-      return statusOk && itemsOk && paymentOk && searchOk;
-    });
-  }, [events, statusFilter, itemsFilter, paymentFilter, search]);
+        : true
+      return statusOk && itemsOk && paymentOk && searchOk
+    })
+  }, [events, statusFilter, itemsFilter, paymentFilter, search])
 
-  const PER_PAGE = 5;
-  const [page, setPage] = useState(1);
-  const totalPages = Math.max(1, Math.ceil(filteredEvents.length / PER_PAGE));
-  const windowPages = pageWindow(page, totalPages, 3);
+  const PER_PAGE = 5
+  const [page, setPage] = useState(1)
+  const totalPages = Math.max(1, Math.ceil(filteredEvents.length / PER_PAGE))
+  const windowPages = pageWindow(page, totalPages, 3)
 
   useEffect(() => {
-    setPage((p) => Math.min(Math.max(1, p), totalPages));
-  }, [totalPages, filteredEvents.length]);
+    setPage((p) => Math.min(Math.max(1, p), totalPages))
+  }, [totalPages, filteredEvents.length])
 
   const paginated = useMemo(() => {
-    const start = (page - 1) * PER_PAGE;
-    return filteredEvents.slice(start, start + PER_PAGE);
-  }, [filteredEvents, page]);
+    const start = (page - 1) * PER_PAGE
+    return filteredEvents.slice(start, start + PER_PAGE)
+  }, [filteredEvents, page])
 
   // Handle status change from EventCard details
   const handleCardStatusChange = async (
-    bookingId: AdminEvent["id"],
+    bookingId: AdminEvent['id'],
     next: Status
   ) => {
-    const toAdmin = (s: Status): "scheduled" | "in_progress" | "completed" =>
-      s === "ongoing"
-        ? "in_progress"
-        : s === "finished"
-        ? "completed"
-        : "scheduled";
+    const toAdmin = (s: Status): 'scheduled' | 'in_progress' | 'completed' =>
+      s === 'ongoing'
+        ? 'in_progress'
+        : s === 'finished'
+        ? 'completed'
+        : 'scheduled'
     // optimistic update
-    const prev = events;
+    const prev = events
     setEvents((cur) =>
       cur.map((e) => (e.id === bookingId ? { ...e, status: next } : e))
-    );
+    )
     try {
       const { updateAdminBookingStatus } = await import(
-        "../../../../schemas/functions/ConfirmedBookings/admin"
-      );
-      await updateAdminBookingStatus(bookingId, toAdmin(next));
+        '../../../../schemas/functions/ConfirmedBookings/admin'
+      )
+      await updateAdminBookingStatus(bookingId, toAdmin(next))
       // success toast if available
       try {
         // @ts-ignore toast likely available in this file's scope
-        toast?.success?.("Event status updated");
+        toast?.success?.('Event status updated')
       } catch {}
     } catch (e: unknown) {
       // revert on failure
-      setEvents(prev);
+      setEvents(prev)
       try {
-        const msg = e instanceof Error ? e.message : "Failed to update status";
+        const msg = e instanceof Error ? e.message : 'Failed to update status'
         // @ts-ignore toast likely available in this file's scope
-        toast?.error?.(msg);
+        toast?.error?.(msg)
       } catch {}
     }
-  };
+  }
 
   return (
     <div className="min-h-[60vh] w-full overflow-x-hidden">
@@ -3297,7 +3329,7 @@ function EventCardsPanel() {
           <div className="flex flex-wrap items-center gap-2">
             <Select
               value={statusFilter}
-              onValueChange={(v) => setStatusFilter(v as Status | "all")}
+              onValueChange={(v) => setStatusFilter(v as Status | 'all')}
             >
               <SelectTrigger className="w-[180px] rounded h-9">
                 <SelectValue placeholder="Status: All" />
@@ -3313,7 +3345,7 @@ function EventCardsPanel() {
             <Select
               value={itemsFilter}
               onValueChange={(v) =>
-                setItemsFilter((v as "all" | "with" | "without") ?? "all")
+                setItemsFilter((v as 'all' | 'with' | 'without') ?? 'all')
               }
             >
               <SelectTrigger className="w-[180px] rounded h-9">
@@ -3328,7 +3360,7 @@ function EventCardsPanel() {
 
             <Select
               value={paymentFilter}
-              onValueChange={(v) => setPaymentFilter(v as Payment | "all")}
+              onValueChange={(v) => setPaymentFilter(v as Payment | 'all')}
             >
               <SelectTrigger className="w-[200px] rounded h-9">
                 <SelectValue placeholder="Payment: All" />
@@ -3377,6 +3409,9 @@ function EventCardsPanel() {
                 grid={ev.grid}
                 boothPlacement={ev.boothPlacement}
                 onStatusChange={(s) => handleCardStatusChange(ev.id, s)}
+                onExtensionChange={({ hours }) =>
+                  handleExtensionChange(ev.id, hours)
+                }
               />
             ))}
             {loading && (
@@ -3398,10 +3433,10 @@ function EventCardsPanel() {
                   <PaginationPrevious
                     href="#"
                     className="text-black no-underline hover:no-underline hover:text-black"
-                    style={{ textDecoration: "none" }}
+                    style={{ textDecoration: 'none' }}
                     onClick={(e) => {
-                      e.preventDefault();
-                      setPage((p) => Math.max(1, p - 1));
+                      e.preventDefault()
+                      setPage((p) => Math.max(1, p - 1))
                     }}
                   />
                 </PaginationItem>
@@ -3411,10 +3446,10 @@ function EventCardsPanel() {
                       href="#"
                       isActive={n === page}
                       className="text-black no-underline hover:no-underline hover:text-black"
-                      style={{ textDecoration: "none" }}
+                      style={{ textDecoration: 'none' }}
                       onClick={(e) => {
-                        e.preventDefault();
-                        setPage(n);
+                        e.preventDefault()
+                        setPage(n)
                       }}
                     >
                       {n}
@@ -3425,10 +3460,10 @@ function EventCardsPanel() {
                   <PaginationNext
                     href="#"
                     className="text-black no-underline hover:no-underline hover:text-black"
-                    style={{ textDecoration: "none" }}
+                    style={{ textDecoration: 'none' }}
                     onClick={(e) => {
-                      e.preventDefault();
-                      setPage((p) => Math.min(totalPages, p + 1));
+                      e.preventDefault()
+                      setPage((p) => Math.min(totalPages, p + 1))
                     }}
                   />
                 </PaginationItem>
@@ -3438,16 +3473,16 @@ function EventCardsPanel() {
         </div>
       </div>
     </div>
-  );
+  )
 }
 function TabButton({
   active,
   onClick,
   children,
 }: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
+  active: boolean
+  onClick: () => void
+  children: React.ReactNode
 }) {
   return (
     <div
@@ -3455,11 +3490,11 @@ function TabButton({
       className={`px-4 py-2 rounded-full cursor-pointer border font-semibold transition
         ${
           active
-            ? "bg-litratoblack text-white border-litratoblack"
-            : "bg-white text-litratoblack border-gray-300 hover:bg-gray-100"
+            ? 'bg-litratoblack text-white border-litratoblack'
+            : 'bg-white text-litratoblack border-gray-300 hover:bg-gray-100'
         }`}
     >
       {children}
     </div>
-  );
+  )
 }
