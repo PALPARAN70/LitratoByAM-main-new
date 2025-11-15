@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 import Image from 'next/image'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { HiOutlineLocationMarker } from 'react-icons/hi'
@@ -36,10 +36,12 @@ import StaffTimelineLogger from './StaffTimelineLogger'
 import {
   updateAdminBookingStatus,
   type AdminBookingStatus,
+  setAdminExtensionDuration,
 } from '../schemas/functions/ConfirmedBookings/admin'
 import {
   updateAssignedBookingStatus,
   type StaffBookingStatus,
+  setAssignedExtensionDuration,
 } from '../schemas/functions/ConfirmedBookings/staff'
 
 type Status = 'ongoing' | 'standby' | 'finished'
@@ -83,6 +85,12 @@ interface EventCardProps {
   ) => void
   // NEW: allow changing event status from Details dialog
   onStatusChange?: (status: Status) => void
+  // NEW: notify parent when extension hours change
+  onExtensionChange?: (payload: {
+    hours: number
+    booking?: any
+    paymentSummary?: any
+  }) => void
   itemsCatalog?: string[]
   // NEW: optional payment proof URL to preview
   paymentProofUrl?: string
@@ -115,10 +123,16 @@ export default function EventCard({
   boothPlacement,
   onItemsChange,
   onStatusChange,
+  onExtensionChange,
   itemsCatalog,
   // NEW: payment proof
   paymentProofUrl,
 }: EventCardProps) {
+  const clampExtensionHours = (value: unknown): number => {
+    const parsed = Number(value ?? 0)
+    if (!Number.isFinite(parsed)) return 0
+    return Math.max(0, Math.min(2, Math.round(parsed * 100) / 100))
+  }
   type ItemEntry = {
     id: string
     name: string
@@ -139,6 +153,17 @@ export default function EventCard({
   const [cardStatus, setCardStatus] = useState<Status>(status)
   // NEW: track whether we have loaded dynamic items for this open session
   const [itemsLoadedFromPackage, setItemsLoadedFromPackage] = useState(false)
+  // NEW: extension duration editing state
+  const [currentExtension, setCurrentExtension] = useState<number>(() =>
+    clampExtensionHours(extensionHours)
+  )
+  const [extensionDraft, setExtensionDraft] = useState<number>(
+    clampExtensionHours(extensionHours)
+  )
+  const [extensionBusy, setExtensionBusy] = useState(false)
+  const [extensionError, setExtensionError] = useState<string | null>(null)
+  const [overrideTotal, setOverrideTotal] = useState<number | null>(null)
+  const HOURLY_RATE = 2000
 
   // NEW: Payments manager modal (list + create + proof preview)
   const [paymentsOpen, setPaymentsOpen] = useState(false)
@@ -202,6 +227,15 @@ export default function EventCard({
   useEffect(() => {
     setCardStatus(status)
   }, [status])
+
+  // keep extension fields in sync with parent updates
+  useEffect(() => {
+    const next = clampExtensionHours(extensionHours)
+    setCurrentExtension(next)
+    setExtensionDraft(next)
+    setOverrideTotal(null)
+    setExtensionError(null)
+  }, [extensionHours])
 
   const setItemStatus = (id: string, type: 'good' | 'damaged') => {
     setEditItems((prev) =>
@@ -519,6 +553,65 @@ export default function EventCard({
     }
   }, [bookingId, summaryRole])
 
+  const handleExtensionSave = async () => {
+    if (!bookingId) return
+    const desired = clampExtensionHours(extensionDraft)
+    if (desired === currentExtension) {
+      setExtensionError(null)
+      return
+    }
+    try {
+      setExtensionBusy(true)
+      setExtensionError(null)
+      const bufferHours = 2
+      let response:
+        | {
+            booking?: any
+            paymentSummary?: any
+          }
+        | undefined
+      if (summaryRole === 'employee') {
+        response = await setAssignedExtensionDuration(
+          bookingId,
+          desired,
+          bufferHours
+        )
+      } else {
+        response = await setAdminExtensionDuration(
+          bookingId,
+          { extension_duration: desired },
+          bufferHours
+        )
+      }
+      const resolvedHours = clampExtensionHours(
+        response?.booking?.extension_duration ?? desired
+      )
+      const derivedBase =
+        typeof basePrice === 'number' && Number.isFinite(basePrice)
+          ? basePrice
+          : Number(response?.booking?.total_booking_price ?? 0)
+      setCurrentExtension(resolvedHours)
+      setExtensionDraft(resolvedHours)
+      setOverrideTotal(derivedBase + resolvedHours * HOURLY_RATE)
+      toast.success('Extension updated')
+      onExtensionChange?.({
+        hours: resolvedHours,
+        booking: response?.booking,
+        paymentSummary: response?.paymentSummary,
+      })
+      await fetchPaymentSummary()
+    } catch (err) {
+      const message =
+        err instanceof Error
+          ? err.message
+          : 'Failed to update extension duration'
+      setExtensionError(message)
+      toast.error(message)
+    } finally {
+      setExtensionBusy(false)
+    }
+  }
+
   useEffect(() => {
     if (!paymentsOpen) return
     void (async () => {
@@ -635,47 +728,49 @@ export default function EventCard({
   }
   const s = statusStyles[cardStatus]
   const p = paymentStyles[paymentStatus]
-  const HOURLY_RATE = 2000
-  const extHours = Math.max(0, Number(extensionHours || 0))
   const base = Number(basePrice || 0)
+  const extHours = currentExtension
   const computedTotal =
-    typeof totalPrice === 'number' ? totalPrice : base + extHours * HOURLY_RATE
+    overrideTotal ??
+    (typeof totalPrice === 'number'
+      ? totalPrice
+      : base + extHours * HOURLY_RATE)
   return (
-    <div>
-      <div className="flex flex-col w-56 bg-gray-300 p-2 rounded-xl">
-        <div className="relative w-52 h-44">
+    <div className="h-full">
+      <div className="group flex h-full w-56 min-h-[22rem] flex-col gap-2 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:shadow-lg">
+        <div className="relative h-40 w-full overflow-hidden rounded-xl bg-slate-100">
           <Image
             src={imageUrl}
             alt="Event Pic"
             fill
             priority
-            className="object-cover rounded-lg"
+            className="object-cover transition duration-300 group-hover:scale-[1.03]"
           />
           <div
-            className={`absolute top-2 right-2 w-28 text-center text-xs font-bold px-2 py-1 rounded ${s.cls}`}
+            className={`absolute top-2 right-2 min-w-[5.5rem] rounded-full px-2 py-1 text-center text-[10px] font-semibold uppercase tracking-wide shadow ${s.cls}`}
           >
             {s.label}
           </div>
           <div
-            className={`absolute top-10 right-2 w-28 text-center text-xs font-bold px-2 py-1 rounded ${p.cls}`}
+            className={`absolute top-11 right-2 min-w-[5.5rem] rounded-full px-2 py-1 text-center text-[10px] font-semibold uppercase tracking-wide shadow ${p.cls}`}
           >
             {p.label}
           </div>
         </div>
-        <div className="flex flex-col gap-1 items-start">
-          <p className="text-xs m-0 leading-tight">
+        <div className="flex flex-1 flex-col items-start gap-1">
+          <p className="m-0 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
             {dateTime ? formatDisplayDateTime(dateTime) : '—'}
           </p>
-          <p className="font-bold m-0 leading-tight flex items-center gap-1">
+          <p className="m-0 flex items-center gap-1 text-base font-semibold text-slate-900">
             {title || '—'}
           </p>
-          <p className="text-xs m-0 leading-tight flex mb-2 gap-1">
-            <HiOutlineLocationMarker className="h-3 w-3 mt-[1.5px]" />
+          <p className="mb-1 flex gap-1 text-xs leading-tight text-slate-600">
+            <HiOutlineLocationMarker className="mt-[1.5px] h-3 w-3 text-slate-400" />
             {location || '—'}
           </p>
           {/* Staff line */}
-          <p className="text-xs m-0 leading-tight mb-2">
-            <span className="font-semibold">Staff:</span>{' '}
+          <p className="mb-1 text-xs leading-tight text-slate-600">
+            <span className="font-semibold text-slate-900">Staff:</span>{' '}
             {Array.isArray(assignedStaff) && assignedStaff.length
               ? assignedStaff
                   .map((s) => `${s.firstname || ''} ${s.lastname || ''}`.trim())
@@ -684,16 +779,19 @@ export default function EventCard({
               : '—'}
           </p>
           {typeof totalPrice === 'number' ? (
-            <p className="text-xs m-0 leading-tight mb-1">
-              Total: ₱
-              {Number(totalPrice).toLocaleString('en-PH', {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2,
-              })}
+            <p className="mb-1 text-sm font-semibold text-slate-900">
+              Total
+              <span className="ml-1 font-bold">
+                ₱
+                {Number(totalPrice).toLocaleString('en-PH', {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}
+              </span>
             </p>
           ) : null}
         </div>
-        <div className="flex justify-end pt-2">
+        <div className="mt-auto flex justify-end border-t border-slate-100 pt-2">
           <Dialog
             onOpenChange={(open) => {
               if (open) {
@@ -712,7 +810,7 @@ export default function EventCard({
             <DialogTrigger asChild>
               <button
                 type="button"
-                className="rounded text-center px-2 text-white transition-all duration-300 cursor-pointer bg-black"
+                className="cursor-pointer rounded-full bg-slate-900 px-4 py-1.5 text-xs font-semibold uppercase tracking-wide text-white shadow-sm transition hover:bg-slate-700"
               >
                 Details
               </button>
@@ -848,6 +946,54 @@ export default function EventCard({
                         maximumFractionDigits: 2,
                       })}`}
                     </div>
+                    {bookingId ? (
+                      <div className="mt-4 rounded border border-dashed border-gray-300 bg-white/70 p-3">
+                        <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-600">
+                          Adjust Extension
+                        </div>
+                        <div className="mt-2 flex flex-wrap items-end gap-3">
+                          <label className="flex flex-col text-xs text-gray-600">
+                            Hours (0-2)
+                            <input
+                              type="number"
+                              min={0}
+                              max={2}
+                              step={0.5}
+                              value={extensionDraft}
+                              onChange={(e) => {
+                                setExtensionError(null)
+                                setExtensionDraft(
+                                  clampExtensionHours(e.target.value)
+                                )
+                              }}
+                              className="mt-1 h-9 w-24 rounded border px-2 text-sm"
+                              disabled={extensionBusy}
+                            />
+                          </label>
+                          <button
+                            type="button"
+                            className="rounded bg-black px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
+                            disabled={
+                              extensionBusy ||
+                              !bookingId ||
+                              extensionDraft === currentExtension
+                            }
+                            onClick={handleExtensionSave}
+                          >
+                            {extensionBusy ? 'Saving…' : 'Update Extension'}
+                          </button>
+                        </div>
+                        <p className="mt-1 text-[11px] text-gray-500">
+                          Staff and admins may extend events up to two total
+                          hours.
+                        </p>
+                        {extensionError ? (
+                          <p className="text-xs text-red-600">
+                            {extensionError}
+                          </p>
+                        ) : null}
+                      </div>
+                    ) : null}
                   </div>
 
                   {/* Contact & On-site */}

@@ -4,6 +4,10 @@ const authController = require('../Controller/authController')
 const authMiddleware = require('../Middleware/authMiddleware')
 const { getAllPackages } = require('../Model/packageModel') // <-- add
 const { getAllGrids } = require('../Model/gridModel')
+const {
+  getDailyConfirmedCounts,
+} = require('../Model/confirmedBookingRequestModel')
+const { getDailyAvailabilitySummary } = require('../Model/bookingRequestModel')
 
 router.post('/register', authController.register)
 router.post('/login', authController.login)
@@ -38,6 +42,45 @@ router.get('/grids', async (_req, res) => {
   } catch (e) {
     console.error('list grids error:', e)
     res.status(500).json({ message: 'Failed to load grids' })
+  }
+})
+
+// Public: aggregate confirmed bookings per date for availability calendars
+router.get('/availability/summary', async (_req, res) => {
+  try {
+    const rows = await getDailyConfirmedCounts()
+    const counts = {}
+    for (const row of rows) {
+      const key = String(row?.event_date || '').trim()
+      const value = Number(row?.count || 0)
+      if (!key || !Number.isFinite(value) || value <= 0) continue
+      counts[key] = value
+    }
+    res.json({ counts })
+  } catch (e) {
+    console.error('availability summary error:', e)
+    res.status(500).json({ message: 'Failed to load availability summary' })
+  }
+})
+
+router.get('/availability/day', async (req, res) => {
+  const dateParam = req.query?.date
+  const dateValue = Array.isArray(dateParam) ? dateParam[0] : dateParam
+  if (!dateValue || !String(dateValue).trim()) {
+    return res
+      .status(400)
+      .json({ message: 'Query parameter "date" (YYYY-MM-DD) is required' })
+  }
+  try {
+    const summary = await getDailyAvailabilitySummary(String(dateValue).trim())
+    res.json(summary)
+  } catch (e) {
+    const msg = String(e?.message || '').toLowerCase()
+    if (msg.includes('invalid date')) {
+      return res.status(400).json({ message: 'Invalid date supplied' })
+    }
+    console.error('availability day error:', e)
+    res.status(500).json({ message: 'Failed to load availability details' })
   }
 })
 

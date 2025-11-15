@@ -1,5 +1,5 @@
 'use client'
-import { useMemo, useState, useEffect } from 'react'
+import { useMemo, useState, useEffect, useCallback } from 'react'
 import EventCard from '../../../../Litratocomponents/EventCard'
 import { formatDisplayDateTime } from '@/lib/datetime'
 import {
@@ -64,6 +64,7 @@ export default function DashboardPage() {
   const [events, setEvents] = useState<StaffEvent[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const EXT_RATE = 2000
 
   const API_BASE =
     (process.env.NEXT_PUBLIC_API_BASE?.replace(/\/$/, '') ||
@@ -94,6 +95,26 @@ export default function DashboardPage() {
         return 'unpaid'
     }
   }
+
+  const handleExtensionChange = useCallback(
+    (bookingId: StaffEvent['id'], hours: number) => {
+      setEvents((prev) =>
+        prev.map((ev) => {
+          if (ev.id !== bookingId) return ev
+          const safeBase =
+            typeof ev.basePrice === 'number' && Number.isFinite(ev.basePrice)
+              ? ev.basePrice
+              : 0
+          return {
+            ...ev,
+            extensionHours: hours,
+            totalPrice: safeBase + hours * EXT_RATE,
+          }
+        })
+      )
+    },
+    [EXT_RATE]
+  )
 
   useEffect(() => {
     let mounted = true
@@ -376,6 +397,9 @@ export default function DashboardPage() {
                   contactPersonNumber={ev.contactPersonNumber}
                   grid={ev.grid}
                   boothPlacement={ev.boothPlacement}
+                  onExtensionChange={({ hours }) =>
+                    handleExtensionChange(ev.id, hours)
+                  }
                 />
               ))}
             </div>

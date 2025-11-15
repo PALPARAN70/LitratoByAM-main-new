@@ -7,8 +7,12 @@ const {
   getPaymentSummary,
   getConfirmedBookingById,
   recalcAndPersistPaymentStatus,
+  updateExtensionDuration,
 } = require('../Model/confirmedBookingRequestModel')
 const { pool } = require('../Config/db')
+const {
+  checkExtensionConflictForConfirmedBooking,
+} = require('../Model/bookingRequestModel')
 // NEW: reuse package/inventory models for staff-safe package items list
 const packageModel = require('../Model/packageModel')
 const packageInventoryItemModel = require('../Model/packageInventoryItemModel')
@@ -119,6 +123,76 @@ exports.getAssignedBookingPaymentSummary = async (req, res) => {
     return res
       .status(500)
       .json({ message: 'Error loading payment summary for booking' })
+  }
+}
+
+// Allow assigned staff to set the total extension duration (capped at 2 hours)
+exports.setAssignedExtensionDuration = async (req, res) => {
+  try {
+    const uid = req?.user?.id
+    if (!uid) return res.status(401).json({ message: 'Unauthorized' })
+
+    const id = parseInt(req.params.id, 10)
+    if (Number.isNaN(id) || id <= 0)
+      return res.status(400).json({ message: 'Invalid booking id' })
+
+    const { extension_duration = null } = req.body || {}
+    const bufferHours = Number(req.query?.bufferHours ?? 2)
+    if (extension_duration == null) {
+      return res.status(400).json({ message: 'extension_duration is required' })
+    }
+
+    const desiredRaw = Number(extension_duration)
+    if (!Number.isFinite(desiredRaw)) {
+      return res
+        .status(400)
+        .json({ message: 'extension_duration must be numeric' })
+    }
+    const desired = Math.max(0, Math.min(2, desiredRaw))
+
+    // Ensure staff is assigned to this booking
+    const { rows } = await pool.query(
+      `SELECT 1 FROM assigned_staff WHERE bookingid = $1 AND staff_userid = $2 LIMIT 1`,
+      [id, uid]
+    )
+    if (!rows[0]) {
+      return res
+        .status(403)
+        .json({ message: 'You are not assigned to this booking' })
+    }
+
+    const booking = await getConfirmedBookingById(id)
+    if (!booking) return res.status(404).json({ message: 'Not found' })
+
+    try {
+      const conflicts = await checkExtensionConflictForConfirmedBooking(
+        id,
+        desired,
+        bufferHours
+      )
+      if (Array.isArray(conflicts) && conflicts.length) {
+        return res.status(409).json({
+          message:
+            'Extending this booking would conflict with another accepted booking (includes setup/cleanup buffer).',
+          conflict: conflicts[0],
+        })
+      }
+    } catch (err) {
+      console.warn(
+        'employee.setAssignedExtensionDuration conflict check failed:',
+        err?.message
+      )
+    }
+
+    await updateExtensionDuration(id, desired)
+    const updated = await getConfirmedBookingById(id)
+    const summary = await getPaymentSummary(id)
+    return res.json({ booking: updated, paymentSummary: summary })
+  } catch (err) {
+    console.error('employee.setAssignedExtensionDuration error:', err)
+    return res
+      .status(500)
+      .json({ message: 'Error updating extension duration' })
   }
 }
 

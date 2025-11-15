@@ -197,6 +197,22 @@ async function listConfirmedBookings() {
   return rows
 }
 
+// Public-facing aggregate: count non-cancelled confirmed bookings per event date
+async function getDailyConfirmedCounts() {
+  const q = `
+    SELECT 
+      TO_CHAR(br.event_date, 'YYYY-MM-DD') AS event_date,
+      COUNT(*)::int AS count
+    FROM confirmed_bookings cb
+    JOIN booking_requests br ON br.requestid = cb.requestid
+    WHERE br.event_date IS NOT NULL
+      AND COALESCE(cb.booking_status, 'scheduled') <> 'cancelled'
+    GROUP BY br.event_date
+  `
+  const { rows } = await pool.query(q)
+  return rows
+}
+
 // Mutations
 async function setContractSigned(bookingid, signed = true) {
   const { rows } = await pool.query(
@@ -352,10 +368,22 @@ async function recalcAndPersistPaymentStatus(bookingid) {
 // Update extension_duration on confirmed_bookings and recalc payment_status
 async function updateExtensionDuration(bookingid, hours) {
   const ext = Math.max(0, Number(hours) || 0)
-  await pool.query(
-    `UPDATE confirmed_bookings SET extension_duration = $2, last_updated = CURRENT_TIMESTAMP WHERE id = $1`,
+  const { rows } = await pool.query(
+    `UPDATE confirmed_bookings
+     SET extension_duration = $2, last_updated = CURRENT_TIMESTAMP
+     WHERE id = $1
+     RETURNING requestid`,
     [bookingid, ext]
   )
+  const requestid = rows?.[0]?.requestid
+  if (requestid) {
+    await pool.query(
+      `UPDATE booking_requests
+       SET extension_duration = $2, last_updated = CURRENT_TIMESTAMP
+       WHERE requestid = $1`,
+      [requestid, ext]
+    )
+  }
   return recalcAndPersistPaymentStatus(bookingid)
 }
 
@@ -372,4 +400,5 @@ module.exports = {
   getPaymentSummary,
   recalcAndPersistPaymentStatus,
   updateExtensionDuration,
+  getDailyConfirmedCounts,
 }
