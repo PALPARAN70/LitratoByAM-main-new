@@ -1,6 +1,13 @@
 'use client'
-import { useEffect, useMemo, useState, useRef, useCallback } from 'react'
-import type { ChangeEventHandler } from 'react'
+import {
+  useEffect,
+  useMemo,
+  useState,
+  useRef,
+  useCallback,
+  Fragment,
+} from 'react'
+import type { ChangeEventHandler, ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
 import Calendar from '../../../../Litratocomponents/LitratoCalendar'
 import {
@@ -1935,85 +1942,107 @@ function MasterListPanel({
                             <Ellipsis />
                           </button>
                         </PopoverTrigger>
-                        <PopoverContent className="w-64 p-3" align="end">
-                          <div className="text-sm space-y-2">
-                            <div>
-                              <div className="font-semibold">Contact info</div>
-                              <div className="text-gray-700 whitespace-pre-wrap">
-                                {row.contact_info || '—'}
-                              </div>
-                            </div>
-                            <div>
-                              <div className="font-semibold">
-                                Contact person
-                              </div>
-                              <div className="text-gray-700 whitespace-pre-wrap">
-                                <div>
-                                  <span className="font-medium">Name:</span>{' '}
-                                  {(row.contact_person || '').trim() || '—'}
-                                </div>
-                                <div>
-                                  <span className="font-medium">Number:</span>{' '}
-                                  {(row.contact_person_number || '').trim() ||
-                                    '—'}
-                                </div>
-                              </div>
-                            </div>
-                            <div>
-                              <div className="font-semibold">Address</div>
-                              <div className="text-gray-700">
-                                {row.place || '—'}
-                              </div>
-                            </div>
-                            <div>
-                              <div className="font-semibold">
-                                Strongest signal
-                              </div>
-                              <div className="text-gray-700">
-                                {row.strongest_signal || '—'}
-                              </div>
-                            </div>
-                            <div>
-                              <div className="font-semibold">
-                                Extension duration
-                              </div>
-                              <div className="text-gray-700">
-                                {row.extension_duration ?? '—'}
-                                {row.extension_duration != null ? ' hr' : ''}
-                              </div>
-                            </div>
-                            <div>
-                              <div className="font-semibold">
-                                Total price (incl. extension)
-                              </div>
-                              <div className="text-gray-700">
-                                {typeof row.amountDue === 'number'
-                                  ? `₱${row.amountDue.toLocaleString('en-PH', {
-                                      minimumFractionDigits: 2,
-                                      maximumFractionDigits: 2,
-                                    })}`
-                                  : '—'}
-                              </div>
-                            </div>
-                            <div>
-                              <div className="font-semibold">Grids</div>
-                              {(() => {
-                                const names = (row.grid || '')
-                                  .split(',')
-                                  .map((s) => s.trim())
-                                  .filter((s) => s && s !== '—')
-                                return names.length ? (
-                                  <ul className="list-disc list-inside text-gray-700">
-                                    {names.map((n) => (
+                        <PopoverContent className="w-72 p-3" align="end">
+                          {(() => {
+                            const sanitizedContactNumber = (() => {
+                              const direct = (
+                                row.contact_person_number || ''
+                              ).trim()
+                              if (direct) return direct
+                              const info = (row.contact_info || '').toString()
+                              const match = info.match(/(\+?\d[\d\s-]{6,}\d)/)
+                              const extracted = (match?.[1] || '').trim()
+                              return extracted || '—'
+                            })()
+
+                            const gridNames = (row.grid || '')
+                              .split(',')
+                              .map((s) => s.trim())
+                              .filter((s) => s && s !== '—')
+
+                            const detailItems: Array<{
+                              label: string
+                              value: ReactNode
+                            }> = [
+                              {
+                                label: 'Contact info',
+                                value: (
+                                  <span className="whitespace-pre-wrap break-words">
+                                    {row.contact_info || '—'}
+                                  </span>
+                                ),
+                              },
+                              {
+                                label: 'Contact name',
+                                value: (row.contact_person || '').trim() || '—',
+                              },
+                              {
+                                label: 'Contact number',
+                                value: sanitizedContactNumber,
+                              },
+                              {
+                                label: 'Address',
+                                value: row.place || '—',
+                              },
+                              {
+                                label: 'Booth placement',
+                                value: row.booth_placement || '—',
+                              },
+                              {
+                                label: 'Strongest signal',
+                                value: row.strongest_signal || '—',
+                              },
+                              {
+                                label: 'Extension duration',
+                                value:
+                                  row.extension_duration != null
+                                    ? `${row.extension_duration} hr`
+                                    : '—',
+                              },
+                              {
+                                label: 'Total price (incl. extension)',
+                                value:
+                                  typeof row.amountDue === 'number'
+                                    ? `₱${row.amountDue.toLocaleString(
+                                        'en-PH',
+                                        {
+                                          minimumFractionDigits: 2,
+                                          maximumFractionDigits: 2,
+                                        }
+                                      )}`
+                                    : '—',
+                              },
+                              {
+                                label: 'Grids',
+                                value: gridNames.length ? (
+                                  <ul className="list-disc list-inside space-y-1">
+                                    {gridNames.map((n) => (
                                       <li key={n}>{n}</li>
                                     ))}
                                   </ul>
                                 ) : (
-                                  <div className="text-gray-700">—</div>
-                                )
-                              })()}
-                            </div>
-                          </div>
+                                  '—'
+                                ),
+                              },
+                            ]
+
+                            return (
+                              <div className="text-sm">
+                                <div className="grid grid-cols-[minmax(0,8rem)_minmax(0,1fr)] gap-x-3 gap-y-2">
+                                  {detailItems.map((item) => (
+                                    <Fragment key={item.label}>
+                                      <div className="font-semibold">
+                                        {item.label}
+                                      </div>
+                                      <div className="text-gray-700 break-words">
+                                        {item.value}
+                                      </div>
+                                    </Fragment>
+                                  ))}
+                                </div>
+                              </div>
+                            )
+                          })()}
                         </PopoverContent>
                       </Popover>
                     </td>
@@ -2926,6 +2955,7 @@ function EventCardsPanel() {
     contactPerson?: string
     contactPersonNumber?: string
     grid?: string
+    boothPlacement?: string
   }
 
   const [events, setEvents] = useState<AdminEvent[]>([])
@@ -2993,6 +3023,7 @@ function EventCardsPanel() {
           contact_person?: string
           contact_person_number?: string
           grid?: string
+          booth_placement?: string | null
           firstname?: string
           lastname?: string
           username?: string
@@ -3087,6 +3118,18 @@ function EventCardsPanel() {
               contactPerson: b.contact_person || undefined,
               contactPersonNumber: b.contact_person_number || undefined,
               grid: b.grid || undefined,
+              boothPlacement: (() => {
+                if (typeof b.booth_placement === 'string') {
+                  const trimmed = b.booth_placement.trim()
+                  if (trimmed.length) return trimmed
+                }
+                const camel = (b as Record<string, unknown>)['boothPlacement']
+                if (typeof camel === 'string') {
+                  const trimmed = camel.trim()
+                  if (trimmed.length) return trimmed
+                }
+                return undefined
+              })(),
             }
           })
         if (mounted) {
@@ -3302,6 +3345,7 @@ function EventCardsPanel() {
                 contactPerson={ev.contactPerson}
                 contactPersonNumber={ev.contactPersonNumber}
                 grid={ev.grid}
+                boothPlacement={ev.boothPlacement}
                 onStatusChange={(s) => handleCardStatusChange(ev.id, s)}
               />
             ))}

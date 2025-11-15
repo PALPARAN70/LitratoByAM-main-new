@@ -7,7 +7,8 @@ import {
 import { Ellipsis } from 'lucide-react'
 
 import { Card, CardHeader, CardContent } from '@/components/ui/card'
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, Fragment } from 'react'
+import type { ReactNode } from 'react'
 import type { ChangeEventHandler } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
@@ -120,6 +121,7 @@ export default function DashboardPage() {
     contact_person_number?: string | null
     strongest_signal?: string | null
     extension_duration?: number | null
+    booth_placement?: string | null
     // NEW: contract status per booking/request
     contractStatus?: 'pending' | 'finished'
   }
@@ -288,6 +290,17 @@ export default function DashboardPage() {
                 .map((s) => s.trim())
                 .filter((s) => !!s)
           const gridString = gridNames.join(', ')
+          const boothPlacement = (() => {
+            const snake = (b as Record<string, unknown>).booth_placement
+            if (typeof snake === 'string' && snake.trim()) {
+              return snake.trim()
+            }
+            const camel = (b as Record<string, unknown>).boothPlacement
+            if (typeof camel === 'string' && camel.trim()) {
+              return camel.trim()
+            }
+            return ''
+          })()
           return {
             name: String((b as Record<string, unknown>).event_name ?? ''),
             date: dateISO,
@@ -302,6 +315,7 @@ export default function DashboardPage() {
                 (b as Record<string, unknown>).eventaddress ??
                 ''
             ).trim(),
+            booth_placement: boothPlacement || null,
             paymentStatus: String(
               (b as Record<string, unknown>).payment_status ?? 'Pending'
             ),
@@ -764,120 +778,123 @@ export default function DashboardPage() {
                                 </button>
                               </PopoverTrigger>
                               <PopoverContent align="end" className="w-64 p-3">
-                                {/* Move all other booking details here */}
-                                {/* ...existing details content (date, time, package, grids, contact, etc.)... */}
-                                <div className="text-sm space-y-2">
-                                  {/* Date/Time/Package */}
-                                  <div className="grid grid-cols-2 gap-x-2">
-                                    <div className="font-semibold">Date</div>
-                                    <div className="text-gray-700">
-                                      {data.date
+                                {(() => {
+                                  const contactPersonName = (() => {
+                                    const byField = (
+                                      data.contact_person || ''
+                                    ).trim()
+                                    const byProfile = [
+                                      profile?.firstname,
+                                      profile?.lastname,
+                                    ]
+                                      .filter(Boolean)
+                                      .join(' ')
+                                      .trim()
+                                    const val = byField || byProfile
+                                    return val || '—'
+                                  })()
+                                  const contactPersonNumber = (() => {
+                                    const direct = (
+                                      data.contact_person_number || ''
+                                    ).trim()
+                                    if (direct) return direct
+                                    const info = (
+                                      data.contact_info || ''
+                                    ).toString()
+                                    const match =
+                                      info.match(/(\+?\d[\d\s-]{6,}\d)/)
+                                    const extracted = (match?.[1] || '').trim()
+                                    return extracted || '—'
+                                  })()
+                                  const timeDisplay = data.startTime
+                                    ? data.endTime
+                                      ? `${data.startTime} - ${data.endTime}`
+                                      : data.startTime
+                                    : data.endTime || '—'
+                                  const gridNames = (data.grid || '')
+                                    .split(',')
+                                    .map((s) => s.trim())
+                                    .filter((s) => s && s !== '—')
+                                  const detailItems: Array<{
+                                    label: string
+                                    value: ReactNode
+                                  }> = [
+                                    {
+                                      label: 'Date',
+                                      value: data.date
                                         ? formatDisplayDate(data.date)
-                                        : '—'}
-                                    </div>
-                                    <div className="font-semibold">Time</div>
-                                    <div className="text-gray-700">
-                                      {data.startTime || '—'}
-                                      {data.endTime ? ` - ${data.endTime}` : ''}
-                                    </div>
-                                    <div className="font-semibold">Package</div>
-                                    <div className="text-gray-700">
-                                      {data.package || '—'}
-                                    </div>
-                                  </div>
-                                  {/* Contact info */}
-                                  <div>
-                                    <div className="font-semibold">
-                                      Contact info
-                                    </div>
-                                    <div className="text-gray-700 whitespace-pre-wrap">
-                                      {data.contact_info || '—'}
-                                    </div>
-                                  </div>
-                                  <div>
-                                    <div className="font-semibold">
-                                      Contact person
-                                    </div>
-                                    <div className="text-gray-700 whitespace-pre-wrap">
-                                      <div>
-                                        <span className="font-medium">
-                                          Name:
-                                        </span>{' '}
-                                        {(() => {
-                                          const byField = (
-                                            data.contact_person || ''
-                                          ).trim()
-                                          const byName = [
-                                            profile?.firstname,
-                                            profile?.lastname,
-                                          ]
-                                            .filter(Boolean)
-                                            .join(' ')
-                                            .trim()
-                                          const val = byField || byName
-                                          return val || '—'
-                                        })()}
-                                      </div>
-                                      <div>
-                                        <span className="font-medium">
-                                          Number:
-                                        </span>{' '}
-                                        {(() => {
-                                          const direct = (
-                                            data.contact_person_number || ''
-                                          ).trim()
-                                          if (direct) return direct
-                                          const info = (
-                                            data.contact_info || ''
-                                          ).toString()
-                                          const m =
-                                            info.match(/(\+?\d[\d\s-]{6,}\d)/)
-                                          const extracted = (
-                                            m?.[1] || ''
-                                          ).trim()
-                                          return extracted || '—'
-                                        })()}
-                                      </div>
-                                    </div>
-                                  </div>
-                                  <div>
-                                    <div className="font-semibold">
-                                      Strongest signal
-                                    </div>
-                                    <div className="text-gray-700">
-                                      {data.strongest_signal || '—'}
-                                    </div>
-                                  </div>
-                                  <div>
-                                    <div className="font-semibold">
-                                      Extension duration
-                                    </div>
-                                    <div className="text-gray-700">
-                                      {data.extension_duration ?? '—'}
-                                      {data.extension_duration != null
-                                        ? ' hr'
-                                        : ''}
-                                    </div>
-                                  </div>
-                                  <div>
-                                    <div className="font-semibold">Grids</div>
-                                    {(() => {
-                                      const names = (data.grid || '')
-                                        .split(',')
-                                        .map((s) => s.trim())
-                                        .filter((s) => s && s !== '—')
-                                      return names.length ? (
-                                        <ul className="list-disc list-inside text-gray-700">
-                                          {names.map((n) => (
+                                        : '—',
+                                    },
+                                    { label: 'Time', value: timeDisplay },
+                                    {
+                                      label: 'Package',
+                                      value: data.package || '—',
+                                    },
+                                    {
+                                      label: 'Contact info',
+                                      value: (
+                                        <span className="whitespace-pre-wrap break-words">
+                                          {data.contact_info || '—'}
+                                        </span>
+                                      ),
+                                    },
+                                    {
+                                      label: 'Contact name',
+                                      value: contactPersonName,
+                                    },
+                                    {
+                                      label: 'Contact number',
+                                      value: contactPersonNumber,
+                                    },
+                                    {
+                                      label: 'Booth placement',
+                                      value: data.booth_placement || '—',
+                                    },
+                                    {
+                                      label: 'Strongest signal',
+                                      value: data.strongest_signal || '—',
+                                    },
+                                    {
+                                      label: 'Extension duration',
+                                      value:
+                                        data.extension_duration != null
+                                          ? `${data.extension_duration} hr`
+                                          : '—',
+                                    },
+                                    {
+                                      label: 'Grids',
+                                      value: gridNames.length ? (
+                                        <ul className="list-disc list-inside space-y-1">
+                                          {gridNames.map((n) => (
                                             <li key={n}>{n}</li>
                                           ))}
                                         </ul>
                                       ) : (
-                                        <div className="text-gray-700">—</div>
-                                      )
-                                    })()}
-                                  </div>
-                                </div>
+                                        '—'
+                                      ),
+                                    },
+                                  ] as {
+                                    label: string
+                                    value: JSX.Element | string
+                                  }[]
+
+                                  return (
+                                    <div className="text-sm">
+                                      <div className="grid grid-cols-[minmax(0,7rem)_minmax(0,1fr)] gap-x-3 gap-y-2">
+                                        {detailItems.map((item) => (
+                                          <Fragment key={item.label}>
+                                            <div className="font-semibold">
+                                              {item.label}
+                                            </div>
+                                            <div className="text-gray-700 break-words">
+                                              {item.value}
+                                            </div>
+                                          </Fragment>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )
+                                })()}
                               </PopoverContent>
                             </Popover>
                           </td>

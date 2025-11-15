@@ -7,6 +7,11 @@ const {
   cancelBookingRequest: cancelBookingRequestModel,
 } = require('../Model/bookingRequestModel')
 
+const {
+  getConfirmedBookingByRequestId,
+  updateBookingStatus: updateConfirmedBookingStatus,
+} = require('../Model/confirmedBookingRequestModel')
+
 // ADD THIS if you call pool.query(...) in this file
 const { pool } = require('../Config/db')
 
@@ -375,6 +380,22 @@ async function cancelBookingRequest(req, res) {
     }
 
     const updated = await cancelBookingRequestModel(requestid)
+
+    if (existing.status === 'accepted') {
+      try {
+        // Keep the linked confirmed booking in sync for admin dashboards
+        const confirmed = await getConfirmedBookingByRequestId(requestid)
+        if (
+          confirmed &&
+          confirmed.id &&
+          confirmed.booking_status !== 'cancelled'
+        ) {
+          await updateConfirmedBookingStatus(confirmed.id, 'cancelled')
+        }
+      } catch (syncErr) {
+        console.warn('cancel booking: confirmed sync failed', syncErr?.message)
+      }
+    }
     return res.json({ message: 'Booking cancelled', booking: updated })
   } catch (err) {
     console.error('cancelBooking error:', err)

@@ -11,7 +11,6 @@ async function initPaymentLogsTable() {
       new_status VARCHAR(50) NOT NULL,
       performed_by VARCHAR(50) NOT NULL,
       user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      notes TEXT,
       action VARCHAR(50) NOT NULL,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
@@ -20,6 +19,8 @@ async function initPaymentLogsTable() {
   await pool.query(
     `ALTER TABLE payment_logs ADD COLUMN IF NOT EXISTS additional_notes TEXT`
   )
+  // remove deprecated notes column if it still exists
+  await pool.query(`ALTER TABLE payment_logs DROP COLUMN IF EXISTS notes`)
 }
 
 // Create a payment log entry
@@ -29,8 +30,8 @@ async function createPaymentLog({
   new_status,
   performed_by,
   user_id,
-  notes = null,
   action,
+  additional_notes = null,
 }) {
   const result = await pool.query(
     `
@@ -40,8 +41,8 @@ async function createPaymentLog({
         new_status,
         performed_by,
         user_id,
-        notes,
-        action
+        action,
+        additional_notes
       )
       VALUES ($1,$2,$3,$4,$5,$6,$7)
       RETURNING *
@@ -52,8 +53,8 @@ async function createPaymentLog({
       new_status,
       performed_by,
       user_id,
-      notes,
       action,
+      additional_notes,
     ]
   )
   return result.rows[0]
@@ -77,32 +78,15 @@ async function listAllPaymentLogs() {
 }
 
 // Update log to add or modify admin-provided additional notes
-async function updatePaymentLog(
-  log_id,
-  { additional_notes = null, notes } = {}
-) {
-  // Whitelist only additional_notes and (optionally) notes
-  const fields = []
-  const values = []
-  let idx = 1
-  if (typeof additional_notes !== 'undefined') {
-    fields.push(`additional_notes = $${idx++}`)
-    values.push(additional_notes)
-  }
-  if (typeof notes !== 'undefined') {
-    fields.push(`notes = $${idx++}`)
-    values.push(notes)
-  }
-  if (!fields.length) return null
-
+async function updatePaymentLog(log_id, { additional_notes } = {}) {
+  if (typeof additional_notes === 'undefined') return null
   const q = `
     UPDATE payment_logs
-    SET ${fields.join(', ')}
-    WHERE log_id = $${idx}
+    SET additional_notes = $1
+    WHERE log_id = $2
     RETURNING *
   `
-  values.push(log_id)
-  const result = await pool.query(q, values)
+  const result = await pool.query(q, [additional_notes, log_id])
   return result.rows[0] || null
 }
 

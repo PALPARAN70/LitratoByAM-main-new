@@ -527,8 +527,7 @@ export default function AdminPaymentsPage() {
           row.log.previous_status,
           row.log.new_status,
           String(row.log.performed_by || ''),
-          (row.log as { additional_notes?: string }).additional_notes || '',
-          (row.log as { notes?: string }).notes || ''
+          (row.log as { additional_notes?: string }).additional_notes || ''
         )
       } else {
         hayParts.push(
