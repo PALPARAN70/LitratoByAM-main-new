@@ -290,18 +290,10 @@ function UserListPanel({
   // --- NEW: compute available role change choices based on current panel role
   const roleChoices: {
     label: string
-    value: 'customer' | 'employee' | 'admin'
+    value: 'customer' | 'employee'
   }[] = (() => {
-    if (role === 'customer')
-      return [
-        { label: 'Staff', value: 'employee' },
-        { label: 'Admin', value: 'admin' },
-      ]
-    if (role === 'employee')
-      return [
-        { label: 'Customer', value: 'customer' },
-        { label: 'Admin', value: 'admin' },
-      ]
+    if (role === 'customer') return [{ label: 'Staff', value: 'employee' }]
+    if (role === 'employee') return [{ label: 'Customer', value: 'customer' }]
     // role === "admin"
     return [
       { label: 'Customer', value: 'customer' },
@@ -310,10 +302,7 @@ function UserListPanel({
   })()
 
   // --- NEW: arrow function to change a user's role
-  const changeRole = async (
-    id: string,
-    newRole: 'customer' | 'employee' | 'admin'
-  ) => {
+  const changeRole = async (id: string, newRole: 'customer' | 'employee') => {
     try {
       const authHeader = getAuthHeader()
       const res = await fetch(

@@ -1780,8 +1780,13 @@ export default function InventoryManagementPage() {
               Add Grid
             </div>
             <DialogContent className="sm:max-w-lg">
+              <DialogHeader>
+                <DialogTitle>Add Grid</DialogTitle>
+                <DialogDescription>
+                  Provide a name and optional image for the grid layout.
+                </DialogDescription>
+              </DialogHeader>
               <div className="space-y-3">
-                <div className="text-lg font-semibold">Add Grid</div>
                 <div className="space-y-2">
                   <label className="block text-sm font-medium">Name</label>
                   <input
@@ -2001,14 +2006,14 @@ export default function InventoryManagementPage() {
     })
     const [pkgForm, setPkgForm] = useState<{
       name: string
-      price: number
+      price: string
       imageUrl: string
       imageName: string
       features: string[]
       durationHours?: number | null
     }>({
       name: '',
-      price: 0,
+      price: '',
       imageUrl: '',
       imageName: '',
       features: [''],
@@ -2287,7 +2292,7 @@ export default function InventoryManagementPage() {
       // reset & close
       setPkgForm({
         name: '',
-        price: 0,
+        price: '',
         imageUrl: '',
         imageName: '',
         features: [''],
@@ -2547,8 +2552,7 @@ export default function InventoryManagementPage() {
     // Update name/price with proper React event types
     const updateField =
       (key: 'name' | 'price') => (e: React.ChangeEvent<HTMLInputElement>) => {
-        const value =
-          key === 'price' ? Number(e.target.value || 0) : e.target.value
+        const value = e.target.value
         setPkgForm((prev) => ({ ...prev, [key]: value } as typeof prev))
       }
 
@@ -3014,14 +3018,14 @@ export default function InventoryManagementPage() {
               if (!o) setEditPkgOpen(false)
             }}
           >
-            <DialogContent className="sm:max-w-lg max-h=[90vh] overflow-y-auto">
+            <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-hidden flex flex-col">
               <DialogHeader>
                 <DialogTitle>Edit Package</DialogTitle>
                 <DialogDescription>
                   Update package details, image, and items.
                 </DialogDescription>
               </DialogHeader>
-              <div className="space-y-4">
+              <div className="flex-1 min-h-0 overflow-y-auto space-y-4 pr-1">
                 {/* Meta fields */}
                 <div>
                   <label className="text-sm font-medium">Name</label>

@@ -146,16 +146,16 @@ export default function ManageBookingPage() {
           Master List
         </TabButton>
         <TabButton
-          active={active === 'bookings'}
-          onClick={() => setActive('bookings')}
-        >
-          Bookings
-        </TabButton>
-        <TabButton
           active={active === 'eventcards'}
           onClick={() => setActive('eventcards')}
         >
           Events
+        </TabButton>
+        <TabButton
+          active={active === 'bookings'}
+          onClick={() => setActive('bookings')}
+        >
+          Bookings
         </TabButton>
       </nav>
       <section className="bg-white rounded-xl shadow p-2">
@@ -2701,26 +2701,38 @@ function MasterListPanel({
             </div>
 
             {/* Equipment details */}
-            <div className="rounded border p-4 bg-gray-50 shadow-sm">
+            <div className="rounded border p-4 bg-gray-50 shadow-sm lg:col-span-2">
               <div className="text-[11px] uppercase text-gray-600 font-semibold mb-2">
                 Equipment details
               </div>
               {reportLoading ? (
                 <div className="text-gray-700">Loading…</div>
               ) : reportItems ? (
-                <div className="space-y-3 text-gray-900">
-                  <div className="grid grid-cols-2 gap-x-6 gap-y-1">
-                    <div>
-                      <span className="text-gray-600">Total:</span>{' '}
-                      {reportItems.total}
+                <div className="space-y-4 text-gray-900">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                    <div className="rounded-md bg-white/70 border px-3 py-2 shadow-sm">
+                      <div className="text-xs text-gray-500 uppercase tracking-wide">
+                        Total
+                      </div>
+                      <div className="text-lg font-semibold">
+                        {reportItems.total}
+                      </div>
                     </div>
-                    <div>
-                      <span className="text-gray-600">Good:</span>{' '}
-                      {reportItems.good}
+                    <div className="rounded-md bg-white/70 border px-3 py-2 shadow-sm">
+                      <div className="text-xs text-gray-500 uppercase tracking-wide">
+                        Good
+                      </div>
+                      <div className="text-lg font-semibold text-emerald-600">
+                        {reportItems.good}
+                      </div>
                     </div>
-                    <div>
-                      <span className="text-gray-600">Damaged:</span>{' '}
-                      {reportItems.damaged}
+                    <div className="rounded-md bg-white/70 border px-3 py-2 shadow-sm">
+                      <div className="text-xs text-gray-500 uppercase tracking-wide">
+                        Damaged
+                      </div>
+                      <div className="text-lg font-semibold text-red-600">
+                        {reportItems.damaged}
+                      </div>
                     </div>
                   </div>
                   <div className="grid grid-cols-1 gap-4 md:grid-cols-2">

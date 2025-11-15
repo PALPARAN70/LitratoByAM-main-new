@@ -5,11 +5,6 @@ const path = require('path')
 const fs = require('fs')
 const app = express()
 
-const authRoute = require('./src/Routes/authRoutes')
-const adminRoute = require('./src/Routes/adminRoutes')
-const employeeRoute = require('./src/Routes/employeeRoutes')
-const customerRoute = require('./src/Routes/customerRoutes')
-
 const cors = require('cors')
 const { initUserTable } = require('./src/Model/userModel')
 const { initBookingRequestTable } = require('./src/Model/bookingRequestModel')
@@ -18,11 +13,13 @@ const { initGridsTable } = require('./src/Model/gridModel')
 const {
   initConfirmedBookingTable,
 } = require('./src/Model/confirmedBookingRequestModel')
+const {
+  initConfirmedBookingStaffTable,
+} = require('./src/Model/confirmedBookingStaffModel')
 const { initPaymentsTable } = require('./src/Model/paymentModel')
 const { initPaymentLogsTable } = require('./src/Model/paymentLogsModel')
 const { initPaymentRefundsTable } = require('./src/Model/paymentRefundModel')
 const { initContractsTable } = require('./src/Model/contractModel')
-// ADD: ensure inventory/packages/status log tables are initialized on startup
 const { initInventoryTable } = require('./src/Model/inventoryModel')
 const { initPackagesTable } = require('./src/Model/packageModel')
 const {
@@ -31,6 +28,8 @@ const {
 const {
   initInventoryStatusLogTable,
 } = require('./src/Model/inventoryStatusLogModel')
+const { initEventStaffLogsTable } = require('./src/Model/eventStaffLogsModel')
+const { initMaterialTypesTable } = require('./src/Model/materialTypesModel')
 
 const ROOT = path.resolve(__dirname, '..') // points to backend/
 const UPLOAD_ROOT = path.join(ROOT, 'Assets')
@@ -62,40 +61,55 @@ app.use(
 app.use(bodyParser.json())
 app.use('/Assets', express.static(UPLOAD_ROOT))
 
-// Routes
-app.use('/api/auth', authRoute)
-app.use('/api/admin', adminRoute)
-app.use('/api/employee', employeeRoute)
-app.use('/api/customer', customerRoute)
+const PORT = process.env.PORT || 5000
 
-// Optional: health check
+// Optional: health check (registered ahead of scheme bootstrap)
 app.get('/health', (_req, res) => res.json({ ok: true }))
 
-// Error handling
-app.use((req, res) => {
-  res.status(404).json({ message: 'Route not found' })
-})
+async function startServer() {
+  try {
+    await initUserTable()
+    // Inventory primitives (no external dependencies beyond users)
+    await initMaterialTypesTable()
+    await initInventoryTable()
+    await initInventoryStatusLogTable()
+    // Core catalog data used by bookings
+    await initPackagesTable()
+    await initGridsTable()
+    await initPackageInventoryItemsTable()
+    // Booking pipeline (requires packages/users before requests; requests before confirmations)
+    await initBookingRequestTable()
+    await initBookingGridsTable()
+    await initConfirmedBookingTable()
+    await initConfirmedBookingStaffTable()
+    await initEventStaffLogsTable()
+    // Payment + contract layers depend on confirmed bookings
+    await initPaymentsTable()
+    await initPaymentLogsTable()
+    await initPaymentRefundsTable()
+    await initContractsTable()
 
-const PORT = process.env.PORT || 5000
-// Initialize essential tables (users + bookings) before starting server
-initUserTable()
-  .then(() => initGridsTable())
-  .then(() => initBookingRequestTable())
-  .then(() => initBookingGridsTable())
-  .then(() => initConfirmedBookingTable())
-  // Ensure core inventory/packages schemas exist before requests hit them
-  .then(() => initInventoryTable())
-  .then(() => initPackagesTable())
-  .then(() => initPackageInventoryItemsTable())
-  .then(() => initInventoryStatusLogTable())
-  .then(() => initPaymentsTable())
-  .then(() => initPaymentLogsTable())
-  .then(() => initPaymentRefundsTable())
-  .then(() => initContractsTable())
-  .then(() => {
+    const authRoute = require('./src/Routes/authRoutes')
+    const adminRoute = require('./src/Routes/adminRoutes')
+    const employeeRoute = require('./src/Routes/employeeRoutes')
+    const customerRoute = require('./src/Routes/customerRoutes')
+
+    // Routes
+    app.use('/api/auth', authRoute)
+    app.use('/api/admin', adminRoute)
+    app.use('/api/employee', employeeRoute)
+    app.use('/api/customer', customerRoute)
+
+    // Error handling (keep last)
+    app.use((req, res) => {
+      res.status(404).json({ message: 'Route not found' })
+    })
+
     app.listen(PORT, () => console.log(`Server running on port ${PORT}`))
-  })
-  .catch((err) => {
+  } catch (err) {
     console.error('Failed to initialize database:', err)
     process.exit(1)
-  })
+  }
+}
+
+startServer()

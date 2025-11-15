@@ -2,6 +2,7 @@ const { pool } = require('../Config/db')
 //const bcrypt = require('bcrypt')
 
 async function initInventoryStatusLogTable() {
+  // Legacy migration: rename old table if present
   await pool.query(`
   DO $$
   BEGIN
@@ -13,34 +14,10 @@ async function initInventoryStatusLogTable() {
     ) THEN
       EXECUTE 'ALTER TABLE status_log RENAME TO inventory_log';
     END IF;
-
-    IF EXISTS (
-      SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'inventory_log' AND column_name = 'log_id'
-    ) THEN
-      EXECUTE 'ALTER TABLE inventory_log RENAME COLUMN log_id TO inventory_log_id';
-    END IF;
-
-    IF NOT EXISTS (
-      SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'inventory_log' AND column_name = 'last_updated'
-    ) THEN
-      EXECUTE 'ALTER TABLE inventory_log ADD COLUMN last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP';
-      EXECUTE 'UPDATE inventory_log SET last_updated = CURRENT_TIMESTAMP WHERE last_updated IS NULL';
-    END IF;
-
-    IF EXISTS (
-      SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'inventory_log' AND column_name = 'updated_at'
-    ) THEN
-      EXECUTE 'ALTER TABLE inventory_log DROP COLUMN updated_at';
-    END IF;
-
-    IF EXISTS (
-      SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'inventory_log' AND column_name = 'last_updated'
-    ) THEN
-      EXECUTE 'ALTER TABLE inventory_log ALTER COLUMN last_updated SET DEFAULT CURRENT_TIMESTAMP';
-    END IF;
   END
   $$;
   `)
+
   await pool.query(`
   CREATE TABLE IF NOT EXISTS inventory_log (
     inventory_log_id SERIAL PRIMARY KEY,
@@ -54,6 +31,42 @@ async function initInventoryStatusLogTable() {
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   )
+  `)
+
+  // Post-creation migrations (only run when table exists)
+  await pool.query(`
+  DO $$
+  BEGIN
+    IF EXISTS (
+      SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'inventory_log'
+    ) THEN
+      IF EXISTS (
+        SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'inventory_log' AND column_name = 'log_id'
+      ) THEN
+        EXECUTE 'ALTER TABLE inventory_log RENAME COLUMN log_id TO inventory_log_id';
+      END IF;
+
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'inventory_log' AND column_name = 'last_updated'
+      ) THEN
+        EXECUTE 'ALTER TABLE inventory_log ADD COLUMN last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP';
+        EXECUTE 'UPDATE inventory_log SET last_updated = CURRENT_TIMESTAMP WHERE last_updated IS NULL';
+      END IF;
+
+      IF EXISTS (
+        SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'inventory_log' AND column_name = 'updated_at'
+      ) THEN
+        EXECUTE 'ALTER TABLE inventory_log DROP COLUMN updated_at';
+      END IF;
+
+      IF EXISTS (
+        SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'inventory_log' AND column_name = 'last_updated'
+      ) THEN
+        EXECUTE 'ALTER TABLE inventory_log ALTER COLUMN last_updated SET DEFAULT CURRENT_TIMESTAMP';
+      END IF;
+    END IF;
+  END
+  $$;
   `)
 }
 //create status log
