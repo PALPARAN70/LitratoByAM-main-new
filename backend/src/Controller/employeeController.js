@@ -397,7 +397,7 @@ exports.createAssignedBookingPayment = async (req, res) => {
         new_status: row.payment_status,
         performed_by: 'employee',
         user_id: uid,
-        notes: row.notes || null,
+        additional_notes: row.notes || null,
         action: 'employee-create',
       })
       await paymentLogsModel.createPaymentLog({
@@ -406,7 +406,7 @@ exports.createAssignedBookingPayment = async (req, res) => {
         new_status: row.payment_status,
         performed_by: 'customer',
         user_id: userId,
-        notes: row.notes || null,
+        additional_notes: row.notes || null,
         action: customerAction,
       })
     } catch (e) {

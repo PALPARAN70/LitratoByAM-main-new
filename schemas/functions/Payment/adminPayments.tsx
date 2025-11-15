@@ -170,7 +170,6 @@ export type PaymentLog = {
   new_status: string
   performed_by: string
   user_id: number
-  notes?: string | null
   action: string
   created_at: string
   additional_notes?: string | null
@@ -196,7 +195,7 @@ export async function listAdminPaymentLogs(
 
 export async function updateAdminPaymentLog(
   log_id: number,
-  body: { additional_notes?: string | null; notes?: string | null }
+  body: { additional_notes?: string | null }
 ): Promise<PaymentLog> {
   const res = await fetch(`${API_BASE}/admin/payment-logs/${log_id}`, {
     method: 'PATCH',

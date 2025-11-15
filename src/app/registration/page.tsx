@@ -33,6 +33,8 @@ export default function RegistrationPage() {
     confirmPassword: false,
   })
 
+  const todayISO = new Date().toISOString().slice(0, 10)
+
   const togglePasswordVisibility = (field: 'password' | 'confirmPassword') => {
     setPasswordVisibility((prev) => ({ ...prev, [field]: !prev[field] }))
   }
@@ -273,6 +275,7 @@ export default function RegistrationPage() {
                         onChange={handleChange}
                         placeholder={field.placeholder}
                         type={field.type}
+                        max={field.name === 'birthdate' ? todayISO : undefined}
                         className={field.className}
                       />
                     )}

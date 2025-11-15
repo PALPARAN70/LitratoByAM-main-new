@@ -11,6 +11,8 @@ import {
   format,
   isSameMonth,
   isSameDay,
+  startOfDay,
+  isBefore,
 } from 'date-fns'
 
 type CalendarProps = {
@@ -84,6 +86,7 @@ export default function Calendar({
     const monthEnd = endOfMonth(monthStart)
     const startDate = startOfWeek(monthStart, { weekStartsOn: 0 })
     const endDate = endOfWeek(monthEnd, { weekStartsOn: 0 })
+    const todayStart = startOfDay(new Date())
 
     const rows = []
     let days = []
@@ -100,6 +103,8 @@ export default function Calendar({
         const isSelected = isSameDay(day, selectedDate)
         const isMarked = markedDate ? isSameDay(day, markedDate) : false
         const hasPending = isCurrentMonth && !!pendingOutline[isoKey]
+        const isPast = isBefore(day, todayStart)
+        const isClickable = isCurrentMonth && !isPast
 
         const commonClass = `flex justify-center items-center h-12 w-12 mx-auto rounded-full transition duration-150 ease-in-out`
 
@@ -137,11 +142,16 @@ export default function Calendar({
             ' ring-2 ring-litratoblack ring-offset-2 ring-offset-gray-300'
         }
 
+        if (!isClickable && !isSelected) {
+          cellClass += ' cursor-not-allowed opacity-60'
+        }
+
         days.push(
           <div
             className={cellClass}
             key={day.toString()}
-            onClick={() => isCurrentMonth && onDateClick(cloneDay)}
+            aria-disabled={!isClickable}
+            onClick={() => isClickable && onDateClick(cloneDay)}
           >
             {formattedDate}
           </div>

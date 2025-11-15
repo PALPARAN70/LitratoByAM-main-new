@@ -46,6 +46,7 @@ type StaffEvent = {
   contactPerson?: string
   contactPersonNumber?: string
   grid?: string
+  boothPlacement?: string
   imageUrl?: string
   damagedItems?: Item[]
 }
@@ -167,6 +168,19 @@ export default function DashboardPage() {
               typeof r['package_id'] === 'number'
                 ? (r['package_id'] as number)
                 : undefined
+            const boothPlacement = (() => {
+              const snake = r['booth_placement']
+              if (typeof snake === 'string') {
+                const trimmed = snake.trim()
+                if (trimmed.length) return trimmed
+              }
+              const camel = r['boothPlacement']
+              if (typeof camel === 'string') {
+                const trimmed = camel.trim()
+                if (trimmed.length) return trimmed
+              }
+              return ''
+            })()
             return {
               id,
               title,
@@ -185,6 +199,7 @@ export default function DashboardPage() {
               contactPerson: String(r['contact_person'] || ''),
               contactPersonNumber: String(r['contact_person_number'] || ''),
               grid: String(r['grid'] || ''),
+              boothPlacement,
               // expose formatted date string for search convenience
               dateDisplay: isoDateTime
                 ? formatDisplayDateTime(isoDateTime)
@@ -360,6 +375,7 @@ export default function DashboardPage() {
                   contactPerson={ev.contactPerson}
                   contactPersonNumber={ev.contactPersonNumber}
                   grid={ev.grid}
+                  boothPlacement={ev.boothPlacement}
                 />
               ))}
             </div>

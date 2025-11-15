@@ -72,6 +72,7 @@ interface EventCardProps {
   grid?: string | string[]
   contactPerson?: string
   contactPersonNumber?: string
+  boothPlacement?: string
   onItemsChange?: (
     items: Array<{
       type: 'damaged'
@@ -111,6 +112,7 @@ export default function EventCard({
   grid,
   contactPerson,
   contactPersonNumber,
+  boothPlacement,
   onItemsChange,
   onStatusChange,
   itemsCatalog,
@@ -624,6 +626,13 @@ export default function EventCard({
     unpaid: { label: 'Unpaid', cls: 'bg-red-700 text-white' },
     paid: { label: 'Paid', cls: 'bg-green-700 text-white' },
   }
+  const formatPaymentMethod = (method?: string | null) => {
+    if (!method) return '—'
+    const lower = method.toLowerCase()
+    if (lower === 'cash') return 'Cash'
+    if (lower === 'gcash') return 'GCash'
+    return method
+  }
   const s = statusStyles[cardStatus]
   const p = paymentStyles[paymentStatus]
   const HOURLY_RATE = 2000
@@ -887,6 +896,14 @@ export default function EventCard({
                           ? (grid as string[]).filter(Boolean).join(', ')
                           : grid && String(grid).trim().length
                           ? String(grid)
+                          : '—'}
+                      </div>
+                      <div>
+                        <span className="font-medium text-gray-600">
+                          Booth Placement:
+                        </span>{' '}
+                        {boothPlacement && String(boothPlacement).trim().length
+                          ? boothPlacement
                           : '—'}
                       </div>
                     </div>
@@ -1389,7 +1406,7 @@ export default function EventCard({
                                 <div>
                                   <div className="text-gray-500">Method</div>
                                   <div className="font-medium">
-                                    {p.payment_method || '—'}
+                                    {formatPaymentMethod(p.payment_method)}
                                   </div>
                                 </div>
                                 <div>

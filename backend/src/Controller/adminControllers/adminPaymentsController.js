@@ -112,7 +112,6 @@ async function updatePaymentHandler(req, res) {
           new_status: String(payment_status),
           performed_by: 'admin',
           user_id: req.user.id,
-          notes: null,
           action: 'status-update',
         })
       } catch (e) {
@@ -129,7 +128,7 @@ async function updatePaymentHandler(req, res) {
           new_status: String(next.payment_status || ''),
           performed_by: 'admin',
           user_id: req.user.id,
-          notes: notes || null,
+          additional_notes: notes || null,
           action: 'note-update',
         })
       } catch (e) {
@@ -172,8 +171,8 @@ async function updatePaymentLogHandler(req, res) {
   try {
     const logId = Number(req.params.log_id)
     if (!logId) return res.status(400).json({ error: 'Invalid log id' })
-    const { additional_notes, notes } = req.body || {}
-    const updated = await updatePaymentLog(logId, { additional_notes, notes })
+    const { additional_notes } = req.body || {}
+    const updated = await updatePaymentLog(logId, { additional_notes })
     if (!updated)
       return res.status(404).json({ error: 'Log not found or no changes' })
     res.json({ log: updated })
@@ -713,7 +712,7 @@ async function createPaymentHandler(req, res) {
         new_status: row.payment_status,
         performed_by: 'admin',
         user_id: req.user?.id,
-        notes: row.notes || null,
+        additional_notes: row.notes || null,
         action: 'admin-create',
       })
     } catch (e) {
@@ -827,7 +826,7 @@ async function createRefundHandler(req, res) {
           new_status: 'Refunded',
           performed_by: 'admin',
           user_id: req.user.id,
-          notes: reason || null,
+          additional_notes: reason || null,
           action: 'refund-full',
         })
         // Recalc booking status after refund
@@ -844,7 +843,7 @@ async function createRefundHandler(req, res) {
           new_status: String(p.payment_status || ''),
           performed_by: 'admin',
           user_id: req.user.id,
-          notes: reason || null,
+          additional_notes: reason || null,
           action: 'refund-partial',
         })
         await recalcBookingPaymentStatus(p.booking_id)

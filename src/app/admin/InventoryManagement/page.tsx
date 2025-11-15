@@ -634,6 +634,13 @@ export default function InventoryManagementPage() {
           )
           return
         }
+        const duplicate = items.some(
+          (row) => row.name.trim().toLowerCase() === name.toLowerCase()
+        )
+        if (duplicate) {
+          toast.error('Equipment name already exists.')
+          return
+        }
         const ensured = await ensureEquipmentType(type, {
           notifyOnCreate: false,
           notifyOnExists: false,
@@ -759,6 +766,18 @@ export default function InventoryManagementPage() {
         condition: string
         notes: string
       }> = {}
+      if (form.name !== undefined) {
+        const nextName = String(form.name ?? '').trim()
+        const duplicate = items.some(
+          (row) =>
+            row.id !== id &&
+            row.name.trim().toLowerCase() === nextName.toLowerCase()
+        )
+        if (duplicate) {
+          toast.error('Equipment name already exists.')
+          return
+        }
+      }
       if (form.name !== undefined)
         updates.material_name = String(form.name).trim()
       if (form.type !== undefined)
@@ -1680,6 +1699,16 @@ export default function InventoryManagementPage() {
     const handleCreateGrid = async () => {
       const name = form.grid_name.trim()
       if (!name) return
+      const duplicate = [...grids, ...archived].some(
+        (g) =>
+          String(g.grid_name || '')
+            .trim()
+            .toLowerCase() === name.toLowerCase()
+      )
+      if (duplicate) {
+        toast.error('Grid name already exists.')
+        return
+      }
       try {
         const row = await createGridAdmin({
           grid_name: name,
@@ -1736,6 +1765,18 @@ export default function InventoryManagementPage() {
     const saveEditedGrid = async () => {
       const id = editForm.id
       if (!id) return
+      const nextName = editForm.grid_name.trim()
+      const duplicate = [...grids, ...archived].some(
+        (g) =>
+          Number(g.id) !== id &&
+          String(g.grid_name || '')
+            .trim()
+            .toLowerCase() === nextName.toLowerCase()
+      )
+      if (duplicate) {
+        toast.error('Grid name already exists.')
+        return
+      }
       try {
         const updated = await updateGridAdmin(id, {
           grid_name: editForm.grid_name,
@@ -2216,6 +2257,13 @@ export default function InventoryManagementPage() {
     const handleCreatePackage = async () => {
       const name = pkgForm.name.trim()
       if (!name) return
+      const duplicate = [...packages, ...archivedPackages].some(
+        (pkg) => pkg.name.trim().toLowerCase() === name.toLowerCase()
+      )
+      if (duplicate) {
+        toast.error('Package name already exists.')
+        return
+      }
 
       try {
         // 1) Create the package
@@ -2700,6 +2748,16 @@ export default function InventoryManagementPage() {
     const saveEditedPackage = async () => {
       const id = editPkgForm.id
       if (!id) return
+      const nextName = editPkgForm.name.trim()
+      const duplicate = [...packages, ...archivedPackages].some(
+        (pkg) =>
+          pkg.id !== id &&
+          pkg.name.trim().toLowerCase() === nextName.toLowerCase()
+      )
+      if (duplicate) {
+        toast.error('Package name already exists.')
+        return
+      }
       try {
         const res = await fetch(`${API_BASE}/package/${id}`, {
           method: 'PATCH',
