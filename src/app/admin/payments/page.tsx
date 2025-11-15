@@ -1,9 +1,9 @@
-'use client'
-
-import React, { useEffect, useMemo, useState } from 'react'
-import Image from 'next/image'
-import { Pencil } from 'lucide-react'
-import { toast } from 'sonner'
+"use client";
+import React, { useEffect, useMemo, useState } from "react";
+import Image from "next/image";
+import { Pencil } from "lucide-react";
+import { RiRefund2Line } from "react-icons/ri";
+import { toast } from "sonner";
 
 import {
   Dialog,
@@ -13,7 +13,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog'
+} from "@/components/ui/dialog";
 import {
   Pagination,
   PaginationContent,
@@ -21,13 +21,13 @@ import {
   PaginationLink,
   PaginationNext,
   PaginationPrevious,
-} from '@/components/ui/pagination'
+} from "@/components/ui/pagination";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from '@/components/ui/popover'
-import { formatDisplayDateTime } from '@/lib/datetime'
+} from "@/components/ui/popover";
+import { formatDisplayDateTime } from "@/lib/datetime";
 import {
   BookingBalance,
   PaymentLog,
@@ -39,261 +39,266 @@ import {
   updateAdminPayment,
   updateAdminPaymentLog,
   uploadAdminPaymentQR,
-} from '../../../../schemas/functions/Payment/adminPayments'
+} from "../../../../schemas/functions/Payment/adminPayments";
 import {
   getAuthHeadersInit,
   getLatestPaymentQR,
-} from '../../../../schemas/functions/Payment/createPayment'
+} from "../../../../schemas/functions/Payment/createPayment";
 import {
   SalesReportRange,
   fetchAdminSalesReport,
   openBlobInNewTabAndPrint,
-} from '../../../../schemas/functions/Payment/printSalesReport'
+} from "../../../../schemas/functions/Payment/printSalesReport";
 
 type Payment = {
-  payment_id: number
-  booking_id: number
-  user_id: number
-  amount: number
-  amount_paid: number
-  payment_method: string
-  qr_image_url?: string | null
-  proof_image_url?: string | null
-  reference_no?: string | null
-  payment_status: string
-  booking_payment_status?: 'unpaid' | 'partial' | 'paid' | 'refunded' | 'failed'
-  booking_base_total?: number
-  booking_ext_hours?: number
-  booking_amount_due?: number
-  notes?: string | null
-  verified_at?: string | null
-  created_at: string
-}
+  payment_id: number;
+  booking_id: number;
+  user_id: number;
+  amount: number;
+  amount_paid: number;
+  payment_method: string;
+  qr_image_url?: string | null;
+  proof_image_url?: string | null;
+  reference_no?: string | null;
+  payment_status: string;
+  booking_payment_status?:
+    | "unpaid"
+    | "partial"
+    | "paid"
+    | "refunded"
+    | "failed";
+  booking_base_total?: number;
+  booking_ext_hours?: number;
+  booking_amount_due?: number;
+  notes?: string | null;
+  verified_at?: string | null;
+  created_at: string;
+};
 
 type LogRow =
   | {
-      kind: 'log'
-      payment_id: number
-      created_at: string
-      log: PaymentLog
+      kind: "log";
+      payment_id: number;
+      created_at: string;
+      log: PaymentLog;
     }
   | {
-      kind: 'payment'
-      payment_id: number
-      created_at: string
-      payment: Payment
-    }
+      kind: "payment";
+      payment_id: number;
+      created_at: string;
+      payment: Payment;
+    };
 
 // Add: pagination window helper (like ManageBooking)
 function pageWindow(current: number, total: number, size = 3): number[] {
-  if (total <= 0) return []
-  const start = Math.floor((Math.max(1, current) - 1) / size) * size + 1
-  const end = Math.min(total, start + size - 1)
-  return Array.from({ length: end - start + 1 }, (_, i) => start + i)
+  if (total <= 0) return [];
+  const start = Math.floor((Math.max(1, current) - 1) / size) * size + 1;
+  const end = Math.min(total, start + size - 1);
+  return Array.from({ length: end - start + 1 }, (_, i) => start + i);
 }
 
 export default function AdminPaymentsPage() {
   // Logs state (this page now shows Payment Logs by default)
-  const [logs, setLogs] = useState<PaymentLog[]>([])
-  const [logsLoading, setLogsLoading] = useState(false)
+  const [logs, setLogs] = useState<PaymentLog[]>([]);
+  const [logsLoading, setLogsLoading] = useState(false);
   // Payments state
-  const [payments, setPayments] = useState<Payment[]>([])
-  const [paymentsLoading, setPaymentsLoading] = useState(false)
-  const [search, setSearch] = useState('')
-  const [page, setPage] = useState(1)
-  const PER_PAGE = 5
+  const [payments, setPayments] = useState<Payment[]>([]);
+  const [paymentsLoading, setPaymentsLoading] = useState(false);
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const PER_PAGE = 5;
 
   const coerceAmount = React.useCallback((value: unknown) => {
-    if (value === null || value === undefined) return undefined
-    const num = Number(value)
-    return Number.isFinite(num) ? num : undefined
-  }, [])
+    if (value === null || value === undefined) return undefined;
+    const num = Number(value);
+    return Number.isFinite(num) ? num : undefined;
+  }, []);
 
   // QR state
-  const [qrUrl, setQrUrl] = useState<string | null>(null)
-  const [qrFile, setQrFile] = useState<File | null>(null)
-  const [qrUploading, setQrUploading] = useState(false)
+  const [qrUrl, setQrUrl] = useState<string | null>(null);
+  const [qrFile, setQrFile] = useState<File | null>(null);
+  const [qrUploading, setQrUploading] = useState(false);
 
-  const [createOpen, setCreateOpen] = useState(false)
+  const [createOpen, setCreateOpen] = useState(false);
   const [createForm, setCreateForm] = useState({
-    booking_id: '' as string,
-    amount_paid: '' as string,
-    payment_method: 'cash',
-    reference_no: '' as string,
-    notes: '' as string,
-  })
+    booking_id: "" as string,
+    amount_paid: "" as string,
+    payment_method: "cash",
+    reference_no: "" as string,
+    notes: "" as string,
+  });
   const [eventOptions, setEventOptions] = useState<
     Array<{ id: number; label: string; userLabel: string }>
-  >([])
-  const [balance, setBalance] = useState<BookingBalance | null>(null)
-  const [balanceLoading, setBalanceLoading] = useState(false)
+  >([]);
+  const [balance, setBalance] = useState<BookingBalance | null>(null);
+  const [balanceLoading, setBalanceLoading] = useState(false);
   const API_ORIGIN =
-    process.env.NEXT_PUBLIC_API_ORIGIN ?? 'http://localhost:5000'
-  const API_BASE = `${API_ORIGIN}/api`
+    process.env.NEXT_PUBLIC_API_ORIGIN ?? "http://localhost:5000";
+  const API_BASE = `${API_ORIGIN}/api`;
 
-  const [reportRange, setReportRange] = useState<SalesReportRange>('month')
+  const [reportRange, setReportRange] = useState<SalesReportRange>("month");
   const printSalesReport = async () => {
     try {
-      const blob = await fetchAdminSalesReport({ range: reportRange })
-      openBlobInNewTabAndPrint(blob)
+      const blob = await fetchAdminSalesReport({ range: reportRange });
+      openBlobInNewTabAndPrint(blob);
     } catch (e) {
-      const err = e as Error & { status?: number }
+      const err = e as Error & { status?: number };
       if (err?.status === 501) {
-        alert(err.message)
-        return
+        alert(err.message);
+        return;
       }
-      console.error('Generate sales report failed:', e)
-      alert('Failed to generate sales report. See console for details.')
+      console.error("Generate sales report failed:", e);
+      alert("Failed to generate sales report. See console for details.");
     }
-  }
+  };
 
   const loadLogs = async () => {
-    setLogsLoading(true)
+    setLogsLoading(true);
     try {
-      const rows = await listAdminPaymentLogs()
-      setLogs(rows)
+      const rows = await listAdminPaymentLogs();
+      setLogs(rows);
     } catch (e) {
-      console.error('Load payment logs failed:', e)
+      console.error("Load payment logs failed:", e);
     } finally {
-      setLogsLoading(false)
+      setLogsLoading(false);
     }
-  }
+  };
 
   const loadPayments = async () => {
-    setPaymentsLoading(true)
+    setPaymentsLoading(true);
     try {
-      const rows = await listAdminPayments()
-      setPayments(rows)
+      const rows = await listAdminPayments();
+      setPayments(rows);
     } catch (e) {
-      console.error('Load payments failed:', e)
+      console.error("Load payments failed:", e);
     } finally {
-      setPaymentsLoading(false)
+      setPaymentsLoading(false);
     }
-  }
+  };
 
   // Edit notes dialog state & handlers
-  const [editOpen, setEditOpen] = useState(false)
-  const [editingLog, setEditingLog] = useState<PaymentLog | null>(null)
-  const [editAdditional, setEditAdditional] = useState('')
+  const [editOpen, setEditOpen] = useState(false);
+  const [editingLog, setEditingLog] = useState<PaymentLog | null>(null);
+  const [editAdditional, setEditAdditional] = useState("");
 
   // Refund dialog state
-  const [refundOpen, setRefundOpen] = useState(false)
-  const [refundPaymentId, setRefundPaymentId] = useState<number | null>(null)
-  const [refundAmount, setRefundAmount] = useState<string>('')
-  const [refundReason, setRefundReason] = useState<string>('')
-  const [refundSubmitting, setRefundSubmitting] = useState(false)
+  const [refundOpen, setRefundOpen] = useState(false);
+  const [refundPaymentId, setRefundPaymentId] = useState<number | null>(null);
+  const [refundAmount, setRefundAmount] = useState<string>("");
+  const [refundReason, setRefundReason] = useState<string>("");
+  const [refundSubmitting, setRefundSubmitting] = useState(false);
 
   // Proof viewer dialog state
-  const [proofOpen, setProofOpen] = useState(false)
-  const [proofPaymentId, setProofPaymentId] = useState<number | null>(null)
-  const [verifySubmitting, setVerifySubmitting] = useState(false)
-  const [confirmVerifyOpen, setConfirmVerifyOpen] = useState(false)
+  const [proofOpen, setProofOpen] = useState(false);
+  const [proofPaymentId, setProofPaymentId] = useState<number | null>(null);
+  const [verifySubmitting, setVerifySubmitting] = useState(false);
+  const [confirmVerifyOpen, setConfirmVerifyOpen] = useState(false);
 
   // Centralized verify handler used by confirmation dialog
   const verifyCurrentPayment = async () => {
-    if (!proofPaymentId) return
-    setVerifySubmitting(true)
+    if (!proofPaymentId) return;
+    setVerifySubmitting(true);
     try {
-      const p = await ensurePayment(proofPaymentId)
-      if (!p) throw new Error('Payment not found')
+      const p = await ensurePayment(proofPaymentId);
+      if (!p) throw new Error("Payment not found");
       const bal = p.booking_id
         ? await getAdminBookingBalance(p.booking_id)
-        : null
-      const remaining = bal ? Math.max(0, bal.amount_due - bal.total_paid) : 0
-      const amt = Number(p.amount_paid || 0)
-      const rowStatus = amt >= remaining ? 'Fully Paid' : 'Partially Paid'
+        : null;
+      const remaining = bal ? Math.max(0, bal.amount_due - bal.total_paid) : 0;
+      const amt = Number(p.amount_paid || 0);
+      const rowStatus = amt >= remaining ? "Fully Paid" : "Partially Paid";
       await updateAdminPayment(proofPaymentId, {
         verified_at: new Date().toISOString(),
         payment_status: rowStatus,
-      })
+      });
       // Invalidate cache for this payment so the Verified badge refreshes
       setPaymentCache((m) => {
-        const { [proofPaymentId]: _omit, ...rest } = m
-        return rest
-      })
-      setConfirmVerifyOpen(false)
-      setProofOpen(false)
-      setProofPaymentId(null)
+        const { [proofPaymentId]: _omit, ...rest } = m;
+        return rest;
+      });
+      setConfirmVerifyOpen(false);
+      setProofOpen(false);
+      setProofPaymentId(null);
       // Refresh both payments and logs to keep tallies accurate
-      await Promise.all([loadPayments(), loadLogs()])
+      await Promise.all([loadPayments(), loadLogs()]);
     } catch (e) {
-      console.error('Verify payment failed:', e)
-      alert('Failed to verify payment')
+      console.error("Verify payment failed:", e);
+      alert("Failed to verify payment");
     } finally {
-      setVerifySubmitting(false)
+      setVerifySubmitting(false);
     }
-  }
+  };
 
   const openEdit = (lg: PaymentLog) => {
-    setEditingLog(lg)
+    setEditingLog(lg);
     setEditAdditional(
-      ((lg as { additional_notes?: string }).additional_notes as string) || ''
-    )
-    setEditOpen(true)
-  }
+      ((lg as { additional_notes?: string }).additional_notes as string) || ""
+    );
+    setEditOpen(true);
+  };
   const saveEdit = async () => {
-    if (!editingLog) return
+    if (!editingLog) return;
     try {
       const updated = await updateAdminPaymentLog(editingLog.log_id, {
         additional_notes: editAdditional,
-      })
+      });
       setLogs((arr) =>
         arr.map((l) => (l.log_id === updated.log_id ? updated : l))
-      )
-      setEditOpen(false)
-      setEditingLog(null)
-      setEditAdditional('')
+      );
+      setEditOpen(false);
+      setEditingLog(null);
+      setEditAdditional("");
     } catch (e) {
-      console.error('Update payment log failed:', e)
-      alert('Failed to update log notes')
+      console.error("Update payment log failed:", e);
+      alert("Failed to update log notes");
     }
-  }
+  };
 
   // --- Enrichment caches for Event/Customer/Proof ---
   type PaymentLite = {
-    booking_id: number
-    user_id: number
-    amount_paid?: number
-    proof_image_url?: string | null
-    verified_at?: string | null
-  }
+    booking_id: number;
+    user_id: number;
+    amount_paid?: number;
+    proof_image_url?: string | null;
+    verified_at?: string | null;
+  };
   type BookingLite = {
-    event_name?: string | null
-    firstname?: string | null
-    lastname?: string | null
-    username?: string | null
-  }
+    event_name?: string | null;
+    firstname?: string | null;
+    lastname?: string | null;
+    username?: string | null;
+  };
   const [paymentCache, setPaymentCache] = useState<Record<number, PaymentLite>>(
     {}
-  )
+  );
   const [bookingCache, setBookingCache] = useState<Record<number, BookingLite>>(
     {}
-  )
+  );
 
   const ensurePayment = React.useCallback(
     async (paymentId: number) => {
-      if (!paymentId) return null
-      if (paymentCache[paymentId]) return paymentCache[paymentId]
+      if (!paymentId) return null;
+      if (paymentCache[paymentId]) return paymentCache[paymentId];
       try {
         const res = await fetch(`${API_BASE}/admin/payments/${paymentId}`, {
           headers: {
-            'Content-Type': 'application/json',
+            "Content-Type": "application/json",
             ...getAuthHeadersInit(),
           },
-          cache: 'no-store',
-        })
-        if (!res.ok) throw new Error(await res.text())
-        const data = await res.json().catch(() => ({}))
+          cache: "no-store",
+        });
+        if (!res.ok) throw new Error(await res.text());
+        const data = await res.json().catch(() => ({}));
         const p = (data as any)?.payment as
           | {
-              booking_id: number
-              user_id: number
-              amount_paid?: unknown
-              amount?: unknown
-              proof_image_url?: string | null
-              verified_at?: string | null
+              booking_id: number;
+              user_id: number;
+              amount_paid?: unknown;
+              amount?: unknown;
+              proof_image_url?: string | null;
+              verified_at?: string | null;
             }
-          | undefined
+          | undefined;
         if (p && p.booking_id) {
           const lite: PaymentLite = {
             booking_id: Number(p.booking_id),
@@ -303,183 +308,183 @@ export default function AdminPaymentsPage() {
             ),
             proof_image_url: p.proof_image_url ?? null,
             verified_at: p.verified_at ?? null,
-          }
-          setPaymentCache((m) => ({ ...m, [paymentId]: lite }))
-          return lite
+          };
+          setPaymentCache((m) => ({ ...m, [paymentId]: lite }));
+          return lite;
         }
       } catch (e) {
-        console.warn('ensurePayment failed:', e)
+        console.warn("ensurePayment failed:", e);
       }
-      return null
+      return null;
     },
     [API_BASE, paymentCache, coerceAmount]
-  )
+  );
 
   const ensureBooking = React.useCallback(
     async (bookingId: number) => {
-      if (!bookingId) return null
-      if (bookingCache[bookingId]) return bookingCache[bookingId]
+      if (!bookingId) return null;
+      if (bookingCache[bookingId]) return bookingCache[bookingId];
       try {
         const res = await fetch(
           `${API_BASE}/admin/confirmed-bookings/${bookingId}`,
           {
             headers: {
-              'Content-Type': 'application/json',
+              "Content-Type": "application/json",
               ...getAuthHeadersInit(),
             },
-            cache: 'no-store',
+            cache: "no-store",
           }
-        )
-        if (!res.ok) throw new Error(await res.text())
-        const data = await res.json().catch(() => ({}))
-        const b = (data as any)?.booking as BookingLite | undefined
+        );
+        if (!res.ok) throw new Error(await res.text());
+        const data = await res.json().catch(() => ({}));
+        const b = (data as any)?.booking as BookingLite | undefined;
         if (b) {
-          setBookingCache((m) => ({ ...m, [bookingId]: b }))
-          return b
+          setBookingCache((m) => ({ ...m, [bookingId]: b }));
+          return b;
         }
       } catch (e) {
-        console.warn('ensureBooking failed:', e)
+        console.warn("ensureBooking failed:", e);
       }
-      return null
+      return null;
     },
     [API_BASE, bookingCache]
-  )
+  );
 
   useEffect(() => {
-    loadLogs()
-    loadPayments()
+    loadLogs();
+    loadPayments();
     const loadQR = async () => {
       try {
-        const url = await getLatestPaymentQR()
-        setQrUrl(url)
+        const url = await getLatestPaymentQR();
+        setQrUrl(url);
       } catch {
-        setQrUrl(null)
+        setQrUrl(null);
       }
-    }
-    loadQR()
-  }, [])
+    };
+    loadQR();
+  }, []);
 
   useEffect(() => {
-    if (!createOpen) return
-    let ignore = false
-    ;(async () => {
+    if (!createOpen) return;
+    let ignore = false;
+    (async () => {
       try {
         const res = await fetch(`${API_BASE}/admin/confirmed-bookings`, {
           headers: {
-            'Content-Type': 'application/json',
+            "Content-Type": "application/json",
             ...getAuthHeadersInit(),
           },
-          cache: 'no-store',
-        })
-        if (!res.ok) throw new Error(await res.text())
-        const data: unknown = await res.json().catch(() => ({} as unknown))
+          cache: "no-store",
+        });
+        if (!res.ok) throw new Error(await res.text());
+        const data: unknown = await res.json().catch(() => ({} as unknown));
         type ConfirmedBookingRow = {
-          id?: number | string
-          firstname?: string
-          lastname?: string
-          username?: string
-          event_date?: string
-          event_time?: string
-          event_name?: string
-          package_name?: string
-          booking_status?: string | null
-          payment_status?: string | null
-        }
+          id?: number | string;
+          firstname?: string;
+          lastname?: string;
+          username?: string;
+          event_date?: string;
+          event_time?: string;
+          event_name?: string;
+          package_name?: string;
+          booking_status?: string | null;
+          payment_status?: string | null;
+        };
         const rows: ConfirmedBookingRow[] =
-          typeof data === 'object' &&
+          typeof data === "object" &&
           data !== null &&
-          'bookings' in (data as Record<string, unknown>) &&
+          "bookings" in (data as Record<string, unknown>) &&
           Array.isArray((data as Record<string, unknown>).bookings)
             ? ((data as Record<string, unknown>).bookings as unknown[]).filter(
                 (b): b is ConfirmedBookingRow =>
-                  typeof b === 'object' && b !== null
+                  typeof b === "object" && b !== null
               )
-            : []
+            : [];
         const opts = rows
           .filter((b) => {
-            const bookingStatus = (b.booking_status || '')
+            const bookingStatus = (b.booking_status || "")
               .toString()
-              .toLowerCase()
-            const paymentStatus = (b.payment_status || '')
+              .toLowerCase();
+            const paymentStatus = (b.payment_status || "")
               .toString()
-              .toLowerCase()
-            const isApproved = bookingStatus !== 'cancelled'
-            const isNotFullyPaid = paymentStatus !== 'paid'
-            return isApproved && isNotFullyPaid
+              .toLowerCase();
+            const isApproved = bookingStatus !== "cancelled";
+            const isNotFullyPaid = paymentStatus !== "paid";
+            return isApproved && isNotFullyPaid;
           })
           .map((b) => {
             const userLabel = [b.firstname, b.lastname]
               .filter(Boolean)
-              .join(' ')
-              .trim()
-            const fallback = b.username || 'Customer'
-            const who = userLabel || fallback
-            const when = [b.event_date, b.event_time].filter(Boolean).join(' ')
-            const title = b.event_name || b.package_name || 'Event'
+              .join(" ")
+              .trim();
+            const fallback = b.username || "Customer";
+            const who = userLabel || fallback;
+            const when = [b.event_date, b.event_time].filter(Boolean).join(" ");
+            const title = b.event_name || b.package_name || "Event";
             return {
               id: Number(b.id),
               label: `#${b.id} • ${title} • ${when} • ${who}`,
               userLabel: who,
-            }
-          })
-        if (!ignore) setEventOptions(opts)
+            };
+          });
+        if (!ignore) setEventOptions(opts);
       } catch (e) {
-        console.error('Load confirmed bookings for dropdown failed:', e)
+        console.error("Load confirmed bookings for dropdown failed:", e);
       }
-    })()
+    })();
     return () => {
-      ignore = true
-    }
-  }, [createOpen, API_BASE])
+      ignore = true;
+    };
+  }, [createOpen, API_BASE]);
 
   useEffect(() => {
-    if (!createOpen) return
-    if (!createForm.booking_id) return
+    if (!createOpen) return;
+    if (!createForm.booking_id) return;
     const exists = eventOptions.some(
       (opt) => String(opt.id) === String(createForm.booking_id)
-    )
+    );
     if (!exists) {
-      setCreateForm((prev) => ({ ...prev, booking_id: '' }))
+      setCreateForm((prev) => ({ ...prev, booking_id: "" }));
     }
-  }, [createOpen, eventOptions, createForm.booking_id])
+  }, [createOpen, eventOptions, createForm.booking_id]);
 
   // Load booking balance when booking changes in create form
   useEffect(() => {
-    const id = Number(createForm.booking_id)
+    const id = Number(createForm.booking_id);
     if (!createOpen || !id) {
-      setBalance(null)
-      return
+      setBalance(null);
+      return;
     }
-    let ignore = false
-    setBalanceLoading(true)
+    let ignore = false;
+    setBalanceLoading(true);
     getAdminBookingBalance(id)
       .then((b) => {
-        if (!ignore) setBalance(b)
+        if (!ignore) setBalance(b);
       })
       .catch((e) => {
-        console.warn('Load admin booking balance failed:', e)
-        if (!ignore) setBalance(null)
+        console.warn("Load admin booking balance failed:", e);
+        if (!ignore) setBalance(null);
       })
       .finally(() => {
-        if (!ignore) setBalanceLoading(false)
-      })
+        if (!ignore) setBalanceLoading(false);
+      });
     return () => {
-      ignore = true
-    }
-  }, [createOpen, createForm.booking_id])
+      ignore = true;
+    };
+  }, [createOpen, createForm.booking_id]);
 
-  const normalized = (search || '').trim().toLowerCase()
+  const normalized = (search || "").trim().toLowerCase();
   // Logs + customer payments filtered
   const logRowsFiltered = useMemo(() => {
     const rows: LogRow[] = [
       ...logs.map((lg) => ({
-        kind: 'log' as const,
+        kind: "log" as const,
         payment_id: lg.payment_id,
         created_at: lg.created_at,
         log: lg,
       })),
       ...payments.map((pmt) => ({
-        kind: 'payment' as const,
+        kind: "payment" as const,
         payment_id: pmt.payment_id,
         created_at: pmt.created_at,
         payment: pmt,
@@ -487,119 +492,119 @@ export default function AdminPaymentsPage() {
     ].sort(
       (a, b) =>
         new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-    )
+    );
 
-    if (!normalized) return rows
+    if (!normalized) return rows;
 
     return rows.filter((row) => {
       const paymentForRow =
-        row.kind === 'payment' ? row.payment : paymentCache[row.payment_id]
+        row.kind === "payment" ? row.payment : paymentCache[row.payment_id];
       const bookingId =
-        row.kind === 'payment'
+        row.kind === "payment"
           ? row.payment.booking_id
-          : paymentForRow?.booking_id
-      const booking = bookingId ? bookingCache[bookingId] : undefined
+          : paymentForRow?.booking_id;
+      const booking = bookingId ? bookingCache[bookingId] : undefined;
       const customerName =
         [booking?.firstname, booking?.lastname]
           .filter(Boolean)
-          .join(' ')
+          .join(" ")
           .trim() ||
         booking?.username ||
-        ''
-      const eventName = booking?.event_name || ''
+        "";
+      const eventName = booking?.event_name || "";
       const amountValue = coerceAmount(
-        row.kind === 'payment'
+        row.kind === "payment"
           ? row.payment.amount_paid ??
               (row.payment as { amount?: unknown }).amount
           : paymentForRow?.amount_paid
-      )
+      );
 
       const hayParts = [
         row.payment_id,
         formatDisplayDateTime(row.created_at),
         eventName,
         customerName,
-      ]
+      ];
 
-      if (row.kind === 'log') {
+      if (row.kind === "log") {
         hayParts.push(
           row.log.action,
           row.log.previous_status,
           row.log.new_status,
-          String(row.log.performed_by || ''),
-          (row.log as { additional_notes?: string }).additional_notes || ''
-        )
+          String(row.log.performed_by || ""),
+          (row.log as { additional_notes?: string }).additional_notes || ""
+        );
       } else {
         hayParts.push(
           row.payment.payment_status,
           row.payment.payment_method,
-          row.payment.reference_no || '',
-          row.payment.notes || ''
-        )
+          row.payment.reference_no || "",
+          row.payment.notes || ""
+        );
       }
 
-      if (typeof amountValue === 'number') {
-        hayParts.push(String(amountValue))
+      if (typeof amountValue === "number") {
+        hayParts.push(String(amountValue));
       }
 
-      return hayParts.join('\n').toLowerCase().includes(normalized)
-    })
-  }, [logs, payments, normalized, paymentCache, bookingCache, coerceAmount])
+      return hayParts.join("\n").toLowerCase().includes(normalized);
+    });
+  }, [logs, payments, normalized, paymentCache, bookingCache, coerceAmount]);
 
   // Payments filtered
   const paymentsFiltered = useMemo(() => {
-    if (!normalized) return payments
+    if (!normalized) return payments;
     return payments.filter((pmt) => {
-      const b = bookingCache[pmt.booking_id]
+      const b = bookingCache[pmt.booking_id];
       const customerName =
-        [b?.firstname, b?.lastname].filter(Boolean).join(' ').trim() ||
+        [b?.firstname, b?.lastname].filter(Boolean).join(" ").trim() ||
         b?.username ||
-        ''
+        "";
       const hay = [
         pmt.payment_id,
         pmt.payment_method,
         pmt.payment_status,
-        pmt.reference_no || '',
+        pmt.reference_no || "",
         formatDisplayDateTime(pmt.created_at),
-        b?.event_name || '',
+        b?.event_name || "",
         customerName,
       ]
-        .join('\n')
-        .toLowerCase()
-      return hay.includes(normalized)
-    })
-  }, [payments, normalized, bookingCache])
+        .join("\n")
+        .toLowerCase();
+      return hay.includes(normalized);
+    });
+  }, [payments, normalized, bookingCache]);
 
   // Tabs
-  type TabKey = 'payments' | 'logs' | 'qr'
-  const [active, setActive] = useState<TabKey>('payments')
+  type TabKey = "payments" | "logs" | "qr";
+  const [active, setActive] = useState<TabKey>("payments");
 
   // Pagination for logs (payments list will show all for now)
-  useEffect(() => setPage(1), [search, active])
+  useEffect(() => setPage(1), [search, active]);
   const totalPagesLogs = Math.max(
     1,
     Math.ceil(logRowsFiltered.length / PER_PAGE)
-  )
-  const startIdxLogs = (page - 1) * PER_PAGE
+  );
+  const startIdxLogs = (page - 1) * PER_PAGE;
   const paginatedLogRows = logRowsFiltered.slice(
     startIdxLogs,
     startIdxLogs + PER_PAGE
-  )
+  );
   const windowPagesLogs = useMemo(
     () => pageWindow(page, totalPagesLogs, 3),
     [page, totalPagesLogs]
-  )
+  );
 
   // Ensure enrichment for currently visible logs
   useEffect(() => {
-    if (!paginatedLogRows.length) return
+    if (!paginatedLogRows.length) return;
 
     setPaymentCache((cache) => {
-      let changed = false
-      const next = { ...cache }
+      let changed = false;
+      const next = { ...cache };
       for (const row of paginatedLogRows) {
-        if (row.kind === 'payment') {
-          const p = row.payment
+        if (row.kind === "payment") {
+          const p = row.payment;
           const lite: PaymentLite = {
             booking_id: Number(p.booking_id),
             user_id: Number(p.user_id),
@@ -608,8 +613,8 @@ export default function AdminPaymentsPage() {
             ),
             proof_image_url: p.proof_image_url ?? null,
             verified_at: p.verified_at ?? null,
-          }
-          const existing = next[p.payment_id]
+          };
+          const existing = next[p.payment_id];
           if (
             !existing ||
             existing.booking_id !== lite.booking_id ||
@@ -618,86 +623,90 @@ export default function AdminPaymentsPage() {
             existing.proof_image_url !== lite.proof_image_url ||
             existing.verified_at !== lite.verified_at
           ) {
-            next[p.payment_id] = lite
-            changed = true
+            next[p.payment_id] = lite;
+            changed = true;
           }
         }
       }
-      return changed ? next : cache
-    })
+      return changed ? next : cache;
+    });
 
     const run = async () => {
       for (const row of paginatedLogRows) {
-        if (row.kind === 'payment') {
+        if (row.kind === "payment") {
           if (row.payment.booking_id) {
-            await ensureBooking(row.payment.booking_id)
+            await ensureBooking(row.payment.booking_id);
           }
         } else {
-          const p = await ensurePayment(row.log.payment_id)
-          if (p?.booking_id) await ensureBooking(p.booking_id)
+          const p = await ensurePayment(row.log.payment_id);
+          if (p?.booking_id) await ensureBooking(p.booking_id);
         }
       }
-    }
+    };
 
-    void run()
-  }, [paginatedLogRows, ensurePayment, ensureBooking, coerceAmount])
+    void run();
+  }, [paginatedLogRows, ensurePayment, ensureBooking, coerceAmount]);
 
   // Ensure we have payment/booking data for the selected refund when dialog opens
   useEffect(() => {
-    if (!refundOpen || !refundPaymentId) return
-    ;(async () => {
-      const p = await ensurePayment(refundPaymentId)
-      if (p?.booking_id) await ensureBooking(p.booking_id)
-    })()
-  }, [refundOpen, refundPaymentId, ensurePayment, ensureBooking])
+    if (!refundOpen || !refundPaymentId) return;
+    (async () => {
+      const p = await ensurePayment(refundPaymentId);
+      if (p?.booking_id) await ensureBooking(p.booking_id);
+    })();
+  }, [refundOpen, refundPaymentId, ensurePayment, ensureBooking]);
 
   // Derived event name for refund dialog
   const refundEventName = useMemo(() => {
-    if (!refundPaymentId) return ''
-    const p = paymentCache[refundPaymentId]
-    if (!p) return ''
-    const b = bookingCache[p.booking_id]
-    return b?.event_name || ''
-  }, [refundPaymentId, paymentCache, bookingCache])
+    if (!refundPaymentId) return "";
+    const p = paymentCache[refundPaymentId];
+    if (!p) return "";
+    const b = bookingCache[p.booking_id];
+    return b?.event_name || "";
+  }, [refundPaymentId, paymentCache, bookingCache]);
 
   // Derived customer name for refund dialog
   const refundCustomerName = useMemo(() => {
-    if (!refundPaymentId) return ''
-    const p = paymentCache[refundPaymentId]
-    if (!p) return ''
-    const b = bookingCache[p.booking_id]
-    const full = [b?.firstname, b?.lastname].filter(Boolean).join(' ').trim()
-    return full || b?.username || ''
-  }, [refundPaymentId, paymentCache, bookingCache])
+    if (!refundPaymentId) return "";
+    const p = paymentCache[refundPaymentId];
+    if (!p) return "";
+    const b = bookingCache[p.booking_id];
+    const full = [b?.firstname, b?.lastname].filter(Boolean).join(" ").trim();
+    return full || b?.username || "";
+  }, [refundPaymentId, paymentCache, bookingCache]);
 
   // Payment status select helpers
-  type BookingPayUi = 'unpaid' | 'partially-paid' | 'paid'
+  type BookingPayUi = "unpaid" | "partially-paid" | "paid";
   const toUiPayment = (s?: string): BookingPayUi =>
-    (s || '').toLowerCase() === 'partial'
-      ? 'partially-paid'
-      : (s || 'unpaid').toLowerCase() === 'paid'
-      ? 'paid'
-      : 'unpaid'
+    (s || "").toLowerCase() === "partial"
+      ? "partially-paid"
+      : (s || "unpaid").toLowerCase() === "paid"
+      ? "paid"
+      : "unpaid";
   const paymentLabel = (p: BookingPayUi) =>
-    p === 'paid' ? 'Paid' : p === 'partially-paid' ? 'Partially Paid' : 'Unpaid'
+    p === "paid"
+      ? "Paid"
+      : p === "partially-paid"
+      ? "Partially Paid"
+      : "Unpaid";
   const paymentBadgeClass = (p: BookingPayUi) =>
-    p === 'paid'
-      ? 'bg-green-700 text-white'
-      : p === 'partially-paid'
-      ? 'bg-yellow-700 text-white'
-      : 'bg-red-700 text-white'
+    p === "paid"
+      ? "bg-green-700 text-white"
+      : p === "partially-paid"
+      ? "bg-yellow-700 text-white"
+      : "bg-red-700 text-white";
 
   return (
     <div className="h-screen flex flex-col p-4 min-h-0">
       <header className="flex items-center justify-between mb-4">
         <h1 className="text-2xl font-bold">
-          {active === 'payments'
-            ? 'Payments'
-            : active === 'logs'
-            ? 'Payment Logs'
-            : 'Payment QR'}
+          {active === "payments"
+            ? "Payments"
+            : active === "logs"
+            ? "Payment Logs"
+            : "Payment QR"}
         </h1>
-        {active === 'payments' && (
+        {active === "payments" && (
           <div className="flex items-center gap-2">
             <div className="flex items-center gap-2">
               <label className="text-sm text-gray-700" htmlFor="reportRange">
@@ -730,7 +739,7 @@ export default function AdminPaymentsPage() {
               className="px-3 py-2 rounded border"
               onClick={() => setCreateOpen((v) => !v)}
             >
-              {createOpen ? 'Close' : 'Create Payment'}
+              {createOpen ? "Close" : "Create Payment"}
             </button>
           </div>
         )}
@@ -738,20 +747,20 @@ export default function AdminPaymentsPage() {
 
       <nav className="flex gap-2 mb-4">
         <TabButton
-          active={active === 'payments'}
-          onClick={() => setActive('payments')}
+          active={active === "payments"}
+          onClick={() => setActive("payments")}
         >
           Payments
         </TabButton>
-        <TabButton active={active === 'logs'} onClick={() => setActive('logs')}>
+        <TabButton active={active === "logs"} onClick={() => setActive("logs")}>
           Logs
         </TabButton>
-        <TabButton active={active === 'qr'} onClick={() => setActive('qr')}>
+        <TabButton active={active === "qr"} onClick={() => setActive("qr")}>
           QR Control
         </TabButton>
       </nav>
 
-      {active === 'qr' && (
+      {active === "qr" && (
         <section className="bg-white h-125 rounded-xl shadow p-4 flex flex-col min-h-0 gap-4">
           <div className="border rounded-xl p-3 flex flex-col gap-2">
             <div className="font-medium">Payment QR</div>
@@ -780,20 +789,20 @@ export default function AdminPaymentsPage() {
                   className="px-3 py-2 rounded bg-litratoblack text-white disabled:opacity-60"
                   disabled={!qrFile || qrUploading}
                   onClick={async () => {
-                    if (!qrFile) return
-                    setQrUploading(true)
+                    if (!qrFile) return;
+                    setQrUploading(true);
                     try {
-                      const { url } = await uploadAdminPaymentQR(qrFile)
-                      setQrUrl(url || null)
-                      setQrFile(null)
+                      const { url } = await uploadAdminPaymentQR(qrFile);
+                      setQrUrl(url || null);
+                      setQrFile(null);
                     } catch (e) {
-                      console.error('QR upload failed:', e)
+                      console.error("QR upload failed:", e);
                     } finally {
-                      setQrUploading(false)
+                      setQrUploading(false);
                     }
                   }}
                 >
-                  {qrUploading ? 'Uploading...' : 'Upload QR'}
+                  {qrUploading ? "Uploading..." : "Upload QR"}
                 </button>
               </div>
             </div>
@@ -801,15 +810,15 @@ export default function AdminPaymentsPage() {
         </section>
       )}
 
-      {active === 'payments' && (
+      {active === "payments" && (
         <section className="bg-white h-125 rounded-xl shadow p-4 flex flex-col min-h-0 gap-4">
           <nav className="flex gap-2 items-center mb-2">
             <div className="flex-grow flex">
               <form
                 className="w-1/3 bg-gray-400 rounded-full items-center flex px-1 py-1"
                 onSubmit={(e) => {
-                  e.preventDefault()
-                  setSearch(search.trim())
+                  e.preventDefault();
+                  setSearch(search.trim());
                 }}
               >
                 <input
@@ -826,30 +835,30 @@ export default function AdminPaymentsPage() {
               const totalAll = paymentsFiltered.reduce(
                 (sum, p) => sum + Number(p.amount_paid || 0),
                 0
-              )
+              );
               const totalVerified = paymentsFiltered.reduce(
                 (sum, p) =>
                   sum + (p.verified_at ? Number(p.amount_paid || 0) : 0),
                 0
-              )
+              );
               return (
                 <div className="hidden md:flex items-center gap-3 mr-2 text-sm">
                   <span className="px-2 py-1 rounded bg-gray-200">
                     Total: ₱
-                    {totalAll.toLocaleString('en-PH', {
+                    {totalAll.toLocaleString("en-PH", {
                       minimumFractionDigits: 2,
                       maximumFractionDigits: 2,
                     })}
                   </span>
                   <span className="px-2 py-1 rounded bg-gray-200">
                     Verified: ₱
-                    {totalVerified.toLocaleString('en-PH', {
+                    {totalVerified.toLocaleString("en-PH", {
                       minimumFractionDigits: 2,
                       maximumFractionDigits: 2,
                     })}
                   </span>
                 </div>
-              )
+              );
             })()}
             <button
               className="px-3 py-2 rounded border text-sm"
@@ -857,7 +866,7 @@ export default function AdminPaymentsPage() {
               disabled={paymentsLoading}
               title="Refresh payments"
             >
-              {paymentsLoading ? 'Loading…' : 'Refresh'}
+              {paymentsLoading ? "Loading…" : "Refresh"}
             </button>
           </nav>
           {paymentsLoading && !payments.length ? (
@@ -872,21 +881,21 @@ export default function AdminPaymentsPage() {
                     <thead>
                       <tr className="bg-gray-300 text-left">
                         {[
-                          'Date/Time',
-                          'Event',
-                          'Customer',
-                          'Method',
-                          'Paid',
-                          'Status',
-                          'Verified',
-                          'Ref#',
-                          'Proof',
+                          "Date/Time",
+                          "Event",
+                          "Customer",
+                          "Method",
+                          "Paid",
+                          "Status",
+                          "Verified",
+                          "Ref#",
+                          "Proof",
                         ].map((h, i, arr) => (
                           <th
                             key={h}
                             className={`px-3 py-2 ${
-                              i === 0 ? 'rounded-tl-xl' : ''
-                            } ${i === arr.length - 1 ? 'rounded-tr-xl' : ''}`}
+                              i === 0 ? "rounded-tl-xl" : ""
+                            } ${i === arr.length - 1 ? "rounded-tr-xl" : ""}`}
                           >
                             {h}
                           </th>
@@ -895,16 +904,16 @@ export default function AdminPaymentsPage() {
                     </thead>
                     <tbody>
                       {paymentsFiltered.map((pmt) => {
-                        const b = bookingCache[pmt.booking_id]
-                        const eventName = b?.event_name || ''
+                        const b = bookingCache[pmt.booking_id];
+                        const eventName = b?.event_name || "";
                         const customerName =
                           [b?.firstname, b?.lastname]
                             .filter(Boolean)
-                            .join(' ')
+                            .join(" ")
                             .trim() ||
                           b?.username ||
-                          ''
-                        const verified = !!pmt.verified_at
+                          "";
+                        const verified = !!pmt.verified_at;
                         return (
                           <tr
                             key={pmt.payment_id}
@@ -917,21 +926,21 @@ export default function AdminPaymentsPage() {
                               className="px-3 py-2 whitespace-nowrap max-w-[14rem] truncate"
                               title={eventName}
                             >
-                              {eventName || '—'}
+                              {eventName || "—"}
                             </td>
                             <td
                               className="px-3 py-2 whitespace-nowrap max-w-[12rem] truncate"
                               title={customerName}
                             >
-                              {customerName || '—'}
+                              {customerName || "—"}
                             </td>
                             <td className="px-3 py-2 whitespace-nowrap">
-                              {pmt.payment_method || '—'}
+                              {pmt.payment_method || "—"}
                             </td>
                             <td className="px-3 py-2 whitespace-nowrap text-right">
                               ₱
                               {Number(pmt.amount_paid || 0).toLocaleString(
-                                'en-PH',
+                                "en-PH",
                                 {
                                   minimumFractionDigits: 2,
                                   maximumFractionDigits: 2,
@@ -939,43 +948,43 @@ export default function AdminPaymentsPage() {
                               )}
                             </td>
                             <td className="px-3 py-2 whitespace-nowrap">
-                              {pmt.payment_status || '—'}
+                              {pmt.payment_status || "—"}
                             </td>
                             <td className="px-3 py-2 whitespace-nowrap">
                               <span
                                 className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${
                                   verified
-                                    ? 'bg-green-700 text-white'
-                                    : 'bg-gray-700 text-white'
+                                    ? "bg-green-700 text-white"
+                                    : "bg-gray-700 text-white"
                                 }`}
                               >
-                                {verified ? 'Verified' : 'Unverified'}
+                                {verified ? "Verified" : "Unverified"}
                               </span>
                             </td>
                             <td className="px-3 py-2 whitespace-nowrap">
-                              {pmt.reference_no || '—'}
+                              {pmt.reference_no || "—"}
                             </td>
                             <td className="px-3 py-2 whitespace-nowrap">
                               <button
                                 type="button"
                                 className={`px-2 py-1 rounded border text-xs ${
-                                  pmt.proof_image_url ? '' : 'opacity-70'
+                                  pmt.proof_image_url ? "" : "opacity-70"
                                 }`}
                                 onClick={async () => {
-                                  setProofPaymentId(pmt.payment_id)
+                                  setProofPaymentId(pmt.payment_id);
                                   const pLite = await ensurePayment(
                                     pmt.payment_id
-                                  )
+                                  );
                                   if (pLite?.booking_id)
-                                    await ensureBooking(pLite.booking_id)
-                                  setProofOpen(true)
+                                    await ensureBooking(pLite.booking_id);
+                                  setProofOpen(true);
                                 }}
                               >
                                 View
                               </button>
                             </td>
                           </tr>
-                        )
+                        );
                       })}
                     </tbody>
                   </table>
@@ -986,15 +995,15 @@ export default function AdminPaymentsPage() {
         </section>
       )}
 
-      {active === 'logs' && (
+      {active === "logs" && (
         <section className="bg-white flex-1 rounded-xl shadow p-4 flex flex-col min-h-0 gap-4">
           <nav className="flex gap-2 items-center mb-2">
             <div className="flex-grow flex">
               <form
                 className="w-1/3 bg-gray-400 rounded-full items-center flex px-1 py-1"
                 onSubmit={(e) => {
-                  e.preventDefault()
-                  setSearch(search.trim())
+                  e.preventDefault();
+                  setSearch(search.trim());
                 }}
               >
                 <input
@@ -1009,12 +1018,12 @@ export default function AdminPaymentsPage() {
             <button
               className="px-3 py-2 rounded border text-sm"
               onClick={async () => {
-                await Promise.all([loadLogs(), loadPayments()])
+                await Promise.all([loadLogs(), loadPayments()]);
               }}
               disabled={logsLoading || paymentsLoading}
               title="Refresh logs and latest payments"
             >
-              {logsLoading || paymentsLoading ? 'Loading…' : 'Refresh'}
+              {logsLoading || paymentsLoading ? "Loading…" : "Refresh"}
             </button>
           </nav>
           {logsLoading && !logs.length ? (
@@ -1029,26 +1038,26 @@ export default function AdminPaymentsPage() {
                     <thead>
                       <tr className="bg-gray-200 text-left text-xs tracking-wide uppercase">
                         {[
-                          { label: 'Date/Time', className: 'w-[7rem]' },
-                          { label: 'Event', className: 'w-[8rem]' },
-                          { label: 'Verified', className: 'w-[5rem]' },
-                          { label: 'Customer', className: 'w-[8rem]' },
+                          { label: "Date/Time", className: "w-[7rem]" },
+                          { label: "Event", className: "w-[8rem]" },
+                          { label: "Verified", className: "w-[5rem]" },
+                          { label: "Customer", className: "w-[8rem]" },
                           {
-                            label: 'Amount',
-                            className: 'w-[6rem] text-right',
+                            label: "Amount",
+                            className: "w-[6rem] text-right",
                           },
-                          { label: 'Action', className: 'w-[8rem]' },
-                          { label: 'Status', className: 'w-[8rem]' },
-                          { label: 'Additional Notes', className: 'w-[6rem]' },
-                          { label: 'Proof', className: 'w-[4.5rem]' },
-                          { label: 'By', className: 'w-[6rem]' },
-                          { label: 'Actions', className: 'w-[5.5rem]' },
+                          { label: "Action", className: "w-[8rem]" },
+                          { label: "Status", className: "w-[8rem]" },
+                          { label: "Additional Notes", className: "w-[6rem]" },
+                          { label: "Proof", className: "w-[4.5rem]" },
+                          { label: "By", className: "w-[6rem]" },
+                          { label: "Actions", className: "w-[5.5rem]" },
                         ].map((h, i, arr) => (
                           <th
                             key={h.label}
-                            className={`px-3 py-2 ${h.className ?? ''} ${
-                              i === 0 ? 'rounded-tl-xl' : ''
-                            } ${i === arr.length - 1 ? 'rounded-tr-xl' : ''}`}
+                            className={`px-3 py-2 ${h.className ?? ""} ${
+                              i === 0 ? "rounded-tl-xl" : ""
+                            } ${i === arr.length - 1 ? "rounded-tr-xl" : ""}`}
                           >
                             {h.label}
                           </th>
@@ -1057,8 +1066,8 @@ export default function AdminPaymentsPage() {
                     </thead>
                     <tbody>
                       {paginatedLogRows.map((row) => {
-                        const isPaymentRow = row.kind === 'payment'
-                        const cached = paymentCache[row.payment_id]
+                        const isPaymentRow = row.kind === "payment";
+                        const cached = paymentCache[row.payment_id];
                         const paymentLite: PaymentLite | undefined =
                           isPaymentRow
                             ? cached ?? {
@@ -1072,55 +1081,55 @@ export default function AdminPaymentsPage() {
                                   row.payment.proof_image_url ?? null,
                                 verified_at: row.payment.verified_at ?? null,
                               }
-                            : cached
+                            : cached;
                         const booking = paymentLite?.booking_id
                           ? bookingCache[paymentLite.booking_id]
-                          : undefined
-                        const eventName = booking?.event_name || ''
+                          : undefined;
+                        const eventName = booking?.event_name || "";
                         const customerName =
                           [booking?.firstname, booking?.lastname]
                             .filter(Boolean)
-                            .join(' ')
+                            .join(" ")
                             .trim() ||
                           booking?.username ||
-                          ''
+                          "";
                         const proofUrl = isPaymentRow
-                          ? row.payment.proof_image_url || ''
-                          : paymentLite?.proof_image_url || ''
+                          ? row.payment.proof_image_url || ""
+                          : paymentLite?.proof_image_url || "";
                         const verified = isPaymentRow
                           ? !!row.payment.verified_at
-                          : !!paymentLite?.verified_at
+                          : !!paymentLite?.verified_at;
                         const amountValue = isPaymentRow
                           ? coerceAmount(
                               row.payment.amount_paid ??
                                 (row.payment as { amount?: unknown }).amount ??
                                 paymentLite?.amount_paid
                             )
-                          : paymentLite?.amount_paid
+                          : paymentLite?.amount_paid;
                         const key =
-                          row.kind === 'log'
+                          row.kind === "log"
                             ? `log-${row.log.log_id}`
-                            : `payment-${row.payment.payment_id}`
+                            : `payment-${row.payment.payment_id}`;
                         const actionLabel = isPaymentRow
                           ? `Payment${
                               row.payment.payment_method
                                 ? ` (${row.payment.payment_method})`
-                                : ''
+                                : ""
                             }`
-                          : row.log.action
+                          : row.log.action;
                         const additionalNotes = isPaymentRow
-                          ? row.payment.notes || ''
+                          ? row.payment.notes || ""
                           : (row.log as { additional_notes?: string })
-                              .additional_notes || ''
+                              .additional_notes || "";
                         const byValue = isPaymentRow
-                          ? 'Customer'
-                          : (row.log.action || '')
+                          ? "Customer"
+                          : (row.log.action || "")
                               .toLowerCase()
-                              .includes('refund')
-                          ? 'Admin'
-                          : 'Employee'
+                              .includes("refund")
+                          ? "Admin"
+                          : "Employee";
                         const statusContent: React.ReactNode = isPaymentRow ? (
-                          row.payment.payment_status || '—'
+                          row.payment.payment_status || "—"
                         ) : (
                           <div className="space-y-0.5">
                             <div className="text-[0.65rem] text-gray-500">
@@ -1130,7 +1139,7 @@ export default function AdminPaymentsPage() {
                               To: {row.log.new_status}
                             </div>
                           </div>
-                        )
+                        );
 
                         return (
                           <tr
@@ -1152,7 +1161,7 @@ export default function AdminPaymentsPage() {
                                 className="block truncate"
                                 title={eventName}
                               >
-                                {eventName || '—'}
+                                {eventName || "—"}
                               </span>
                               {isPaymentRow && row.payment.payment_method ? (
                                 <span className="text-[0.65rem] text-gray-500 uppercase tracking-wide">
@@ -1176,19 +1185,19 @@ export default function AdminPaymentsPage() {
                                 className="block truncate"
                                 title={customerName}
                               >
-                                {customerName || '—'}
+                                {customerName || "—"}
                               </span>
                             </td>
                             <td className="px-3 py-2 text-right align-middle">
-                              {typeof amountValue === 'number'
+                              {typeof amountValue === "number"
                                 ? `₱${Number(amountValue).toLocaleString(
-                                    'en-PH',
+                                    "en-PH",
                                     {
                                       minimumFractionDigits: 2,
                                       maximumFractionDigits: 2,
                                     }
                                   )}`
-                                : '—'}
+                                : "—"}
                             </td>
                             <td className="px-3 py-2 align-middle">
                               <span
@@ -1224,25 +1233,25 @@ export default function AdminPaymentsPage() {
                                 type="button"
                                 className={`px-2 py-1 rounded border text-[0.65rem] font-medium transition ${
                                   proofUrl
-                                    ? 'hover:bg-gray-100'
-                                    : 'opacity-60 cursor-default'
+                                    ? "hover:bg-gray-100"
+                                    : "opacity-60 cursor-default"
                                 }`}
                                 onClick={async () => {
-                                  setProofPaymentId(row.payment_id)
+                                  setProofPaymentId(row.payment_id);
                                   if (isPaymentRow) {
-                                    await ensurePayment(row.payment_id)
+                                    await ensurePayment(row.payment_id);
                                     if (row.payment.booking_id)
                                       await ensureBooking(
                                         row.payment.booking_id
-                                      )
+                                      );
                                   } else {
                                     const pLite = await ensurePayment(
                                       row.log.payment_id
-                                    )
+                                    );
                                     if (pLite?.booking_id)
-                                      await ensureBooking(pLite.booking_id)
+                                      await ensureBooking(pLite.booking_id);
                                   }
-                                  setProofOpen(true)
+                                  setProofOpen(true);
                                 }}
                               >
                                 View
@@ -1250,7 +1259,7 @@ export default function AdminPaymentsPage() {
                             </td>
                             <td className="px-3 py-2 text-center align-middle">
                               <span className="inline-flex items-center rounded-full bg-gray-500/20 text-gray-700 text-[0.65rem] font-medium px-2 py-1 uppercase">
-                                {byValue || '—'}
+                                {byValue || "—"}
                               </span>
                             </td>
                             <td className="px-3 py-2 align-middle">
@@ -1263,29 +1272,30 @@ export default function AdminPaymentsPage() {
                                   <button
                                     type="button"
                                     title="Edit additional notes"
-                                    className="inline-flex h-7 w-7 items-center justify-center rounded-full border hover:bg-gray-100"
+                                    className="inline-flex h-7 w-7 items-center justify-center rounded border hover:bg-gray-100"
                                     onClick={() => openEdit(row.log)}
                                   >
-                                    <Pencil className="w-4 h-4" />
+                                    <Pencil className="w-4  h-4" />
                                   </button>
                                   <button
                                     type="button"
                                     title="Create refund"
-                                    className="inline-flex h-7 w-7 items-center justify-center rounded-full border hover:bg-gray-100"
+                                    className="inline-flex relative h-7 w-7 items-center justify-center rounded border hover:bg-gray-100"
                                     onClick={() => {
-                                      setRefundPaymentId(row.log.payment_id)
-                                      setRefundAmount('')
-                                      setRefundReason('')
-                                      setRefundOpen(true)
+                                      setRefundPaymentId(row.log.payment_id);
+                                      setRefundAmount("");
+                                      setRefundReason("");
+                                      setRefundOpen(true);
                                     }}
                                   >
-                                    Refund
+                                    {" "}
+                                    <RiRefund2Line className="w-4 h-4" />
                                   </button>
                                 </div>
                               )}
                             </td>
                           </tr>
-                        )
+                        );
                       })}
                     </tbody>
                   </table>
@@ -1298,10 +1308,10 @@ export default function AdminPaymentsPage() {
                       <PaginationPrevious
                         href="#"
                         className="text-black no-underline hover:no-underline hover:text-black"
-                        style={{ textDecoration: 'none' }}
+                        style={{ textDecoration: "none" }}
                         onClick={(e) => {
-                          e.preventDefault()
-                          setPage((p) => Math.max(1, p - 1))
+                          e.preventDefault();
+                          setPage((p) => Math.max(1, p - 1));
                         }}
                       />
                     </PaginationItem>
@@ -1311,10 +1321,10 @@ export default function AdminPaymentsPage() {
                           href="#"
                           isActive={n === page}
                           className="text-black no-underline hover:no-underline hover:text-black"
-                          style={{ textDecoration: 'none' }}
+                          style={{ textDecoration: "none" }}
                           onClick={(e) => {
-                            e.preventDefault()
-                            setPage(n)
+                            e.preventDefault();
+                            setPage(n);
                           }}
                         >
                           {n}
@@ -1325,10 +1335,10 @@ export default function AdminPaymentsPage() {
                       <PaginationNext
                         href="#"
                         className="text-black no-underline hover:no-underline hover:text-black"
-                        style={{ textDecoration: 'none' }}
+                        style={{ textDecoration: "none" }}
                         onClick={(e) => {
-                          e.preventDefault()
-                          setPage((p) => Math.min(totalPagesLogs, p + 1))
+                          e.preventDefault();
+                          setPage((p) => Math.min(totalPagesLogs, p + 1));
                         }}
                       />
                     </PaginationItem>
@@ -1345,9 +1355,9 @@ export default function AdminPaymentsPage() {
         open={editOpen}
         onOpenChange={(o) => {
           if (!o) {
-            setEditOpen(false)
-            setEditingLog(null)
-            setEditAdditional('')
+            setEditOpen(false);
+            setEditingLog(null);
+            setEditAdditional("");
           }
         }}
       >
@@ -1360,7 +1370,7 @@ export default function AdminPaymentsPage() {
           </DialogHeader>
           <div className="space-y-3 py-2">
             <div className="text-xs text-gray-500">
-              Log ID: {editingLog?.log_id ?? '—'}
+              Log ID: {editingLog?.log_id ?? "—"}
             </div>
             <textarea
               rows={5}
@@ -1395,9 +1405,9 @@ export default function AdminPaymentsPage() {
         open={proofOpen}
         onOpenChange={(o) => {
           if (!o) {
-            setProofOpen(false)
-            setProofPaymentId(null)
-            setVerifySubmitting(false)
+            setProofOpen(false);
+            setProofPaymentId(null);
+            setVerifySubmitting(false);
           }
         }}
       >
@@ -1410,20 +1420,20 @@ export default function AdminPaymentsPage() {
           </DialogHeader>
           <div className="space-y-3 py-2">
             {(() => {
-              if (!proofPaymentId) return null
-              const p = paymentCache[proofPaymentId]
-              const b = p?.booking_id ? bookingCache[p.booking_id] : undefined
-              const eventName = b?.event_name || ''
+              if (!proofPaymentId) return null;
+              const p = paymentCache[proofPaymentId];
+              const b = p?.booking_id ? bookingCache[p.booking_id] : undefined;
+              const eventName = b?.event_name || "";
               const customerName =
-                [b?.firstname, b?.lastname].filter(Boolean).join(' ').trim() ||
+                [b?.firstname, b?.lastname].filter(Boolean).join(" ").trim() ||
                 b?.username ||
-                ''
-              const url = p?.proof_image_url || ''
+                "";
+              const url = p?.proof_image_url || "";
               return (
                 <>
                   <div className="text-sm">Payment ID: {proofPaymentId}</div>
-                  <div className="text-sm">Event: {eventName || '—'}</div>
-                  <div className="text-sm">Customer: {customerName || '—'}</div>
+                  <div className="text-sm">Event: {eventName || "—"}</div>
+                  <div className="text-sm">Customer: {customerName || "—"}</div>
                   {url ? (
                     // Use img to allow arbitrary remote sources
                     <div className="border rounded overflow-hidden">
@@ -1440,7 +1450,7 @@ export default function AdminPaymentsPage() {
                     </div>
                   )}
                 </>
-              )
+              );
             })()}
           </div>
           <DialogFooter>
@@ -1470,7 +1480,7 @@ export default function AdminPaymentsPage() {
       <Dialog
         open={confirmVerifyOpen}
         onOpenChange={(o) => {
-          if (!o) setConfirmVerifyOpen(false)
+          if (!o) setConfirmVerifyOpen(false);
         }}
       >
         <DialogContent className="sm:max-w-md">
@@ -1500,7 +1510,7 @@ export default function AdminPaymentsPage() {
                 disabled={verifySubmitting}
                 onClick={verifyCurrentPayment}
               >
-                {verifySubmitting ? 'Verifying…' : 'Confirm Verify'}
+                {verifySubmitting ? "Verifying…" : "Confirm Verify"}
               </button>
             ) : null}
           </DialogFooter>
@@ -1510,7 +1520,7 @@ export default function AdminPaymentsPage() {
       <Dialog
         open={createOpen}
         onOpenChange={(o) => {
-          if (!o) setCreateOpen(false)
+          if (!o) setCreateOpen(false);
         }}
       >
         <DialogContent className="sm:max-w-[720px] max-h-[70vh] overflow-hidden flex flex-col">
@@ -1550,8 +1560,8 @@ export default function AdminPaymentsPage() {
                       (eventOptions.find(
                         (o) => String(o.id) === String(createForm.booking_id)
                       )?.userLabel ||
-                        '')) ||
-                    ''
+                        "")) ||
+                    ""
                   }
                   readOnly
                   placeholder="Auto-filled when event is selected"
@@ -1576,8 +1586,8 @@ export default function AdminPaymentsPage() {
                 />
                 {balance && (
                   <div className="text-xs text-gray-600 mt-1">
-                    Amount due: {balance.amount_due.toFixed(2)} • Paid:{' '}
-                    {balance.total_paid.toFixed(2)} • Remaining:{' '}
+                    Amount due: {balance.amount_due.toFixed(2)} • Paid:{" "}
+                    {balance.total_paid.toFixed(2)} • Remaining:{" "}
                     {balance.balance.toFixed(2)}
                   </div>
                 )}
@@ -1647,56 +1657,56 @@ export default function AdminPaymentsPage() {
               type="button"
               className="px-4 py-2 rounded bg-litratoblack text-white text-sm"
               onClick={async () => {
-                const booking_id = Number(createForm.booking_id)
-                const amount_paid = Number(createForm.amount_paid)
+                const booking_id = Number(createForm.booking_id);
+                const amount_paid = Number(createForm.amount_paid);
                 if (!booking_id || !amount_paid) {
-                  alert('Booking ID and Amount Paid are required')
-                  return
+                  alert("Booking ID and Amount Paid are required");
+                  return;
                 }
                 if (balance && amount_paid > balance.balance) {
                   toast.error(
                     `Amount exceeds remaining balance (${balance.balance.toFixed(
                       2
                     )}).`
-                  )
-                  return
+                  );
+                  return;
                 }
                 try {
-                  const markVerified = true
+                  const markVerified = true;
                   let statusToSend:
-                    | 'Pending'
-                    | 'Partially Paid'
-                    | 'Fully Paid' = 'Pending'
+                    | "Pending"
+                    | "Partially Paid"
+                    | "Fully Paid" = "Pending";
                   if (markVerified && balance) {
                     statusToSend =
                       amount_paid >= balance.balance
-                        ? 'Fully Paid'
-                        : 'Partially Paid'
+                        ? "Fully Paid"
+                        : "Partially Paid";
                   }
                   await createAdminPayment({
                     booking_id,
                     amount_paid,
                     payment_method: createForm.payment_method,
                     reference_no:
-                      createForm.reference_no.trim() || 'CASH-ON-EVENT',
+                      createForm.reference_no.trim() || "CASH-ON-EVENT",
                     notes: createForm.notes.trim() || undefined,
                     verified: markVerified,
                     payment_status: statusToSend,
-                  })
+                  });
                   setCreateForm({
-                    booking_id: '',
-                    amount_paid: '',
-                    payment_method: 'cash',
-                    reference_no: '',
-                    notes: '',
-                  })
-                  setBalance(null)
-                  setCreateOpen(false)
+                    booking_id: "",
+                    amount_paid: "",
+                    payment_method: "cash",
+                    reference_no: "",
+                    notes: "",
+                  });
+                  setBalance(null);
+                  setCreateOpen(false);
                   // Refresh both logs and payments so tallies/rows update immediately
-                  await Promise.all([loadLogs(), loadPayments()])
+                  await Promise.all([loadLogs(), loadPayments()]);
                 } catch (e) {
-                  console.error('Create admin payment failed:', e)
-                  alert('Failed to create payment')
+                  console.error("Create admin payment failed:", e);
+                  alert("Failed to create payment");
                 }
               }}
             >
@@ -1711,10 +1721,10 @@ export default function AdminPaymentsPage() {
         open={refundOpen}
         onOpenChange={(o) => {
           if (!o) {
-            setRefundOpen(false)
-            setRefundPaymentId(null)
-            setRefundAmount('')
-            setRefundReason('')
+            setRefundOpen(false);
+            setRefundPaymentId(null);
+            setRefundAmount("");
+            setRefundReason("");
           }
         }}
       >
@@ -1728,9 +1738,9 @@ export default function AdminPaymentsPage() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3 py-2">
-            <div className="text-sm">Payment ID: {refundPaymentId ?? '—'}</div>
-            <div className="text-sm">Event: {refundEventName || '—'}</div>
-            <div className="text-sm">Customer: {refundCustomerName || '—'}</div>
+            <div className="text-sm">Payment ID: {refundPaymentId ?? "—"}</div>
+            <div className="text-sm">Event: {refundEventName || "—"}</div>
+            <div className="text-sm">Customer: {refundCustomerName || "—"}</div>
             <div>
               <label className="text-sm">Amount</label>
               <input
@@ -1769,43 +1779,43 @@ export default function AdminPaymentsPage() {
                 !refundPaymentId || !Number(refundAmount) || refundSubmitting
               }
               onClick={async () => {
-                if (!refundPaymentId) return
-                const amt = Number(refundAmount)
+                if (!refundPaymentId) return;
+                const amt = Number(refundAmount);
                 if (!Number.isFinite(amt) || amt <= 0) {
-                  alert('Enter a valid refund amount')
-                  return
+                  alert("Enter a valid refund amount");
+                  return;
                 }
-                setRefundSubmitting(true)
+                setRefundSubmitting(true);
                 try {
                   await createAdminRefund(refundPaymentId, {
                     amount: amt,
                     reason: refundReason.trim() || undefined,
-                  })
+                  });
                   // Invalidate cache so any derived payment details refresh
                   setPaymentCache((m) => {
-                    const { [refundPaymentId]: _omit, ...rest } = m
-                    return rest
-                  })
-                  setRefundOpen(false)
-                  setRefundPaymentId(null)
-                  setRefundAmount('')
-                  setRefundReason('')
-                  await loadLogs()
+                    const { [refundPaymentId]: _omit, ...rest } = m;
+                    return rest;
+                  });
+                  setRefundOpen(false);
+                  setRefundPaymentId(null);
+                  setRefundAmount("");
+                  setRefundReason("");
+                  await loadLogs();
                 } catch (e) {
-                  console.error('Create refund failed:', e)
-                  alert('Failed to create refund')
+                  console.error("Create refund failed:", e);
+                  alert("Failed to create refund");
                 } finally {
-                  setRefundSubmitting(false)
+                  setRefundSubmitting(false);
                 }
               }}
             >
-              {refundSubmitting ? 'Submitting…' : 'Create Refund'}
+              {refundSubmitting ? "Submitting…" : "Create Refund"}
             </button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
-  )
+  );
 }
 
 // (Old PaymentLogsPanel removed)
@@ -1815,20 +1825,20 @@ function TabButton({
   onClick,
   children,
 }: {
-  active: boolean
-  onClick: () => void
-  children: React.ReactNode
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
 }) {
   return (
     <div
       onClick={onClick}
       className={`px-4 py-2 rounded-full cursor-pointer border font-semibold transition ${
         active
-          ? 'bg-litratoblack text-white border-litratoblack'
-          : 'bg-white text-litratoblack border-gray-300 hover:bg-gray-100'
+          ? "bg-litratoblack text-white border-litratoblack"
+          : "bg-white text-litratoblack border-gray-300 hover:bg-gray-100"
       }`}
     >
       {children}
     </div>
-  )
+  );
 }

@@ -72,21 +72,33 @@ export const bookingFormSchema = z
     }
 
     // Ensure we have either the new split fields (both) or the legacy combined
-    const hasSplit = Boolean(
-      (data as any).contactPersonName && (data as any).contactPersonNumber
-    );
-    const hasLegacy = Boolean((data as any).contactPersonAndNumber);
-    if (!hasSplit && !hasLegacy) {
-      ctx.addIssue({
-        path: ["contactPersonName"],
-        code: z.ZodIssueCode.custom,
-        message: "Provide contact person name.",
-      });
-      ctx.addIssue({
-        path: ["contactPersonNumber"],
-        code: z.ZodIssueCode.custom,
-        message: "Provide contact person number.",
-      });
+    const contactPersonName = ((data as any).contactPersonName || "").trim();
+    const contactPersonNumber = (
+      (data as any).contactPersonNumber || ""
+    ).trim();
+    const contactPersonAndNumber = (
+      (data as any).contactPersonAndNumber || ""
+    ).trim();
+
+    const hasLegacy = contactPersonAndNumber.length > 0;
+    const hasName = contactPersonName.length > 0;
+    const hasNumber = contactPersonNumber.length > 0;
+
+    if (!hasLegacy) {
+      if (!hasName) {
+        ctx.addIssue({
+          path: ["contactPersonName"],
+          code: z.ZodIssueCode.custom,
+          message: "Provide contact person name.",
+        });
+      }
+      if (!hasNumber) {
+        ctx.addIssue({
+          path: ["contactPersonNumber"],
+          code: z.ZodIssueCode.custom,
+          message: "Provide contact person number.",
+        });
+      }
     }
   });
 
