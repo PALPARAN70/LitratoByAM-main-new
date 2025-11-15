@@ -1,12 +1,18 @@
-'use client'
-import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react'
-import Image from 'next/image'
-import { toast } from 'sonner'
+"use client";
+import React, {
+  useState,
+  useMemo,
+  useCallback,
+  useEffect,
+  useRef,
+} from "react";
+import Image from "next/image";
+import { toast } from "sonner";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from '@/components/ui/popover'
+} from "@/components/ui/popover";
 import {
   MoreHorizontal as Ellipsis,
   Pencil,
@@ -14,27 +20,27 @@ import {
   EyeOff,
   Archive,
   ArchiveRestore,
-} from 'lucide-react'
+} from "lucide-react";
 // Grid Admin helpers (extracted API logic)
 import createGridAdmin, {
   type GridRow as AdminGridRow,
-} from '../../../../schemas/functions/InventoryAdmin/createGrid'
+} from "../../../../schemas/functions/InventoryAdmin/createGrid";
 import {
   loadActiveGrids,
   loadArchivedGrids,
-} from '../../../../schemas/functions/InventoryAdmin/loadGridsAdmin'
-import updateGridAdmin from '../../../../schemas/functions/InventoryAdmin/updateGrid'
+} from "../../../../schemas/functions/InventoryAdmin/loadGridsAdmin";
+import updateGridAdmin from "../../../../schemas/functions/InventoryAdmin/updateGrid";
 import {
   archiveGrid,
   unarchiveGrid,
-} from '../../../../schemas/functions/InventoryAdmin/archivedGrid'
+} from "../../../../schemas/functions/InventoryAdmin/archivedGrid";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select'
+} from "@/components/ui/select";
 import {
   Dialog,
   DialogTrigger,
@@ -44,7 +50,7 @@ import {
   DialogDescription,
   DialogFooter,
   DialogClose,
-} from '@/components/ui/dialog'
+} from "@/components/ui/dialog";
 import {
   Table,
   TableBody,
@@ -52,11 +58,11 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from '@/components/ui/table'
-import { Input } from '@/components/ui/input'
-import { Textarea } from '@/components/ui/textarea'
-import { Button } from '@/components/ui/button'
-import { formatDisplayDateTime } from '@/lib/datetime'
+} from "@/components/ui/table";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Button } from "@/components/ui/button";
+import { formatDisplayDateTime } from "@/lib/datetime";
 // Removed unused PromoCard-based rendering; using internal SimplePackageCard instead
 import {
   Pagination,
@@ -65,113 +71,117 @@ import {
   PaginationItem,
   PaginationPrevious,
   PaginationNext,
-} from '@/components/ui/pagination'
+} from "@/components/ui/pagination";
 // Shared types hoisted for stability
-type TabKey = 'equipment' | 'package' | 'grid' | 'logitems'
+type TabKey = "equipment" | "package" | "grid" | "logitems";
 // Status key used by backend for availability
-type EquipmentTabKey = 'available' | 'unavailable'
+type EquipmentTabKey = "available" | "unavailable";
 // UI view tab inside Equipment panel
-type EquipmentViewTabKey = 'available' | 'unavailable' | 'archived'
+type EquipmentViewTabKey = "available" | "unavailable" | "archived";
 type EquipmentRow = {
-  id: string
-  name: string
-  type: string
-  condition: string
-  status: EquipmentTabKey
-  isArchived: boolean
-  assignedPackage: string
-  moreDetails: string
-  notes: string
-  created_at: string
-  last_updated: string
-}
+  id: string;
+  name: string;
+  type: string;
+  condition: string;
+  status: EquipmentTabKey;
+  isArchived: boolean;
+  assignedPackage: string;
+  moreDetails: string;
+  notes: string;
+  created_at: string;
+  last_updated: string;
+};
 
 function normalizeTypeName(value: string): string {
-  const trimmed = String(value ?? '').trim()
-  if (!trimmed) return ''
-  return trimmed.charAt(0).toUpperCase() + trimmed.slice(1)
+  const trimmed = String(value ?? "").trim();
+  if (!trimmed) return "";
+  return trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
 }
 
 function mergeEquipmentTypes(
   ...lists: Array<Iterable<string> | undefined>
 ): string[] {
-  const seen = new Map<string, string>()
+  const seen = new Map<string, string>();
   for (const list of lists) {
-    if (!list) continue
+    if (!list) continue;
     for (const raw of list) {
-      const normalized = normalizeTypeName(String(raw ?? ''))
-      if (!normalized) continue
-      const key = normalized.toLowerCase()
-      if (!seen.has(key)) seen.set(key, normalized)
+      const normalized = normalizeTypeName(String(raw ?? ""));
+      if (!normalized) continue;
+      const key = normalized.toLowerCase();
+      if (!seen.has(key)) seen.set(key, normalized);
     }
   }
-  return Array.from(seen.values()).sort((a, b) => a.localeCompare(b))
+  return Array.from(seen.values()).sort((a, b) => a.localeCompare(b));
 }
 
 type MaterialTypePersistResult =
-  | { ok: true; normalized: string; state: 'created' | 'exists' }
+  | { ok: true; normalized: string; state: "created" | "exists" }
   | {
-      ok: false
-      normalized: string
-      state: 'empty' | 'http' | 'network'
-      httpStatus?: number
-      error?: unknown
-    }
+      ok: false;
+      normalized: string;
+      state: "empty" | "http" | "network";
+      httpStatus?: number;
+      error?: unknown;
+    };
 
 type MaterialTypePersistSuccess = Extract<
   MaterialTypePersistResult,
   { ok: true }
->
+>;
 
-const EQUIPMENT_ENTITY_TYPES = new Set(['Equipments', 'Equipment', 'Inventory'])
+const EQUIPMENT_ENTITY_TYPES = new Set([
+  "Equipments",
+  "Equipment",
+  "Inventory",
+]);
 
 const isEquipmentEntity = (entityType: string) =>
-  EQUIPMENT_ENTITY_TYPES.has(entityType)
+  EQUIPMENT_ENTITY_TYPES.has(entityType);
 
 const displayEntityType = (entityType: string) => {
-  if (isEquipmentEntity(entityType)) return 'Equipment'
-  if (entityType === 'Packages') return 'Package'
-  return entityType
-}
+  if (isEquipmentEntity(entityType)) return "Equipment";
+  if (entityType === "Packages") return "Package";
+  return entityType;
+};
 
 // Default equipment type options
 const DEFAULT_EQUIPMENT_TYPES = [
-  'Camera',
-  'Tripod',
-  'Lighting',
-  'Backdrop',
-  'Printer',
-  'Prop',
-  'Speech bubble',
-  'Frame',
-  'Electronics',
-]
+  "Camera",
+  "Tripod",
+  "Lighting",
+  "Backdrop",
+  "Printer",
+  "Prop",
+  "Speech bubble",
+  "Frame",
+  "Electronics",
+];
 
 //<------------------------ Add Type button component----------[ Part of Add Equipment ]------------------------->
 const AddTypeButton = ({
   onAdd,
 }: {
-  onAdd: (type: string) => Promise<boolean> | boolean
+  onAdd: (type: string) => Promise<boolean> | boolean;
 }) => {
-  const [adding, setAdding] = React.useState(false)
-  const [value, setValue] = React.useState('')
-  const [saving, setSaving] = React.useState(false)
+  const [adding, setAdding] = React.useState(false);
+  const [value, setValue] = React.useState("");
+  const [saving, setSaving] = React.useState(false);
 
   const commit = async () => {
-    if (saving) return
-    const normalized = normalizeTypeName(value)
-    if (!normalized) return
-    setSaving(true)
+    if (saving) return;
+    const normalized = normalizeTypeName(value);
+    if (!normalized) return;
+    setSaving(true);
     try {
-      const result = await onAdd(normalized)
+      const result = await onAdd(normalized);
       if (result) {
-        setValue('')
-        setAdding(false)
+        setValue("");
+        setAdding(false);
       }
     } finally {
-      setSaving(false)
+      setSaving(false);
     }
-  }
+  };
   return (
     <div className="flex items-center">
       {adding ? (
@@ -183,12 +193,12 @@ const AddTypeButton = ({
             onChange={(e) => setValue(e.target.value)}
             disabled={saving}
             onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault()
-                void commit()
-              } else if (e.key === 'Escape') {
-                setAdding(false)
-                setValue('')
+              if (e.key === "Enter") {
+                e.preventDefault();
+                void commit();
+              } else if (e.key === "Escape") {
+                setAdding(false);
+                setValue("");
               }
             }}
           />
@@ -198,14 +208,14 @@ const AddTypeButton = ({
             onClick={() => void commit()}
             disabled={saving}
           >
-            {saving ? 'Saving…' : 'Add'}
+            {saving ? "Saving…" : "Add"}
           </button>
           <button
             type="button"
             className="rounded border px-2 py-1 text-[10px] hover:bg-muted"
             onClick={() => {
-              setAdding(false)
-              setValue('')
+              setAdding(false);
+              setValue("");
             }}
             disabled={saving}
           >
@@ -223,50 +233,50 @@ const AddTypeButton = ({
         </button>
       )}
     </div>
-  )
-}
+  );
+};
 
 // Removed unused FILTER_OPTIONS
 
 // NEW: helper to build a 3-page window like {1,2,3}, {4,5,6}, etc.
 function pageWindow(current: number, total: number, size = 3): number[] {
-  if (total <= 0) return []
-  const start = Math.floor((Math.max(1, current) - 1) / size) * size + 1
-  const end = Math.min(total, start + size - 1)
-  return Array.from({ length: end - start + 1 }, (_, i) => start + i)
+  if (total <= 0) return [];
+  const start = Math.floor((Math.max(1, current) - 1) / size) * size + 1;
+  const end = Math.min(total, start + size - 1);
+  return Array.from({ length: end - start + 1 }, (_, i) => start + i);
 }
 
 export default function InventoryManagementPage() {
-  const [active, setActive] = useState<TabKey>('equipment')
+  const [active, setActive] = useState<TabKey>("equipment");
   // Search state (mirrors AdminAccountManagementPage): input value + debounced applied term
-  const [searchInput, setSearchInput] = useState('')
-  const [searchTerm, setSearchTerm] = useState('')
+  const [searchInput, setSearchInput] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
 
   // Debounce: apply searchTerm 500ms after last keystroke
   useEffect(() => {
-    const trimmed = searchInput.trim()
-    if (trimmed === searchTerm) return
-    const id = setTimeout(() => setSearchTerm(trimmed), 500)
-    return () => clearTimeout(id)
-  }, [searchInput, searchTerm])
+    const trimmed = searchInput.trim();
+    if (trimmed === searchTerm) return;
+    const id = setTimeout(() => setSearchTerm(trimmed), 500);
+    return () => clearTimeout(id);
+  }, [searchInput, searchTerm]);
 
   // NEW: memoize heavy panels so typing in the search box doesn't re-render them
   const equipmentPanelEl = useMemo(
     () => <CreateEquipmentPanel searchTerm={searchTerm} />,
     [searchTerm, CreateEquipmentPanel]
-  )
+  );
   const packagePanelEl = useMemo(
     () => <CreatePackagePanel searchTerm={searchTerm} />,
     [searchTerm, CreatePackagePanel]
-  )
+  );
   const gridPanelEl = useMemo(
     () => <GridPanel searchTerm={searchTerm} />,
     [searchTerm, GridPanel]
-  )
+  );
   const itemLogsPanelEl = useMemo(
     () => <ItemLogsPanel searchTerm={searchTerm} />,
     [searchTerm, ItemLogsPanel]
-  )
+  );
 
   return (
     <>
@@ -276,26 +286,26 @@ export default function InventoryManagementPage() {
         </header>
         <nav className="flex gap-2  mb-6">
           <TabButton
-            active={active === 'equipment'}
-            onClick={() => setActive('equipment')}
+            active={active === "equipment"}
+            onClick={() => setActive("equipment")}
           >
             Equipments
           </TabButton>
           <TabButton
-            active={active === 'package'}
-            onClick={() => setActive('package')}
+            active={active === "package"}
+            onClick={() => setActive("package")}
           >
             Packages
           </TabButton>
           <TabButton
-            active={active === 'grid'}
-            onClick={() => setActive('grid')}
+            active={active === "grid"}
+            onClick={() => setActive("grid")}
           >
             Grid
           </TabButton>
           <TabButton
-            active={active === 'logitems'}
-            onClick={() => setActive('logitems')}
+            active={active === "logitems"}
+            onClick={() => setActive("logitems")}
           >
             Logs
           </TabButton>
@@ -305,8 +315,8 @@ export default function InventoryManagementPage() {
             <form
               className="w-1/4 bg-gray-400 rounded-full items-center flex px-1 py-1"
               onSubmit={(e) => {
-                e.preventDefault()
-                setSearchTerm(searchInput.trim())
+                e.preventDefault();
+                setSearchTerm(searchInput.trim());
               }}
             >
               <input
@@ -320,133 +330,133 @@ export default function InventoryManagementPage() {
           </div>
         </nav>
         <section className="bg-white h-125 rounded-xl shadow p-4 flex flex-col min-h-0">
-          {active === 'equipment' && equipmentPanelEl}
-          {active === 'package' && packagePanelEl}
-          {active === 'grid' && gridPanelEl}
-          {active === 'logitems' && itemLogsPanelEl}
+          {active === "equipment" && equipmentPanelEl}
+          {active === "package" && packagePanelEl}
+          {active === "grid" && gridPanelEl}
+          {active === "logitems" && itemLogsPanelEl}
           {/* NEW */}
         </section>
       </div>
     </>
-  )
+  );
 
   // Panels
   function CreateEquipmentPanel({ searchTerm }: { searchTerm?: string }) {
-    const [active, setActive] = useState<EquipmentViewTabKey>('available')
-    const [items, setItems] = useState<EquipmentRow[]>([])
+    const [active, setActive] = useState<EquipmentViewTabKey>("available");
+    const [items, setItems] = useState<EquipmentRow[]>([]);
     const [assignmentMap, setAssignmentMap] = useState<Record<string, string>>(
       {}
-    )
+    );
     const [equipmentTypes, setEquipmentTypes] = useState<string[]>(() =>
       mergeEquipmentTypes(DEFAULT_EQUIPMENT_TYPES)
-    )
+    );
     // API base (override via .env.local NEXT_PUBLIC_API_ORIGIN=http://localhost:5000)
     const API_ORIGIN =
-      process.env.NEXT_PUBLIC_API_ORIGIN ?? 'http://localhost:5000'
-    const API_BASE = `${API_ORIGIN}/api/admin`
+      process.env.NEXT_PUBLIC_API_ORIGIN ?? "http://localhost:5000";
+    const API_BASE = `${API_ORIGIN}/api/admin`;
 
     // small helpers
     const getCookie = (name: string) =>
-      typeof document === 'undefined'
-        ? ''
+      typeof document === "undefined"
+        ? ""
         : document.cookie
-            .split('; ')
-            .find((r) => r.startsWith(name + '='))
-            ?.split('=')[1] || ''
+            .split("; ")
+            .find((r) => r.startsWith(name + "="))
+            ?.split("=")[1] || "";
 
     // CHANGED: align with AccountManager -> use "access_token" and ensure Bearer prefix
     const getAuthHeaderString = useCallback(() => {
       const raw =
-        (typeof window !== 'undefined' &&
-          localStorage.getItem('access_token')) ||
-        getCookie('access_token')
-      if (!raw) return ''
-      return raw.startsWith('Bearer ') ? raw : `Bearer ${raw}`
-    }, [])
+        (typeof window !== "undefined" &&
+          localStorage.getItem("access_token")) ||
+        getCookie("access_token");
+      if (!raw) return "";
+      return raw.startsWith("Bearer ") ? raw : `Bearer ${raw}`;
+    }, []);
 
     const getAuthHeaders = useCallback((): Record<string, string> => {
-      const auth = getAuthHeaderString()
-      return auth ? { Authorization: auth } : {}
-    }, [getAuthHeaderString])
+      const auth = getAuthHeaderString();
+      return auth ? { Authorization: auth } : {};
+    }, [getAuthHeaderString]);
 
     useEffect(() => {
-      let ignore = false
-      ;(async () => {
+      let ignore = false;
+      (async () => {
         try {
           const res = await fetch(`${API_BASE}/material-types`, {
             headers: {
               ...getAuthHeaders(),
             },
-          })
+          });
           if (!res.ok) {
-            if (res.status === 401 || res.status === 403) return
-            console.error(`GET /material-types ${res.status}`)
-            return
+            if (res.status === 401 || res.status === 403) return;
+            console.error(`GET /material-types ${res.status}`);
+            return;
           }
-          const payload = await res.json().catch(() => ({} as any))
+          const payload = await res.json().catch(() => ({} as any));
           const fetched = Array.isArray(payload?.materialTypes)
             ? payload.materialTypes
                 .map((t: { name?: string }) =>
-                  normalizeTypeName(String(t?.name ?? ''))
+                  normalizeTypeName(String(t?.name ?? ""))
                 )
                 .filter(Boolean)
-            : []
+            : [];
           if (!ignore && fetched.length) {
             setEquipmentTypes((prev) =>
               mergeEquipmentTypes(DEFAULT_EQUIPMENT_TYPES, prev, fetched)
-            )
+            );
           }
         } catch (error) {
-          console.error('Load material types failed:', error)
+          console.error("Load material types failed:", error);
         }
-      })()
+      })();
       return () => {
-        ignore = true
-      }
-    }, [API_BASE, getAuthHeaders])
+        ignore = true;
+      };
+    }, [API_BASE, getAuthHeaders]);
 
     useEffect(() => {
       setItems((prev) =>
         prev.map((row) => ({
           ...row,
-          assignedPackage: assignmentMap[row.id] ?? 'Unassigned',
+          assignedPackage: assignmentMap[row.id] ?? "Unassigned",
         }))
-      )
-    }, [assignmentMap])
+      );
+    }, [assignmentMap]);
 
     const persistMaterialType = useCallback(
       async (typeName: string): Promise<MaterialTypePersistResult> => {
-        const normalized = normalizeTypeName(typeName)
+        const normalized = normalizeTypeName(typeName);
         if (!normalized) {
-          return { ok: false, normalized: '', state: 'empty' }
+          return { ok: false, normalized: "", state: "empty" };
         }
         try {
           const res = await fetch(`${API_BASE}/material-types`, {
-            method: 'POST',
+            method: "POST",
             headers: {
-              'Content-Type': 'application/json',
+              "Content-Type": "application/json",
               ...getAuthHeaders(),
             },
             body: JSON.stringify({ name: normalized }),
-          })
+          });
           if (res.status === 409) {
-            return { ok: true, normalized, state: 'exists' }
+            return { ok: true, normalized, state: "exists" };
           }
           if (!res.ok) {
             return {
               ok: false,
               normalized,
-              state: 'http',
+              state: "http",
               httpStatus: res.status,
-            }
+            };
           }
-          return { ok: true, normalized, state: 'created' }
+          return { ok: true, normalized, state: "created" };
         } catch (error) {
-          return { ok: false, normalized, state: 'network', error }
+          return { ok: false, normalized, state: "network", error };
         }
       },
       [API_BASE, getAuthHeaders]
-    )
+    );
 
     const ensureEquipmentType = useCallback(
       async (
@@ -456,235 +466,237 @@ export default function InventoryManagementPage() {
           notifyOnExists = true,
         }: { notifyOnCreate?: boolean; notifyOnExists?: boolean } = {}
       ): Promise<MaterialTypePersistSuccess | null> => {
-        const result = await persistMaterialType(candidate)
+        const result = await persistMaterialType(candidate);
         if (!result.ok) {
           switch (result.state) {
-            case 'empty':
-              toast.error('Please enter a type name.')
-              break
-            case 'http':
+            case "empty":
+              toast.error("Please enter a type name.");
+              break;
+            case "http":
               if (result.httpStatus === 401) {
-                toast.error('Unauthorized. Please log in again.')
+                toast.error("Unauthorized. Please log in again.");
               } else if (result.httpStatus === 403) {
-                toast.error('Only admins can add equipment types.')
+                toast.error("Only admins can add equipment types.");
               } else {
-                toast.error('Failed to save equipment type.')
+                toast.error("Failed to save equipment type.");
               }
-              break
+              break;
             default:
-              toast.error('Network error while saving equipment type.')
+              toast.error("Network error while saving equipment type.");
           }
-          return null
+          return null;
         }
         setEquipmentTypes((prev) =>
           mergeEquipmentTypes(DEFAULT_EQUIPMENT_TYPES, prev, [
             result.normalized,
           ])
-        )
-        if (result.state === 'created' && notifyOnCreate) {
-          toast.success('Equipment type added.')
-        } else if (result.state === 'exists' && notifyOnExists) {
-          toast.info('Equipment type already exists.')
+        );
+        if (result.state === "created" && notifyOnCreate) {
+          toast.success("Equipment type added.");
+        } else if (result.state === "exists" && notifyOnExists) {
+          toast.info("Equipment type already exists.");
         }
-        return result
+        return result;
       },
       [persistMaterialType]
-    )
+    );
 
     const mapItem = (
       it: Record<string, unknown>,
       assignments: Record<string, string> = assignmentMap
     ): EquipmentRow => {
-      const id = String(it.id ?? '')
+      const id = String(it.id ?? "");
       const rawCondition = String(
-        (it as { condition?: unknown }).condition ?? ''
-      )
-      const archiveValue = (it as { is_archived?: unknown }).is_archived
+        (it as { condition?: unknown }).condition ?? ""
+      );
+      const archiveValue = (it as { is_archived?: unknown }).is_archived;
       const derivedArchived = (() => {
         if (archiveValue === undefined) {
-          return rawCondition.trim().toLowerCase() === 'archived'
+          return rawCondition.trim().toLowerCase() === "archived";
         }
-        if (typeof archiveValue === 'string') {
-          const normalized = archiveValue.trim().toLowerCase()
-          return ['true', '1', 't', 'yes', 'y'].includes(normalized)
+        if (typeof archiveValue === "string") {
+          const normalized = archiveValue.trim().toLowerCase();
+          return ["true", "1", "t", "yes", "y"].includes(normalized);
         }
-        if (typeof archiveValue === 'number') {
-          return Number(archiveValue) !== 0
+        if (typeof archiveValue === "number") {
+          return Number(archiveValue) !== 0;
         }
-        return Boolean(archiveValue)
-      })()
-      const statusBool = Boolean((it as { status?: unknown }).status)
+        return Boolean(archiveValue);
+      })();
+      const statusBool = Boolean((it as { status?: unknown }).status);
       const status = (
-        statusBool && !derivedArchived ? 'available' : 'unavailable'
-      ) as EquipmentTabKey
+        statusBool && !derivedArchived ? "available" : "unavailable"
+      ) as EquipmentTabKey;
       return {
         id,
-        name: String((it as { material_name?: unknown }).material_name ?? ''),
-        type: String((it as { material_type?: unknown }).material_type ?? ''),
+        name: String((it as { material_name?: unknown }).material_name ?? ""),
+        type: String((it as { material_type?: unknown }).material_type ?? ""),
         condition: rawCondition,
         status,
         isArchived: derivedArchived,
-        assignedPackage: assignments[id] ?? 'Unassigned',
-        moreDetails: 'View',
-        notes: String((it as { notes?: unknown }).notes ?? ''),
-        created_at: String((it as { created_at?: unknown }).created_at ?? ''),
+        assignedPackage: assignments[id] ?? "Unassigned",
+        moreDetails: "View",
+        notes: String((it as { notes?: unknown }).notes ?? ""),
+        created_at: String((it as { created_at?: unknown }).created_at ?? ""),
         last_updated: String(
-          (it as { last_updated?: unknown }).last_updated ?? ''
+          (it as { last_updated?: unknown }).last_updated ?? ""
         ),
-      }
-    }
+      };
+    };
 
     // load from backend
     useEffect(() => {
-      let ignore = false
-      ;(async () => {
+      let ignore = false;
+      (async () => {
         try {
-          console.log('API_BASE', API_BASE)
+          console.log("API_BASE", API_BASE);
           const headers = {
-            'Content-Type': 'application/json',
+            "Content-Type": "application/json",
             ...getAuthHeaders(),
-          }
+          };
 
           const [inventoryRes, assignmentsRes] = await Promise.all([
             fetch(`${API_BASE}/inventory`, { headers }),
             fetch(`${API_BASE}/package-inventory-item`, { headers }),
-          ])
+          ]);
 
           if (inventoryRes.status === 401 || assignmentsRes.status === 401)
-            throw new Error('Unauthorized. Please log in.')
+            throw new Error("Unauthorized. Please log in.");
           if (inventoryRes.status === 403 || assignmentsRes.status === 403)
-            throw new Error('Forbidden: Admin role required.')
+            throw new Error("Forbidden: Admin role required.");
           if (!inventoryRes.ok)
-            throw new Error(`GET /inventory ${inventoryRes.status}`)
+            throw new Error(`GET /inventory ${inventoryRes.status}`);
 
-          const inventoryPayload = await inventoryRes.json()
-          const rawItems = inventoryPayload.items ?? inventoryPayload ?? []
+          const inventoryPayload = await inventoryRes.json();
+          const rawItems = inventoryPayload.items ?? inventoryPayload ?? [];
 
-          let assignmentLookup: Record<string, string> = {}
+          let assignmentLookup: Record<string, string> = {};
           if (assignmentsRes.ok) {
             try {
-              const assignmentsPayload = await assignmentsRes.json()
+              const assignmentsPayload = await assignmentsRes.json();
               const rows = Array.isArray(
                 assignmentsPayload?.packageInventoryItems
               )
                 ? assignmentsPayload.packageInventoryItems
                 : Array.isArray(assignmentsPayload)
                 ? assignmentsPayload
-                : []
-              const typedRows = rows as Array<Record<string, unknown>>
+                : [];
+              const typedRows = rows as Array<Record<string, unknown>>;
               assignmentLookup = typedRows.reduce(
                 (acc: Record<string, string>, row) => {
-                  const inventoryId = String(row?.inventory_id ?? '')
-                  const packageName = String(row?.package_name ?? '').trim()
+                  const inventoryId = String(row?.inventory_id ?? "");
+                  const packageName = String(row?.package_name ?? "").trim();
                   if (inventoryId) {
-                    acc[inventoryId] = packageName || 'Unnamed Package'
+                    acc[inventoryId] = packageName || "Unnamed Package";
                   }
-                  return acc
+                  return acc;
                 },
                 {} as Record<string, string>
-              )
+              );
             } catch (error) {
-              console.error('Parse package assignments failed:', error)
+              console.error("Parse package assignments failed:", error);
             }
           } else {
-            console.warn(`GET /package-inventory-item ${assignmentsRes.status}`)
+            console.warn(
+              `GET /package-inventory-item ${assignmentsRes.status}`
+            );
           }
 
           if (!ignore) {
-            setAssignmentMap(assignmentLookup)
+            setAssignmentMap(assignmentLookup);
             setItems(
               rawItems.map((item: Record<string, unknown>) =>
                 mapItem(item, assignmentLookup)
               )
-            )
+            );
           }
         } catch (e) {
-          console.error('Load inventory failed:', e)
+          console.error("Load inventory failed:", e);
         }
-      })()
+      })();
       return () => {
-        ignore = true
-      }
-    }, [API_BASE, getAuthHeaders])
+        ignore = true;
+      };
+    }, [API_BASE, getAuthHeaders]);
 
     // Form state for the Add Equipment modal
     const [form, setForm] = useState({
-      id: '',
-      name: '',
-      type: '',
-      condition: '',
-      status: 'available' as EquipmentTabKey,
-      notes: '',
-      created_at: '',
-      last_updated: '',
-    })
+      id: "",
+      name: "",
+      type: "",
+      condition: "",
+      status: "available" as EquipmentTabKey,
+      notes: "",
+      created_at: "",
+      last_updated: "",
+    });
     const updateForm = <K extends keyof typeof form>(
       key: K,
       value: (typeof form)[K]
-    ) => setForm((prev) => ({ ...prev, [key]: value }))
+    ) => setForm((prev) => ({ ...prev, [key]: value }));
     const handleCreate = async () => {
       try {
         // Basic validation: require all key details (notes optional)
-        const name = form.name.trim()
-        const type = form.type.trim()
-        const condition = form.condition.trim()
+        const name = form.name.trim();
+        const type = form.type.trim();
+        const condition = form.condition.trim();
         if (!name || !type || !condition || !form.status) {
           toast.error(
-            'Please complete all required fields before creating equipment.'
-          )
-          return
+            "Please complete all required fields before creating equipment."
+          );
+          return;
         }
         const duplicate = items.some(
           (row) => row.name.trim().toLowerCase() === name.toLowerCase()
-        )
+        );
         if (duplicate) {
-          toast.error('Equipment name already exists.')
-          return
+          toast.error("Equipment name already exists.");
+          return;
         }
         const ensured = await ensureEquipmentType(type, {
           notifyOnCreate: false,
           notifyOnExists: false,
-        })
+        });
         if (!ensured) {
-          return
+          return;
         }
         const body = {
           materialName: name,
           materialType: ensured.normalized,
-          condition: form.condition.trim() || 'Good',
-          status: form.status === 'available',
+          condition: form.condition.trim() || "Good",
+          status: form.status === "available",
           notes: form.notes,
           display: true,
           is_archived: false,
-        }
+        };
         const res = await fetch(`${API_BASE}/inventory`, {
-          method: 'POST',
+          method: "POST",
           headers: {
-            'Content-Type': 'application/json',
+            "Content-Type": "application/json",
             ...getAuthHeaders(),
           },
           body: JSON.stringify(body),
-        })
-        if (!res.ok) throw new Error(`POST /inventory ${res.status}`)
-        const data = await res.json()
-        if (data.item) setItems((prev) => [...prev, mapItem(data.item)])
-        toast.success('Equipment added.')
+        });
+        if (!res.ok) throw new Error(`POST /inventory ${res.status}`);
+        const data = await res.json();
+        if (data.item) setItems((prev) => [...prev, mapItem(data.item)]);
+        toast.success("Equipment added.");
       } catch (e) {
-        console.error('Create inventory failed:', e)
-        toast.error('Unable to add equipment.')
+        console.error("Create inventory failed:", e);
+        toast.error("Unable to add equipment.");
       }
       // reset form
       setForm({
-        id: '',
-        name: '',
-        type: '',
-        condition: '',
-        status: 'available',
-        notes: '',
-        created_at: '',
-        last_updated: '',
-      })
-    }
+        id: "",
+        name: "",
+        type: "",
+        condition: "",
+        status: "available",
+        notes: "",
+        created_at: "",
+        last_updated: "",
+      });
+    };
 
     // Generic form handlers to reduce inline functions
     const handleText = useCallback(
@@ -692,12 +704,12 @@ export default function InventoryManagementPage() {
         (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
           setForm((prev) => ({ ...prev, [key]: e.target.value })),
       [setForm]
-    )
+    );
     const isCreateDisabled =
       !form.name.trim() ||
       !form.type.trim() ||
       !form.condition.trim() ||
-      !form.status
+      !form.status;
     // removed unused handleNumber
 
     // Stable status update
@@ -705,109 +717,109 @@ export default function InventoryManagementPage() {
       async (id: string, status: EquipmentTabKey) => {
         setItems((prev) =>
           prev.map((it) => (it.id === id ? { ...it, status } : it))
-        )
+        );
         try {
           const res = await fetch(`${API_BASE}/inventory/${id}`, {
-            method: 'PATCH',
+            method: "PATCH",
             headers: {
-              'Content-Type': 'application/json',
+              "Content-Type": "application/json",
               ...getAuthHeaders(),
             },
-            body: JSON.stringify({ status: status === 'available' }),
-          })
-          if (!res.ok) throw new Error(`PATCH /inventory/${id} ${res.status}`)
+            body: JSON.stringify({ status: status === "available" }),
+          });
+          if (!res.ok) throw new Error(`PATCH /inventory/${id} ${res.status}`);
         } catch (e) {
-          console.error('Update status failed:', e)
+          console.error("Update status failed:", e);
           setItems((prev) =>
             prev.map((it) =>
               it.id === id
                 ? {
                     ...it,
                     status:
-                      status === 'available' ? 'unavailable' : 'available',
+                      status === "available" ? "unavailable" : "available",
                   }
                 : it
             )
-          )
+          );
         }
       },
       [API_BASE, getAuthHeaders]
-    )
+    );
 
     // Columns defined once
     const columns = useMemo(
       () => [
-        { key: 'name', label: 'Name' },
-        { key: 'type', label: 'Type' },
-        { key: 'condition', label: 'Condition' },
-        { key: 'assignedPackage', label: 'Package' },
-        { key: 'status', label: 'Status' },
-        { key: 'moreDetails', label: 'More Details' },
-        { key: 'actions', label: 'Actions' },
+        { key: "name", label: "Name" },
+        { key: "type", label: "Type" },
+        { key: "condition", label: "Condition" },
+        { key: "assignedPackage", label: "Package" },
+        { key: "status", label: "Status" },
+        { key: "moreDetails", label: "More Details" },
+        { key: "actions", label: "Actions" },
       ],
       []
-    )
+    );
 
     // REPLACED: edit modal state now only tracks open + selected row; form lives inside the dialog component
-    const [editOpen, setEditOpen] = useState(false)
-    const [editRow, setEditRow] = useState<EquipmentRow | null>(null)
+    const [editOpen, setEditOpen] = useState(false);
+    const [editRow, setEditRow] = useState<EquipmentRow | null>(null);
 
     const openEditModal = (row: EquipmentRow) => {
-      setEditRow(row)
-      setEditOpen(true)
-    }
+      setEditRow(row);
+      setEditOpen(true);
+    };
 
     // NEW: API update + local state sync for edited equipment
     const updateEquipment = async (id: string, form: Partial<EquipmentRow>) => {
       // Map partial form -> backend snake_case fields, include only provided keys
       const updates: Partial<{
-        material_name: string
-        material_type: string
-        condition: string
-        notes: string
-      }> = {}
+        material_name: string;
+        material_type: string;
+        condition: string;
+        notes: string;
+      }> = {};
       if (form.name !== undefined) {
-        const nextName = String(form.name ?? '').trim()
+        const nextName = String(form.name ?? "").trim();
         const duplicate = items.some(
           (row) =>
             row.id !== id &&
             row.name.trim().toLowerCase() === nextName.toLowerCase()
-        )
+        );
         if (duplicate) {
-          toast.error('Equipment name already exists.')
-          return
+          toast.error("Equipment name already exists.");
+          return;
         }
       }
       if (form.name !== undefined)
-        updates.material_name = String(form.name).trim()
+        updates.material_name = String(form.name).trim();
       if (form.type !== undefined)
-        updates.material_type = String(form.type).trim()
+        updates.material_type = String(form.type).trim();
       // quantity fields removed from schema; ignore any legacy fields
       if (form.condition !== undefined)
-        updates.condition = String(form.condition).trim() || 'Good'
-      if (form.notes !== undefined) updates.notes = form.notes ?? ''
+        updates.condition = String(form.condition).trim() || "Good";
+      if (form.notes !== undefined) updates.notes = form.notes ?? "";
 
       // If nothing to update, skip request
-      if (Object.keys(updates).length === 0) return
+      if (Object.keys(updates).length === 0) return;
 
       try {
         const res = await fetch(`${API_BASE}/inventory/${id}`, {
-          method: 'PATCH',
+          method: "PATCH",
           headers: {
-            'Content-Type': 'application/json',
+            "Content-Type": "application/json",
             ...getAuthHeaders(),
           },
           body: JSON.stringify(updates),
-        })
-        if (!res.ok) throw new Error(`PATCH /inventory/${id} ${res.status}`)
+        });
+        if (!res.ok) throw new Error(`PATCH /inventory/${id} ${res.status}`);
 
         // Prefer server-updated row to avoid drift
-        let nextRow: EquipmentRow | null = null
+        let nextRow: EquipmentRow | null = null;
         try {
-          const data = await res.json()
-          const updated = (data && (data.item || data)) ?? null
+          const data = await res.json();
+          const updated = (data && (data.item || data)) ?? null;
           if (updated && updated.id !== undefined) {
-            nextRow = mapItem(updated)
+            nextRow = mapItem(updated);
           }
         } catch {
           // ignore body parse errors; fallback to local merge
@@ -815,8 +827,8 @@ export default function InventoryManagementPage() {
 
         setItems((prev) =>
           prev.map((it) => {
-            if (it.id !== id) return it
-            if (nextRow) return nextRow
+            if (it.id !== id) return it;
+            if (nextRow) return nextRow;
             // Fallback: apply local updates to current row
             return {
               ...it,
@@ -831,98 +843,98 @@ export default function InventoryManagementPage() {
                 condition: updates.condition,
               }),
               ...(updates.notes !== undefined && { notes: updates.notes }),
-            }
+            };
           })
-        )
+        );
       } catch (e) {
-        console.error('Edit equipment failed:', e)
+        console.error("Edit equipment failed:", e);
       }
-    }
+    };
 
     // Search filter: id, type, name, condition
-    const normalizedSearch = (searchTerm || '').trim().toLowerCase()
+    const normalizedSearch = (searchTerm || "").trim().toLowerCase();
     const filteredItems = useMemo(() => {
-      if (!normalizedSearch) return items
+      if (!normalizedSearch) return items;
       return items.filter((it) => {
-        const id = (it.id || '').toString().toLowerCase()
-        const name = (it.name || '').toLowerCase()
-        const type = (it.type || '').toLowerCase()
-        const condition = (it.isArchived ? 'archived' : it.condition || '')
+        const id = (it.id || "").toString().toLowerCase();
+        const name = (it.name || "").toLowerCase();
+        const type = (it.type || "").toLowerCase();
+        const condition = (it.isArchived ? "archived" : it.condition || "")
           .toString()
-          .toLowerCase()
-        const assigned = (it.assignedPackage || '').toLowerCase()
+          .toLowerCase();
+        const assigned = (it.assignedPackage || "").toLowerCase();
         return (
           id.includes(normalizedSearch) ||
           name.includes(normalizedSearch) ||
           type.includes(normalizedSearch) ||
           condition.includes(normalizedSearch) ||
           assigned.includes(normalizedSearch)
-        )
-      })
-    }, [items, normalizedSearch])
+        );
+      });
+    }, [items, normalizedSearch]);
 
     // Memoized filtered rows
     const availableRows = useMemo(
       () =>
         filteredItems.filter(
-          (it) => !it.isArchived && it.status === 'available'
+          (it) => !it.isArchived && it.status === "available"
         ),
       [filteredItems]
-    )
+    );
     const unavailableRows = useMemo(
       () =>
         filteredItems.filter(
-          (it) => !it.isArchived && it.status === 'unavailable'
+          (it) => !it.isArchived && it.status === "unavailable"
         ),
       [filteredItems]
-    )
+    );
     const archivedRows = useMemo(
       () => filteredItems.filter((it) => it.isArchived),
       [filteredItems]
-    )
+    );
 
     // NEW: pagination state + derived slices (5 per page)
-    const PER_PAGE = 5
-    const [pageAvail, setPageAvail] = useState(1)
-    const [pageUnavail, setPageUnavail] = useState(1)
-    const [pageArch, setPageArch] = useState(1)
+    const PER_PAGE = 5;
+    const [pageAvail, setPageAvail] = useState(1);
+    const [pageUnavail, setPageUnavail] = useState(1);
+    const [pageArch, setPageArch] = useState(1);
     const totalPagesAvail = Math.max(
       1,
       Math.ceil(availableRows.length / PER_PAGE)
-    )
+    );
     const totalPagesUnavail = Math.max(
       1,
       Math.ceil(unavailableRows.length / PER_PAGE)
-    )
+    );
     const totalPagesArch = Math.max(
       1,
       Math.ceil(archivedRows.length / PER_PAGE)
-    )
+    );
 
     useEffect(() => {
-      setPageAvail((p) => Math.min(Math.max(1, p), totalPagesAvail))
-    }, [totalPagesAvail])
+      setPageAvail((p) => Math.min(Math.max(1, p), totalPagesAvail));
+    }, [totalPagesAvail]);
     useEffect(() => {
-      setPageUnavail((p) => Math.min(Math.max(1, p), totalPagesUnavail))
-    }, [totalPagesUnavail])
+      setPageUnavail((p) => Math.min(Math.max(1, p), totalPagesUnavail));
+    }, [totalPagesUnavail]);
     useEffect(() => {
-      setPageArch((p) => Math.min(Math.max(1, p), totalPagesArch))
-    }, [totalPagesArch])
+      setPageArch((p) => Math.min(Math.max(1, p), totalPagesArch));
+    }, [totalPagesArch]);
 
     const paginatedAvailableRows = useMemo(() => {
-      const start = (pageAvail - 1) * PER_PAGE
-      return availableRows.slice(start, start + PER_PAGE)
-    }, [availableRows, pageAvail])
+      const start = (pageAvail - 1) * PER_PAGE;
+      return availableRows.slice(start, start + PER_PAGE);
+    }, [availableRows, pageAvail]);
 
     const paginatedUnavailableRows = useMemo(() => {
-      const start = (pageUnavail - 1) * PER_PAGE
-      return unavailableRows.slice(start, start + PER_PAGE)
-    }, [unavailableRows, pageUnavail])
+      const start = (pageUnavail - 1) * PER_PAGE;
+      return unavailableRows.slice(start, start + PER_PAGE);
+    }, [unavailableRows, pageUnavail]);
 
     const paginatedArchivedRows = useMemo(() => {
-      const start = (pageArch - 1) * PER_PAGE
-      return archivedRows.slice(start, start + PER_PAGE)
-    }, [archivedRows, pageArch])
+      const start = (pageArch - 1) * PER_PAGE;
+      return archivedRows.slice(start, start + PER_PAGE);
+    }, [archivedRows, pageArch]);
 
     return (
       <>
@@ -933,20 +945,20 @@ export default function InventoryManagementPage() {
               <h2>Equipment</h2>
               <div className="flex gap-2 mb-2">
                 <TabButton
-                  active={active === 'available'}
-                  onClick={() => setActive('available')}
+                  active={active === "available"}
+                  onClick={() => setActive("available")}
                 >
                   Available
                 </TabButton>
                 <TabButton
-                  active={active === 'unavailable'}
-                  onClick={() => setActive('unavailable')}
+                  active={active === "unavailable"}
+                  onClick={() => setActive("unavailable")}
                 >
                   Unavailable
                 </TabButton>
                 <TabButton
-                  active={active === 'archived'}
-                  onClick={() => setActive('archived')}
+                  active={active === "archived"}
+                  onClick={() => setActive("archived")}
                 >
                   Archived
                 </TabButton>
@@ -979,7 +991,7 @@ export default function InventoryManagementPage() {
                         className="h-9 rounded-md border px-3 text-sm outline-none "
                         placeholder="e.g. Camera"
                         value={form.name}
-                        onChange={handleText('name')}
+                        onChange={handleText("name")}
                       />
                     </div>
                     <div className="flex flex-col gap-1">
@@ -988,7 +1000,7 @@ export default function InventoryManagementPage() {
                         <div className="flex-1 min-w-[180px]">
                           <Select
                             value={form.type}
-                            onValueChange={(value) => updateForm('type', value)}
+                            onValueChange={(value) => updateForm("type", value)}
                           >
                             <SelectTrigger className="h-9 text-sm rounded w-full">
                               <SelectValue placeholder="Select type" />
@@ -1006,15 +1018,15 @@ export default function InventoryManagementPage() {
                           onAdd={async (newType) => {
                             const result = await ensureEquipmentType(newType, {
                               notifyOnExists: false,
-                            })
-                            if (!result) return false
-                            updateForm('type', result.normalized)
-                            if (result.state === 'exists') {
+                            });
+                            if (!result) return false;
+                            updateForm("type", result.normalized);
+                            if (result.state === "exists") {
                               toast.info(
-                                'Type already exists; selected it for you.'
-                              )
+                                "Type already exists; selected it for you."
+                              );
                             }
-                            return true
+                            return true;
                           }}
                         />
                       </div>
@@ -1024,7 +1036,7 @@ export default function InventoryManagementPage() {
                       <Select
                         value={form.condition}
                         onValueChange={(value) =>
-                          updateForm('condition', value)
+                          updateForm("condition", value)
                         }
                       >
                         <SelectTrigger className="h-9 text-sm rounded">
@@ -1043,7 +1055,7 @@ export default function InventoryManagementPage() {
                       <Select
                         value={form.status}
                         onValueChange={(value) =>
-                          updateForm('status', value as EquipmentTabKey)
+                          updateForm("status", value as EquipmentTabKey)
                         }
                       >
                         <SelectTrigger className="h-9 text-sm rounded">
@@ -1064,7 +1076,7 @@ export default function InventoryManagementPage() {
                         rows={2}
                         className="rounded-md border px-3 py-2 text-sm outline-none "
                         value={form.notes}
-                        onChange={handleText('notes')}
+                        onChange={handleText("notes")}
                       />
                     </div>
                   </form>
@@ -1094,7 +1106,7 @@ export default function InventoryManagementPage() {
             </Dialog>
           </div>
           <section className="mt-4 flex-1 min-h-0 flex flex-col">
-            {active === 'available' && (
+            {active === "available" && (
               <AvailableEquipmentPanel
                 rows={paginatedAvailableRows}
                 currentPage={pageAvail}
@@ -1102,7 +1114,7 @@ export default function InventoryManagementPage() {
                 onPageChange={setPageAvail}
               />
             )}
-            {active === 'unavailable' && (
+            {active === "unavailable" && (
               <UnavailableEquipmentPanel
                 rows={paginatedUnavailableRows}
                 currentPage={pageUnavail}
@@ -1110,7 +1122,7 @@ export default function InventoryManagementPage() {
                 onPageChange={setPageUnavail}
               />
             )}
-            {active === 'archived' && (
+            {active === "archived" && (
               <ArchivedEquipmentPanel
                 rows={paginatedArchivedRows}
                 currentPage={pageArch}
@@ -1126,18 +1138,18 @@ export default function InventoryManagementPage() {
           open={editOpen}
           row={editRow}
           onOpenChange={(open) => {
-            setEditOpen(open)
-            if (!open) setEditRow(null)
+            setEditOpen(open);
+            if (!open) setEditRow(null);
           }}
           onSave={async (form) => {
-            if (!editRow) return
-            await updateEquipment(editRow.id, form)
-            setEditOpen(false)
-            setEditRow(null)
+            if (!editRow) return;
+            await updateEquipment(editRow.id, form);
+            setEditOpen(false);
+            setEditRow(null);
           }}
         />
       </>
-    )
+    );
 
     // Equipment table components (internal, purely for deduping)
     function StatusSelect({
@@ -1146,17 +1158,17 @@ export default function InventoryManagementPage() {
       triggerClassName,
       disabled,
     }: {
-      value: EquipmentTabKey
-      onChange: (v: EquipmentTabKey) => void
-      triggerClassName: string
-      disabled?: boolean
+      value: EquipmentTabKey;
+      onChange: (v: EquipmentTabKey) => void;
+      triggerClassName: string;
+      disabled?: boolean;
     }) {
       if (disabled) {
         return (
           <div className={triggerClassName}>
             <span className="text-sm">{value}</span>
           </div>
-        )
+        );
       }
       return (
         <Select
@@ -1171,12 +1183,12 @@ export default function InventoryManagementPage() {
             <SelectItem value="unavailable">Unavailable</SelectItem>
           </SelectContent>
         </Select>
-      )
+      );
     }
 
     function MoreDetailsCell({ row }: { row: EquipmentRow }) {
       const formatDateTime = (value: unknown): string =>
-        formatDisplayDateTime(value)
+        formatDisplayDateTime(value);
       return (
         <Popover>
           <PopoverTrigger asChild>
@@ -1213,7 +1225,7 @@ export default function InventoryManagementPage() {
             </div>
           </PopoverContent>
         </Popover>
-      )
+      );
     }
 
     function EquipmentTable({
@@ -1224,20 +1236,20 @@ export default function InventoryManagementPage() {
       onPageChange,
       disableStatus,
     }: {
-      rows: EquipmentRow[]
-      triggerClassName: string
-      currentPage: number
-      totalPages: number
-      onPageChange: (p: number) => void
-      disableStatus?: boolean
+      rows: EquipmentRow[];
+      triggerClassName: string;
+      currentPage: number;
+      totalPages: number;
+      onPageChange: (p: number) => void;
+      disableStatus?: boolean;
     }) {
       const goTo = (p: number) =>
-        onPageChange(Math.min(Math.max(1, p), totalPages))
+        onPageChange(Math.min(Math.max(1, p), totalPages));
       // CHANGED: only show a 3-page window
       const windowPages = useMemo(
         () => pageWindow(currentPage, totalPages, 3),
         [currentPage, totalPages]
-      )
+      );
 
       return (
         <>
@@ -1268,7 +1280,7 @@ export default function InventoryManagementPage() {
                           key={col.key}
                           className="px-4 py-2 whitespace-nowrap"
                         >
-                          {col.key === 'status' ? (
+                          {col.key === "status" ? (
                             disableStatus ? (
                               // Archived view: show status like other text cells (capitalized)
                               String(
@@ -1284,15 +1296,15 @@ export default function InventoryManagementPage() {
                                 />
                               </div>
                             )
-                          ) : col.key === 'moreDetails' ? (
+                          ) : col.key === "moreDetails" ? (
                             <MoreDetailsCell row={row} />
-                          ) : col.key === 'condition' ? (
+                          ) : col.key === "condition" ? (
                             row.isArchived ? (
-                              'Archived'
+                              "Archived"
                             ) : (
                               String(row.condition)
                             )
-                          ) : col.key === 'actions' ? (
+                          ) : col.key === "actions" ? (
                             <div className="flex gap-2 items-center">
                               {!row.isArchived ? (
                                 <button
@@ -1348,10 +1360,10 @@ export default function InventoryManagementPage() {
                     <PaginationPrevious
                       href="#"
                       className="text-black no-underline hover:no-underline hover:text-black"
-                      style={{ textDecoration: 'none' }}
+                      style={{ textDecoration: "none" }}
                       onClick={(e) => {
-                        e.preventDefault()
-                        goTo(currentPage - 1)
+                        e.preventDefault();
+                        goTo(currentPage - 1);
                       }}
                     />
                   </PaginationItem>
@@ -1361,11 +1373,11 @@ export default function InventoryManagementPage() {
                       <PaginationLink
                         href="#"
                         isActive={n === currentPage}
-                        style={{ textDecoration: 'none' }}
+                        style={{ textDecoration: "none" }}
                         className="text-black no-underline hover:no-underline hover:text-black"
                         onClick={(e) => {
-                          e.preventDefault()
-                          goTo(n)
+                          e.preventDefault();
+                          goTo(n);
                         }}
                       >
                         {n}
@@ -1377,10 +1389,10 @@ export default function InventoryManagementPage() {
                     <PaginationNext
                       href="#"
                       className="text-black no-underline hover:no-underline hover:text-black"
-                      style={{ textDecoration: 'none' }}
+                      style={{ textDecoration: "none" }}
                       onClick={(e) => {
-                        e.preventDefault()
-                        goTo(currentPage + 1)
+                        e.preventDefault();
+                        goTo(currentPage + 1);
                       }}
                     />
                   </PaginationItem>
@@ -1389,14 +1401,14 @@ export default function InventoryManagementPage() {
             </div>
           </div>
         </>
-      )
+      );
     }
 
     function AvailableEquipmentPanel(props: {
-      rows: EquipmentRow[]
-      currentPage: number
-      totalPages: number
-      onPageChange: (p: number) => void
+      rows: EquipmentRow[];
+      currentPage: number;
+      totalPages: number;
+      onPageChange: (p: number) => void;
     }) {
       return (
         <EquipmentTable
@@ -1407,13 +1419,13 @@ export default function InventoryManagementPage() {
           onPageChange={props.onPageChange}
           disableStatus={false}
         />
-      )
+      );
     }
     function UnavailableEquipmentPanel(props: {
-      rows: EquipmentRow[]
-      currentPage: number
-      totalPages: number
-      onPageChange: (p: number) => void
+      rows: EquipmentRow[];
+      currentPage: number;
+      totalPages: number;
+      onPageChange: (p: number) => void;
     }) {
       return (
         <EquipmentTable
@@ -1424,13 +1436,13 @@ export default function InventoryManagementPage() {
           onPageChange={props.onPageChange}
           disableStatus={false}
         />
-      )
+      );
     }
     function ArchivedEquipmentPanel(props: {
-      rows: EquipmentRow[]
-      currentPage: number
-      totalPages: number
-      onPageChange: (p: number) => void
+      rows: EquipmentRow[];
+      currentPage: number;
+      totalPages: number;
+      onPageChange: (p: number) => void;
     }) {
       return (
         <EquipmentTable
@@ -1441,7 +1453,7 @@ export default function InventoryManagementPage() {
           onPageChange={props.onPageChange}
           disableStatus={true}
         />
-      )
+      );
     }
 
     // NEW: Self-contained edit dialog with local form state to prevent parent/table re-renders while typing
@@ -1451,12 +1463,12 @@ export default function InventoryManagementPage() {
       onOpenChange,
       onSave,
     }: {
-      open: boolean
-      row: EquipmentRow | null
-      onOpenChange: (open: boolean) => void
-      onSave: (form: Partial<EquipmentRow>) => void | Promise<void>
+      open: boolean;
+      row: EquipmentRow | null;
+      onOpenChange: (open: boolean) => void;
+      onSave: (form: Partial<EquipmentRow>) => void | Promise<void>;
     }) {
-      const [form, setForm] = useState<Partial<EquipmentRow>>({})
+      const [form, setForm] = useState<Partial<EquipmentRow>>({});
 
       useEffect(() => {
         if (open && row) {
@@ -1466,19 +1478,19 @@ export default function InventoryManagementPage() {
             // quantity fields removed
             condition: row.condition,
             notes: row.notes,
-          })
+          });
         }
-      }, [open, row])
+      }, [open, row]);
 
       const handleChange =
         <K extends keyof EquipmentRow>(key: K) =>
         (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
           const value =
-            e.target instanceof HTMLInputElement && e.target.type === 'number'
+            e.target instanceof HTMLInputElement && e.target.type === "number"
               ? Number(e.target.value)
-              : e.target.value
-          setForm((p) => ({ ...p, [key]: value }))
-        }
+              : e.target.value;
+          setForm((p) => ({ ...p, [key]: value }));
+        };
 
       return (
         <Dialog open={open} onOpenChange={onOpenChange}>
@@ -1499,15 +1511,15 @@ export default function InventoryManagementPage() {
                   <Input
                     className="h-9 rounded-md border px-3 text-sm outline-none"
                     placeholder="e.g. Camera"
-                    value={(form.name as string) ?? ''}
-                    onChange={handleChange('name')}
+                    value={(form.name as string) ?? ""}
+                    onChange={handleChange("name")}
                   />
                 </div>
                 <div className="flex flex-col gap-1">
                   <label className="text-sm font-medium">Type</label>
                   <div className="flex gap-2 items-center">
                     <Select
-                      value={(form.type as string) ?? ''}
+                      value={(form.type as string) ?? ""}
                       onValueChange={(v) => setForm((p) => ({ ...p, type: v }))}
                     >
                       <SelectTrigger className="h-9 text-sm rounded w-full">
@@ -1525,15 +1537,15 @@ export default function InventoryManagementPage() {
                       onAdd={async (newType) => {
                         const result = await ensureEquipmentType(newType, {
                           notifyOnExists: false,
-                        })
-                        if (!result) return false
-                        setForm((p) => ({ ...p, type: result.normalized }))
-                        if (result.state === 'exists') {
+                        });
+                        if (!result) return false;
+                        setForm((p) => ({ ...p, type: result.normalized }));
+                        if (result.state === "exists") {
                           toast.info(
-                            'Type already exists; selected it for you.'
-                          )
+                            "Type already exists; selected it for you."
+                          );
                         }
-                        return true
+                        return true;
                       }}
                     />
                   </div>
@@ -1541,7 +1553,7 @@ export default function InventoryManagementPage() {
                 <div className="flex flex-col gap-1">
                   <label className="text-sm font-medium">Condition</label>
                   <Select
-                    value={(form.condition as string) ?? ''}
+                    value={(form.condition as string) ?? ""}
                     onValueChange={(v) =>
                       setForm((p) => ({ ...p, condition: v }))
                     }
@@ -1562,8 +1574,8 @@ export default function InventoryManagementPage() {
                   <Textarea
                     rows={2}
                     className="rounded-md border px-3 py-2 text-sm outline-none"
-                    value={(form.notes as string) ?? ''}
-                    onChange={handleChange('notes')}
+                    value={(form.notes as string) ?? ""}
+                    onChange={handleChange("notes")}
                   />
                 </div>
               </form>
@@ -1588,12 +1600,12 @@ export default function InventoryManagementPage() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
-      )
+      );
     }
     // PATCH equipment archive flag
     async function updateArchive(id: string, archived: boolean) {
       // capture original for rollback
-      const original = items.find((it) => it.id === id)
+      const original = items.find((it) => it.id === id);
       // optimistic update
       setItems((prev) =>
         prev.map((it) =>
@@ -1602,40 +1614,40 @@ export default function InventoryManagementPage() {
                 ...it,
                 isArchived: archived,
                 // Always force status to unavailable whenever condition changes via archive/unarchive flow
-                status: 'unavailable' as EquipmentTabKey,
+                status: "unavailable" as EquipmentTabKey,
               }
             : it
         )
-      )
+      );
       try {
         // Always send status=false so backend logs reflect unavailable after archive or unarchive
         const payload: Record<string, unknown> = {
           is_archived: archived,
           status: false,
-        }
+        };
 
         const res = await fetch(`${API_BASE}/inventory/${id}`, {
-          method: 'PATCH',
+          method: "PATCH",
           headers: {
-            'Content-Type': 'application/json',
+            "Content-Type": "application/json",
             ...getAuthHeaders(),
           },
           body: JSON.stringify(payload),
-        })
-        if (!res.ok) throw new Error(`PATCH /inventory/${id} ${res.status}`)
+        });
+        if (!res.ok) throw new Error(`PATCH /inventory/${id} ${res.status}`);
         // if server returns item, prefer it
         try {
-          const data = await res.json()
-          const updated = (data && (data.item || data)) ?? null
+          const data = await res.json();
+          const updated = (data && (data.item || data)) ?? null;
           if (updated && updated.id !== undefined) {
-            const nextRow = mapItem(updated)
-            setItems((prev) => prev.map((it) => (it.id === id ? nextRow : it)))
+            const nextRow = mapItem(updated);
+            setItems((prev) => prev.map((it) => (it.id === id ? nextRow : it)));
           }
         } catch {
           // ignore body parse
         }
       } catch (e) {
-        console.error('Update archive flag failed:', e)
+        console.error("Update archive flag failed:", e);
         // rollback to original values if available
         setItems((prev) =>
           prev.map((it) =>
@@ -1647,67 +1659,67 @@ export default function InventoryManagementPage() {
                 }
               : it
           )
-        )
+        );
       }
     }
   }
 
   // Grid panel with header and API helpers
   function GridPanel({ searchTerm }: { searchTerm?: string }) {
-    const [view, setView] = useState<'active' | 'archived'>('active')
-    const [open, setOpen] = useState(false)
-    const [grids, setGrids] = useState<AdminGridRow[]>([])
-    const [archived, setArchived] = useState<AdminGridRow[]>([])
-    const [loading, setLoading] = useState(false)
+    const [view, setView] = useState<"active" | "archived">("active");
+    const [open, setOpen] = useState(false);
+    const [grids, setGrids] = useState<AdminGridRow[]>([]);
+    const [archived, setArchived] = useState<AdminGridRow[]>([]);
+    const [loading, setLoading] = useState(false);
     const [form, setForm] = useState<{
-      grid_name: string
-      imageFile: File | null
-    }>({ grid_name: '', imageFile: null })
-    const [editOpen, setEditOpen] = useState(false)
+      grid_name: string;
+      imageFile: File | null;
+    }>({ grid_name: "", imageFile: null });
+    const [editOpen, setEditOpen] = useState(false);
     const [editForm, setEditForm] = useState<{
-      id: number | null
-      grid_name: string
-      imageFile: File | null
-      image_url: string | null
-    }>({ id: null, grid_name: '', imageFile: null, image_url: null })
+      id: number | null;
+      grid_name: string;
+      imageFile: File | null;
+      image_url: string | null;
+    }>({ id: null, grid_name: "", imageFile: null, image_url: null });
 
     // Load lists
     useEffect(() => {
-      let ignore = false
-      ;(async () => {
+      let ignore = false;
+      (async () => {
         try {
-          setLoading(true)
-          if (view === 'active') {
-            const rows = await loadActiveGrids()
-            if (!ignore) setGrids(rows)
+          setLoading(true);
+          if (view === "active") {
+            const rows = await loadActiveGrids();
+            if (!ignore) setGrids(rows);
           } else {
-            const rows = await loadArchivedGrids()
-            if (!ignore) setArchived(rows)
+            const rows = await loadArchivedGrids();
+            if (!ignore) setArchived(rows);
           }
         } catch (e) {
-          console.error('Load grids failed:', e)
+          console.error("Load grids failed:", e);
         } finally {
-          setLoading(false)
+          setLoading(false);
         }
-      })()
+      })();
       return () => {
-        ignore = true
-      }
-    }, [view])
+        ignore = true;
+      };
+    }, [view]);
 
     // Create grid
     const handleCreateGrid = async () => {
-      const name = form.grid_name.trim()
-      if (!name) return
+      const name = form.grid_name.trim();
+      if (!name) return;
       const duplicate = [...grids, ...archived].some(
         (g) =>
-          String(g.grid_name || '')
+          String(g.grid_name || "")
             .trim()
             .toLowerCase() === name.toLowerCase()
-      )
+      );
       if (duplicate) {
-        toast.error('Grid name already exists.')
-        return
+        toast.error("Grid name already exists.");
+        return;
       }
       try {
         const row = await createGridAdmin({
@@ -1715,83 +1727,83 @@ export default function InventoryManagementPage() {
           status: true,
           display: true,
           imageFile: form.imageFile ?? undefined,
-        })
-        setGrids((prev) => [row, ...prev])
-        setOpen(false)
-        setForm({ grid_name: '', imageFile: null })
+        });
+        setGrids((prev) => [row, ...prev]);
+        setOpen(false);
+        setForm({ grid_name: "", imageFile: null });
       } catch (e) {
-        console.error('Create grid failed:', e)
+        console.error("Create grid failed:", e);
       }
-    }
+    };
 
     // Archive/unarchive
     const toggleArchive = async (row: AdminGridRow) => {
-      const isArchived = row.display === false
+      const isArchived = row.display === false;
       try {
         if (isArchived) {
-          await unarchiveGrid(Number(row.id))
+          await unarchiveGrid(Number(row.id));
           // move to active
-          setArchived((arr) => arr.filter((g) => g.id !== row.id))
-          setGrids((arr) => [{ ...row, display: true }, ...arr])
-          if (view === 'archived') setView('active')
+          setArchived((arr) => arr.filter((g) => g.id !== row.id));
+          setGrids((arr) => [{ ...row, display: true }, ...arr]);
+          if (view === "archived") setView("active");
         } else {
-          await archiveGrid(Number(row.id))
+          await archiveGrid(Number(row.id));
           // move to archived
-          setGrids((arr) => arr.filter((g) => g.id !== row.id))
-          setArchived((arr) => [{ ...row, display: false }, ...arr])
+          setGrids((arr) => arr.filter((g) => g.id !== row.id));
+          setArchived((arr) => [{ ...row, display: false }, ...arr]);
         }
       } catch (e) {
-        console.error('Toggle archive grid failed:', e)
+        console.error("Toggle archive grid failed:", e);
       }
-    }
+    };
 
-    const list = view === 'active' ? grids : archived
-    const q = (searchTerm || '').trim().toLowerCase()
+    const list = view === "active" ? grids : archived;
+    const q = (searchTerm || "").trim().toLowerCase();
     const filtered = useMemo(() => {
-      if (!q) return list
-      return list.filter((g) => (g.grid_name || '').toLowerCase().includes(q))
-    }, [list, q])
+      if (!q) return list;
+      return list.filter((g) => (g.grid_name || "").toLowerCase().includes(q));
+    }, [list, q]);
 
     const openEditGrid = (row: AdminGridRow) => {
       setEditForm({
         id: Number(row.id),
-        grid_name: row.grid_name || '',
+        grid_name: row.grid_name || "",
         imageFile: null,
         image_url: row.image_url ?? null,
-      })
-      setEditOpen(true)
-    }
+      });
+      setEditOpen(true);
+    };
 
     const saveEditedGrid = async () => {
-      const id = editForm.id
-      if (!id) return
-      const nextName = editForm.grid_name.trim()
+      const id = editForm.id;
+      if (!id) return;
+      const nextName = editForm.grid_name.trim();
       const duplicate = [...grids, ...archived].some(
         (g) =>
           Number(g.id) !== id &&
-          String(g.grid_name || '')
+          String(g.grid_name || "")
             .trim()
             .toLowerCase() === nextName.toLowerCase()
-      )
+      );
       if (duplicate) {
-        toast.error('Grid name already exists.')
-        return
+        toast.error("Grid name already exists.");
+        return;
       }
       try {
         const updated = await updateGridAdmin(id, {
           grid_name: editForm.grid_name,
           imageFile: editForm.imageFile ?? undefined,
-        })
+        });
         // replace in both arrays to avoid desync
-        setGrids((arr) => arr.map((g) => (Number(g.id) === id ? updated : g)))
+        setGrids((arr) => arr.map((g) => (Number(g.id) === id ? updated : g)));
         setArchived((arr) =>
           arr.map((g) => (Number(g.id) === id ? updated : g))
-        )
-        setEditOpen(false)
+        );
+        setEditOpen(false);
       } catch (e) {
-        console.error('Save edited grid failed:', e)
+        console.error("Save edited grid failed:", e);
       }
-    }
+    };
 
     return (
       <div className="flex flex-col h-full min-h-0">
@@ -1800,14 +1812,14 @@ export default function InventoryManagementPage() {
             <h2 className="text-lg font-semibold">Grid</h2>
             <div className="flex gap-2 mb-2">
               <TabButton
-                active={view === 'active'}
-                onClick={() => setView('active')}
+                active={view === "active"}
+                onClick={() => setView("active")}
               >
                 Active
               </TabButton>
               <TabButton
-                active={view === 'archived'}
-                onClick={() => setView('archived')}
+                active={view === "archived"}
+                onClick={() => setView("archived")}
               >
                 Archived
               </TabButton>
@@ -1903,8 +1915,8 @@ export default function InventoryManagementPage() {
                       type="button"
                       className="inline-flex items-center justify-center h-7 w-7 rounded bg-white/90 border shadow-sm hover:bg-white"
                       onClick={() => toggleArchive(g)}
-                      title={g.display === false ? 'Unarchive' : 'Archive'}
-                      aria-label={g.display === false ? 'Unarchive' : 'Archive'}
+                      title={g.display === false ? "Unarchive" : "Archive"}
+                      aria-label={g.display === false ? "Unarchive" : "Archive"}
                     >
                       {g.display === false ? (
                         <Eye className="h-4 w-4" />
@@ -1929,10 +1941,10 @@ export default function InventoryManagementPage() {
                     <div className="font-medium">{g.grid_name}</div>
                     <div className="text-xs text-gray-500">
                       {g.display === false
-                        ? 'Archived'
+                        ? "Archived"
                         : g.status
-                        ? 'Active'
-                        : 'Inactive'}
+                        ? "Active"
+                        : "Inactive"}
                     </div>
                   </div>
                 </div>
@@ -1949,7 +1961,7 @@ export default function InventoryManagementPage() {
         <Dialog
           open={editOpen}
           onOpenChange={(o) => {
-            if (!o) setEditOpen(false)
+            if (!o) setEditOpen(false);
           }}
         >
           <DialogContent className="sm:max-w-[640px] max-h-[70vh] overflow-hidden flex flex-col">
@@ -2011,266 +2023,268 @@ export default function InventoryManagementPage() {
           </DialogContent>
         </Dialog>
       </div>
-    )
+    );
   }
 
   function CreatePackagePanel({ searchTerm }: { searchTerm?: string }) {
     type PackageItem = {
-      id: string
-      name: string
-      price: number
-      imageUrl: string
-      features: string[]
-      durationHours?: number | null
-      display?: boolean // ADDED: visibility flag
-    }
+      id: string;
+      name: string;
+      price: number;
+      imageUrl: string;
+      features: string[];
+      durationHours?: number | null;
+      display?: boolean; // ADDED: visibility flag
+    };
 
-    const [open, setOpen] = useState(false)
-    const [packages, setPackages] = useState<PackageItem[]>([]) // active (display=true)
-    const [archivedPackages, setArchivedPackages] = useState<PackageItem[]>([]) // archived (display=false)
-    const [pkgView, setPkgView] = useState<'active' | 'archived'>('active')
-    const [editPkgOpen, setEditPkgOpen] = useState(false)
+    const [open, setOpen] = useState(false);
+    const [packages, setPackages] = useState<PackageItem[]>([]); // active (display=true)
+    const [archivedPackages, setArchivedPackages] = useState<PackageItem[]>([]); // archived (display=false)
+    const [pkgView, setPkgView] = useState<"active" | "archived">("active");
+    const [editPkgOpen, setEditPkgOpen] = useState(false);
     const [editPkgForm, setEditPkgForm] = useState<{
-      id: string
-      name: string
-      price: number
-      imageUrl: string
-      features: string[]
-      durationHours?: number | null
+      id: string;
+      name: string;
+      price: number;
+      imageUrl: string;
+      features: string[];
+      durationHours?: number | null;
     }>({
-      id: '',
-      name: '',
+      id: "",
+      name: "",
       price: 0,
-      imageUrl: '',
+      imageUrl: "",
       features: [],
       durationHours: undefined,
-    })
+    });
     const [pkgForm, setPkgForm] = useState<{
-      name: string
-      price: string
-      imageUrl: string
-      imageName: string
-      features: string[]
-      durationHours?: number | null
+      name: string;
+      price: string;
+      imageUrl: string;
+      imageName: string;
+      features: string[];
+      durationHours?: number | null;
     }>({
-      name: '',
-      price: '',
-      imageUrl: '',
-      imageName: '',
-      features: [''],
+      name: "",
+      price: "",
+      imageUrl: "",
+      imageName: "",
+      features: [""],
       durationHours: undefined,
-    })
+    });
 
-    const fileInputRef = useRef<HTMLInputElement | null>(null)
+    const fileInputRef = useRef<HTMLInputElement | null>(null);
 
     // ADD: API + auth helpers reused from equipment panel
     const API_ORIGIN =
-      process.env.NEXT_PUBLIC_API_ORIGIN ?? 'http://localhost:5000'
-    const API_BASE = `${API_ORIGIN}/api/admin`
+      process.env.NEXT_PUBLIC_API_ORIGIN ?? "http://localhost:5000";
+    const API_BASE = `${API_ORIGIN}/api/admin`;
     const getCookie = (name: string) =>
-      typeof document === 'undefined'
-        ? ''
+      typeof document === "undefined"
+        ? ""
         : document.cookie
-            .split('; ')
-            .find((r) => r.startsWith(name + '='))
-            ?.split('=')[1] || ''
+            .split("; ")
+            .find((r) => r.startsWith(name + "="))
+            ?.split("=")[1] || "";
     const getAuthHeaderString = () => {
       const raw =
-        (typeof window !== 'undefined' &&
-          localStorage.getItem('access_token')) ||
-        getCookie('access_token')
-      if (!raw) return ''
-      return raw.startsWith('Bearer ') ? raw : `Bearer ${raw}`
-    }
+        (typeof window !== "undefined" &&
+          localStorage.getItem("access_token")) ||
+        getCookie("access_token");
+      if (!raw) return "";
+      return raw.startsWith("Bearer ") ? raw : `Bearer ${raw}`;
+    };
     const getAuthHeaders = useCallback((): Record<string, string> => {
-      const auth = getAuthHeaderString()
-      return auth ? { Authorization: auth } : {}
-    }, [])
+      const auth = getAuthHeaderString();
+      return auth ? { Authorization: auth } : {};
+    }, []);
 
     // ADD: load inventory to pick items for the package
     type InvPick = {
-      id: string
-      name: string
-      isArchived: boolean
-    }
-    const [inventory, setInventory] = useState<InvPick[]>([])
-    const [selected, setSelected] = useState<Record<string, number>>({}) // inventory_id -> qty
+      id: string;
+      name: string;
+      isArchived: boolean;
+    };
+    const [inventory, setInventory] = useState<InvPick[]>([]);
+    const [selected, setSelected] = useState<Record<string, number>>({}); // inventory_id -> qty
 
     // NEW: edit selection map (inventory_id -> qty)
-    const [editSelected, setEditSelected] = useState<Record<string, number>>({})
+    const [editSelected, setEditSelected] = useState<Record<string, number>>(
+      {}
+    );
 
     type AssignedInfo = {
-      packageId: string
-      packageName?: string
-    }
+      packageId: string;
+      packageName?: string;
+    };
     const [assignedInventory, setAssignedInventory] = useState<
       Record<string, AssignedInfo>
-    >({})
+    >({});
 
     const refreshAssignedInventory = useCallback(
       async (shouldSkip?: () => boolean) => {
         try {
           const res = await fetch(`${API_BASE}/package-inventory-item`, {
             headers: {
-              'Content-Type': 'application/json',
+              "Content-Type": "application/json",
               ...getAuthHeaders(),
             },
-          })
+          });
           if (!res.ok)
-            throw new Error(`GET /package-inventory-item ${res.status}`)
-          const payload = await res.json().catch(() => ({} as any))
+            throw new Error(`GET /package-inventory-item ${res.status}`);
+          const payload = await res.json().catch(() => ({} as any));
           const list = Array.isArray(payload?.packageInventoryItems)
             ? payload.packageInventoryItems
             : Array.isArray(payload?.items)
             ? payload.items
             : Array.isArray(payload)
             ? payload
-            : []
-          const map: Record<string, AssignedInfo> = {}
+            : [];
+          const map: Record<string, AssignedInfo> = {};
           for (const entry of list) {
-            const rec = entry as Record<string, unknown>
-            const invId = String(rec.inventory_id ?? '')
-            if (!invId) continue
-            const pkgId = String(rec.package_id ?? '')
-            if (!pkgId) continue
+            const rec = entry as Record<string, unknown>;
+            const invId = String(rec.inventory_id ?? "");
+            if (!invId) continue;
+            const pkgId = String(rec.package_id ?? "");
+            if (!pkgId) continue;
             const pkgName = String(
-              (rec as { package_name?: unknown }).package_name ?? ''
-            ).trim()
+              (rec as { package_name?: unknown }).package_name ?? ""
+            ).trim();
             map[invId] = {
               packageId: pkgId,
               packageName: pkgName || undefined,
-            }
+            };
           }
           if (!shouldSkip || !shouldSkip()) {
-            setAssignedInventory(map)
+            setAssignedInventory(map);
           }
         } catch (error) {
-          console.error('Load assigned inventory failed:', error)
+          console.error("Load assigned inventory failed:", error);
         }
       },
       [API_BASE, getAuthHeaders]
-    )
+    );
 
     useEffect(() => {
       setSelected((prev) => {
-        if (!prev || !Object.keys(prev).length) return prev
-        const next = { ...prev }
-        let mutated = false
+        if (!prev || !Object.keys(prev).length) return prev;
+        const next = { ...prev };
+        let mutated = false;
         for (const key of Object.keys(next)) {
           if (assignedInventory[key]) {
-            delete next[key]
-            mutated = true
+            delete next[key];
+            mutated = true;
           }
         }
-        return mutated ? next : prev
-      })
-    }, [assignedInventory])
+        return mutated ? next : prev;
+      });
+    }, [assignedInventory]);
 
     useEffect(() => {
-      if (!editPkgOpen) return
+      if (!editPkgOpen) return;
       setEditSelected((prev) => {
-        if (!prev || !Object.keys(prev).length) return prev
-        const allowedPackage = editPkgForm.id
-        if (!allowedPackage) return prev
-        const next = { ...prev }
-        let mutated = false
+        if (!prev || !Object.keys(prev).length) return prev;
+        const allowedPackage = editPkgForm.id;
+        if (!allowedPackage) return prev;
+        const next = { ...prev };
+        let mutated = false;
         for (const key of Object.keys(next)) {
-          const assigned = assignedInventory[key]
+          const assigned = assignedInventory[key];
           if (assigned && assigned.packageId !== allowedPackage) {
-            delete next[key]
-            mutated = true
+            delete next[key];
+            mutated = true;
           }
         }
-        return mutated ? next : prev
-      })
-    }, [assignedInventory, editPkgOpen, editPkgForm])
+        return mutated ? next : prev;
+      });
+    }, [assignedInventory, editPkgOpen, editPkgForm]);
 
     useEffect(() => {
-      let ignore = false
-      ;(async () => {
+      let ignore = false;
+      (async () => {
         try {
           const res = await fetch(`${API_BASE}/inventory`, {
             headers: {
-              'Content-Type': 'application/json',
+              "Content-Type": "application/json",
               ...getAuthHeaders(),
             },
-          })
-          if (!res.ok) throw new Error(`GET /inventory ${res.status}`)
-          const data = await res.json()
+          });
+          if (!res.ok) throw new Error(`GET /inventory ${res.status}`);
+          const data = await res.json();
           const list = Array.isArray(data)
             ? data
             : Array.isArray(data.items)
             ? data.items
-            : []
+            : [];
           const items = list
             .map((it: unknown) => {
-              const rec = it as Record<string, unknown>
+              const rec = it as Record<string, unknown>;
               const conditionRaw = String(
-                (rec as { condition?: unknown }).condition ?? ''
-              )
+                (rec as { condition?: unknown }).condition ?? ""
+              );
               const archiveValue = (rec as { is_archived?: unknown })
-                .is_archived
+                .is_archived;
               const isArchived = (() => {
                 if (archiveValue === undefined) {
-                  return conditionRaw.trim().toLowerCase() === 'archived'
+                  return conditionRaw.trim().toLowerCase() === "archived";
                 }
-                if (typeof archiveValue === 'string') {
-                  const normalized = archiveValue.trim().toLowerCase()
-                  return ['true', '1', 't', 'yes', 'y', 'archived'].includes(
+                if (typeof archiveValue === "string") {
+                  const normalized = archiveValue.trim().toLowerCase();
+                  return ["true", "1", "t", "yes", "y", "archived"].includes(
                     normalized
-                  )
+                  );
                 }
-                if (typeof archiveValue === 'number') {
-                  return Number(archiveValue) !== 0
+                if (typeof archiveValue === "number") {
+                  return Number(archiveValue) !== 0;
                 }
-                return Boolean(archiveValue)
-              })()
+                return Boolean(archiveValue);
+              })();
               return {
-                id: String(rec.id ?? ''),
+                id: String(rec.id ?? ""),
                 name: String(
-                  (rec as { material_name?: unknown }).material_name ?? ''
+                  (rec as { material_name?: unknown }).material_name ?? ""
                 ),
                 isArchived,
                 // quantities removed from schema
-              } as InvPick
+              } as InvPick;
             })
-            .filter((it: InvPick) => !it.isArchived)
-          if (!ignore) setInventory(items)
+            .filter((it: InvPick) => !it.isArchived);
+          if (!ignore) setInventory(items);
         } catch (e) {
-          console.error('Load inventory for packages failed:', e)
+          console.error("Load inventory for packages failed:", e);
         }
-        await refreshAssignedInventory(() => ignore)
-      })()
+        await refreshAssignedInventory(() => ignore);
+      })();
       return () => {
-        ignore = true
-      }
-    }, [API_BASE, getAuthHeaders, refreshAssignedInventory])
+        ignore = true;
+      };
+    }, [API_BASE, getAuthHeaders, refreshAssignedInventory]);
 
     const toggleItem = (id: string, on: boolean) =>
       setSelected((prev) => {
-        const next = { ...prev }
-        if (on) next[id] = 1
-        else delete next[id]
-        return next
-      })
+        const next = { ...prev };
+        if (on) next[id] = 1;
+        else delete next[id];
+        return next;
+      });
 
     const handleCreatePackage = async () => {
-      const name = pkgForm.name.trim()
-      if (!name) return
+      const name = pkgForm.name.trim();
+      if (!name) return;
       const duplicate = [...packages, ...archivedPackages].some(
         (pkg) => pkg.name.trim().toLowerCase() === name.toLowerCase()
-      )
+      );
       if (duplicate) {
-        toast.error('Package name already exists.')
-        return
+        toast.error("Package name already exists.");
+        return;
       }
 
       try {
         // 1) Create the package
         const pRes = await fetch(`${API_BASE}/package`, {
-          method: 'POST',
+          method: "POST",
           headers: {
-            'Content-Type': 'application/json',
+            "Content-Type": "application/json",
             ...getAuthHeaders(),
           },
           body: JSON.stringify({
@@ -2278,7 +2292,7 @@ export default function InventoryManagementPage() {
             description: pkgForm.features
               .map((f) => f.trim())
               .filter(Boolean)
-              .join('\n'),
+              .join("\n"),
             price: Number(pkgForm.price) || 0,
             duration_hours:
               pkgForm.durationHours == null
@@ -2288,22 +2302,22 @@ export default function InventoryManagementPage() {
             display: true,
             image_url: pkgForm.imageUrl,
           }),
-        })
-        if (!pRes.ok) throw new Error(await pRes.text())
-        const pData = await pRes.json()
-        const created = pData?.package ?? pData
-        const pkgId = created?.id
-        if (!pkgId) throw new Error('Package created but id missing')
+        });
+        if (!pRes.ok) throw new Error(await pRes.text());
+        const pData = await pRes.json();
+        const created = pData?.package ?? pData;
+        const pkgId = created?.id;
+        if (!pkgId) throw new Error("Package created but id missing");
 
         // 2) Create junction rows for selected inventory items
-        const ids = Object.keys(selected)
+        const ids = Object.keys(selected);
         if (ids.length) {
           await Promise.all(
             ids.map((inventory_id) =>
               fetch(`${API_BASE}/package-inventory-item`, {
-                method: 'POST',
+                method: "POST",
                 headers: {
-                  'Content-Type': 'application/json',
+                  "Content-Type": "application/json",
                   ...getAuthHeaders(),
                 },
                 body: JSON.stringify({
@@ -2312,13 +2326,13 @@ export default function InventoryManagementPage() {
                   quantity: 1,
                 }),
               }).then(async (r) => {
-                if (!r.ok) throw new Error(await r.text())
+                if (!r.ok) throw new Error(await r.text());
               })
             )
-          )
+          );
         }
 
-        await refreshAssignedInventory()
+        await refreshAssignedInventory();
 
         // 3) Update local UI list using the same mapper
         const newPkg = mapPackageFromApi({
@@ -2326,60 +2340,60 @@ export default function InventoryManagementPage() {
           package_name: name,
           price: Number(pkgForm.price) || 0,
           image_url: pkgForm.imageUrl,
-          description: pkgForm.features.join('\n'),
+          description: pkgForm.features.join("\n"),
           duration_hours:
             pkgForm.durationHours == null
               ? null
               : Number(pkgForm.durationHours) || 0,
-        })
-        setPackages((prev) => [newPkg, ...prev])
+        });
+        setPackages((prev) => [newPkg, ...prev]);
       } catch (e) {
-        console.error('Create package (with items) failed:', e)
+        console.error("Create package (with items) failed:", e);
       }
 
       // reset & close
       setPkgForm({
-        name: '',
-        price: '',
-        imageUrl: '',
-        imageName: '',
-        features: [''],
+        name: "",
+        price: "",
+        imageUrl: "",
+        imageName: "",
+        features: [""],
         durationHours: undefined,
-      })
-      setSelected({})
-      if (fileInputRef.current) fileInputRef.current.value = ''
-      setOpen(false)
-    }
+      });
+      setSelected({});
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      setOpen(false);
+    };
 
     // Map API -> UI model (memoized)
     const mapPackageFromApi = useCallback(
       (it: Record<string, unknown>): PackageItem => {
-        const description = (it as { description?: unknown }).description
+        const description = (it as { description?: unknown }).description;
         const features =
-          typeof description === 'string'
+          typeof description === "string"
             ? description
                 .split(/\r?\n/)
                 .map((s: string) => s.trim())
                 .filter(Boolean)
             : Array.isArray((it as { features?: unknown }).features)
             ? ((it as { features?: unknown }).features as string[])
-            : []
+            : [];
         return {
           id: String(
             (it as { id?: unknown }).id ??
               (it as { package_id?: unknown }).package_id ??
-              ''
+              ""
           ),
           name: String(
             (it as { package_name?: unknown }).package_name ??
               (it as { name?: unknown }).name ??
-              ''
+              ""
           ),
           price: Number((it as { price?: unknown }).price ?? 0),
           imageUrl: String(
             (it as { image_url?: unknown }).image_url ??
               (it as { imageUrl?: unknown }).imageUrl ??
-              ''
+              ""
           ),
           features,
           durationHours:
@@ -2389,87 +2403,87 @@ export default function InventoryManagementPage() {
                 0,
           // ADDED: try common keys, default to true
           display:
-            typeof (it as { display?: unknown }).display === 'boolean'
+            typeof (it as { display?: unknown }).display === "boolean"
               ? ((it as { display?: unknown }).display as boolean)
-              : typeof (it as { visible?: unknown }).visible === 'boolean'
+              : typeof (it as { visible?: unknown }).visible === "boolean"
               ? ((it as { visible?: unknown }).visible as boolean)
-              : typeof (it as { is_visible?: unknown }).is_visible === 'boolean'
+              : typeof (it as { is_visible?: unknown }).is_visible === "boolean"
               ? ((it as { is_visible?: unknown }).is_visible as boolean)
               : typeof (it as { is_displayed?: unknown }).is_displayed ===
-                'boolean'
+                "boolean"
               ? ((it as { is_displayed?: unknown }).is_displayed as boolean)
               : true,
-        }
+        };
       },
       []
-    )
+    );
 
     // Fetch existing packages (active) on mount
     useEffect(() => {
-      let ignore = false
-      ;(async () => {
+      let ignore = false;
+      (async () => {
         try {
           const res = await fetch(`${API_BASE}/package`, {
             headers: {
-              'Content-Type': 'application/json',
+              "Content-Type": "application/json",
               ...getAuthHeaders(),
             },
-          })
-          if (!res.ok) throw new Error(`GET /package ${res.status}`)
-          const data = await res.json()
+          });
+          if (!res.ok) throw new Error(`GET /package ${res.status}`);
+          const data = await res.json();
           const list = Array.isArray(data)
             ? data
             : Array.isArray(data.packages)
             ? data.packages
             : Array.isArray(data.items)
             ? data.items
-            : []
-          if (!ignore) setPackages(list.map(mapPackageFromApi))
+            : [];
+          if (!ignore) setPackages(list.map(mapPackageFromApi));
         } catch (e) {
-          console.error('Load packages failed:', e)
+          console.error("Load packages failed:", e);
         }
-      })()
+      })();
       return () => {
-        ignore = true
-      }
-    }, [API_BASE, getAuthHeaders, mapPackageFromApi])
+        ignore = true;
+      };
+    }, [API_BASE, getAuthHeaders, mapPackageFromApi]);
 
     // Fetch archived packages when panel first opens OR when switching to archived view and we haven't loaded yet
     useEffect(() => {
-      if (pkgView !== 'archived') return
+      if (pkgView !== "archived") return;
       // if we already loaded once skip
-      if (archivedPackages.length) return
-      let ignore = false
-      ;(async () => {
+      if (archivedPackages.length) return;
+      let ignore = false;
+      (async () => {
         try {
           const res = await fetch(`${API_BASE}/package/archived`, {
             headers: {
-              'Content-Type': 'application/json',
+              "Content-Type": "application/json",
               ...getAuthHeaders(),
             },
-          })
-          if (!res.ok) throw new Error(`GET /package/archived ${res.status}`)
-          const data = await res.json()
+          });
+          if (!res.ok) throw new Error(`GET /package/archived ${res.status}`);
+          const data = await res.json();
           const list = Array.isArray(data)
             ? data
             : Array.isArray(data.packages)
             ? data.packages
-            : []
-          if (!ignore) setArchivedPackages(list.map(mapPackageFromApi))
+            : [];
+          if (!ignore) setArchivedPackages(list.map(mapPackageFromApi));
         } catch (e) {
-          console.error('Load archived packages failed:', e)
+          console.error("Load archived packages failed:", e);
         }
-      })()
+      })();
       return () => {
-        ignore = true
-      }
+        ignore = true;
+      };
     }, [
       pkgView,
       archivedPackages.length,
       API_BASE,
       getAuthHeaders,
       mapPackageFromApi,
-    ])
+    ]);
 
     // Removed PromoCard-based rendering; using internal SimplePackageCard instead
 
@@ -2486,217 +2500,259 @@ export default function InventoryManagementPage() {
       onToggleDisplay,
       onEdit,
     }: {
-      pkg: PackageItem
-      onToggleDisplay?: (pkg: PackageItem) => void
-      onEdit?: (pkg: PackageItem) => void
+      pkg: PackageItem;
+      onToggleDisplay?: (pkg: PackageItem) => void;
+      onEdit?: (pkg: PackageItem) => void;
     }) {
-      const features = Array.isArray(pkg.features) ? pkg.features : []
-      const hidden = pkg.display === false
+      const features = Array.isArray(pkg.features) ? pkg.features : [];
+      const hidden = pkg.display === false;
+
+      // Split features into individual items (same logic as PromoCard)
+      const splitToFeatures = (s: string): string[] => {
+        const primary = s
+          .split(/[\r\n]+|[•|;]+/g)
+          .map((t) => t.trim())
+          .filter(Boolean);
+        if (primary.length > 1) return primary;
+        const comma = s
+          .split(/,/g)
+          .map((t) => t.trim())
+          .filter(Boolean);
+        return comma.length > 1 ? comma : s.trim() ? [s.trim()] : [];
+      };
+
+      const items: string[] =
+        features.length === 1 ? splitToFeatures(features[0] ?? "") : features;
+
       return (
         <div
-          className={`relative border rounded-lg p-2 bg-gray-200 shadow-sm transition ${
-            hidden ? 'opacity-60' : ''
+          className={`flex justify-center mb-6 rounded-md ${
+            hidden ? "opacity-60" : ""
           }`}
         >
-          {pkg.imageUrl ? (
-            <Image
-              src={pkg.imageUrl}
-              alt={pkg.name}
-              width={600}
-              height={160}
-              className="w-full h-40 object-cover rounded"
-              sizes="(max-width: 768px) 100vw, (max-width: 1024px) 50vw, 33vw"
-              unoptimized
-            />
-          ) : null}
-          <div className="mt-3">
-            <div className="flex items-center gap-2">
-              <h3 className="font-semibold">{pkg.name}</h3>
-              {hidden ? (
-                <span className="text-xs px-2 py-0.5 rounded-full bg-gray-200 border">
+          <div className="flex flex-col rounded-t-xl w-[220px] border-white shadow-neutral-200 shadow-md overflow-hidden relative">
+            {/* Action buttons overlay */}
+            <div className="absolute top-4 right-2 z-20 flex gap-1.5">
+              <button
+                type="button"
+                onClick={() => onEdit?.(pkg)}
+                className="inline-flex items-center justify-center w-7 h-7 rounded bg-white/90 hover:bg-white shadow-md transition"
+                title="Edit package"
+                aria-label="Edit package"
+              >
+                <Pencil className="w-3.5 h-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => onToggleDisplay?.(pkg)}
+                className="inline-flex items-center justify-center w-7 h-7 rounded bg-white/90 hover:bg-white shadow-md transition"
+                title={hidden ? "Unhide package" : "Hide package"}
+                aria-label={hidden ? "Unhide package" : "Hide package"}
+              >
+                {hidden ? (
+                  <Eye className="w-3.5 h-3.5" />
+                ) : (
+                  <EyeOff className="w-3.5 h-3.5" />
+                )}
+              </button>
+            </div>
+
+            {/* Header section */}
+            <div className="bg-[#1E1E1E] flex flex-col rounded-t-[32px] relative">
+              <div className="p-1.5 bg-[#1E1E1E] rounded-t-4xl shadow-md shadow-litratoblack">
+                <Image
+                  src={pkg.imageUrl || "/Images/litratobg.jpg"}
+                  alt={pkg.name}
+                  width={210}
+                  height={140}
+                  className="w-[210px] h-[140px] object-cover bg-no-repeat rounded-[24px]"
+                  unoptimized
+                />
+              </div>
+              <p className="text-white text-center pt-1 pb-1.5 text-[20px] font-didone">
+                {pkg.name}
+              </p>
+              {hidden && (
+                <span className="absolute top-1.5 left-1.5 z-20 text-[10px] px-1.5 py-0.5 rounded-full bg-gray-200 border font-medium">
                   Hidden
                 </span>
-              ) : null}
-              <div className="absolute top-2 right-2 flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => onEdit?.(pkg)}
-                  className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-slate-300 hover:bg-slate-400"
-                  title="Edit package"
-                  aria-label="Edit package"
-                >
-                  <Pencil className="w-4 h-4" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onToggleDisplay?.(pkg)}
-                  className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-slate-300 hover:bg-slate-400"
-                  title={hidden ? 'Unhide package' : 'Hide package'}
-                  aria-label={hidden ? 'Unhide package' : 'Hide package'}
-                >
-                  {hidden ? (
-                    <Eye className="w-4 h-4" />
-                  ) : (
-                    <EyeOff className="w-4 h-4" />
-                  )}
-                </button>
+              )}
+
+              {/* Price circle */}
+              <div className="absolute top-[100%] left-1/2 -translate-x-1/2 -translate-y-1/2 z-10">
+                <div className="rounded-full bg-white shadow-litratoblack/50 shadow-md p-0.5">
+                  <div className="rounded-full p-2.5 bg-litratoblack w-10 h-10 flex items-center justify-center text-white text-[10px] font-semibold border-3 border-white">
+                    {new Intl.NumberFormat("en-PH", {
+                      style: "currency",
+                      currency: "PHP",
+                      maximumFractionDigits: 0,
+                    }).format(pkg.price)}
+                  </div>
+                </div>
               </div>
             </div>
-            <p className="text-sm text-gray-600">
-              {new Intl.NumberFormat('en-PH', {
-                style: 'currency',
-                currency: 'PHP',
-                maximumFractionDigits: 0,
-              }).format(pkg.price)}
-            </p>
-            {features.length > 0 ? (
-              <ul className="mt-2 list-disc list-inside text-sm">
-                {features.map((f, i) => (
-                  <li key={i}>{f}</li>
-                ))}
-              </ul>
-            ) : null}
+
+            {/* Description list */}
+            <div className="bg-white flex flex-col pt-6 max-h-[200px] overflow-y-auto">
+              {items.map((item, index) => (
+                <div
+                  key={index}
+                  className={`py-1 pl-3 text-[9px] flex flex-row leading-tight ${
+                    index % 2 === 0 ? "bg-[#F5F5F5]" : "bg-white"
+                  }`}
+                >
+                  <Image
+                    src="/Icons/check.png"
+                    width={10}
+                    height={10}
+                    className="object-contain background-no-repeat mr-1.5"
+                    alt="check_icon"
+                  />
+                  {item}
+                </div>
+              ))}
+            </div>
           </div>
         </div>
-      )
+      );
     }
 
     // Removed SafePromoCard wrapper
 
     // Upload file then set pkgForm.imageUrl to the returned URL
     const uploadPackageImage = async (file: File): Promise<string> => {
-      const fd = new FormData()
-      fd.append('image', file) // must match upload.single('image')
+      const fd = new FormData();
+      fd.append("image", file); // must match upload.single('image')
       const res = await fetch(`${API_BASE}/package-image`, {
-        method: 'POST',
+        method: "POST",
         headers: { ...getAuthHeaders() }, // do NOT set Content-Type
         body: fd,
-      })
-      if (!res.ok) throw new Error(await res.text())
-      const data = await res.json()
-      return String(data.url || '')
-    }
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json();
+      return String(data.url || "");
+    };
 
     // File change handler
     const handleFileChange: React.ChangeEventHandler<HTMLInputElement> = async (
       e
     ) => {
-      const file = e.target.files?.[0]
-      if (!file) return
+      const file = e.target.files?.[0];
+      if (!file) return;
       try {
-        const url = await uploadPackageImage(file)
-        setPkgForm((p) => ({ ...p, imageUrl: url, imageName: file.name }))
+        const url = await uploadPackageImage(file);
+        setPkgForm((p) => ({ ...p, imageUrl: url, imageName: file.name }));
       } catch (err) {
-        console.error('Upload failed:', err)
+        console.error("Upload failed:", err);
       }
-    }
+    };
 
     // Clear selected image
     const handleClearImage = () => {
-      if (fileInputRef.current) fileInputRef.current.value = ''
-      setPkgForm((p) => ({ ...p, imageUrl: '', imageName: '' }))
-    }
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      setPkgForm((p) => ({ ...p, imageUrl: "", imageName: "" }));
+    };
 
     // Update name/price with proper React event types
     const updateField =
-      (key: 'name' | 'price') => (e: React.ChangeEvent<HTMLInputElement>) => {
-        const value = e.target.value
-        setPkgForm((prev) => ({ ...prev, [key]: value } as typeof prev))
-      }
+      (key: "name" | "price") => (e: React.ChangeEvent<HTMLInputElement>) => {
+        const value = e.target.value;
+        setPkgForm((prev) => ({ ...prev, [key]: value } as typeof prev));
+      };
 
     // Features helpers
     const addFeature = () =>
-      setPkgForm((p) => ({ ...p, features: [...p.features, ''] }))
+      setPkgForm((p) => ({ ...p, features: [...p.features, ""] }));
 
     const removeFeature = (idx: number) =>
       setPkgForm((p) => ({
         ...p,
         features: p.features.filter((_, i) => i !== idx),
-      }))
+      }));
 
     const updateFeature =
       (idx: number) => (e: React.ChangeEvent<HTMLInputElement>) =>
         setPkgForm((p) => ({
           ...p,
           features: p.features.map((f, i) => (i === idx ? e.target.value : f)),
-        }))
+        }));
 
     // Toggle package visibility (display flag) with optimistic UI update
     const togglePackageDisplay = async (pkg: PackageItem) => {
-      const nextDisplay = pkg.display === false ? true : false
-      const prevView = pkgView
+      const nextDisplay = pkg.display === false ? true : false;
+      const prevView = pkgView;
 
       if (nextDisplay) {
         // move from archived -> active
-        setArchivedPackages((arr) => arr.filter((p) => p.id !== pkg.id))
-        setPackages((arr) => [{ ...pkg, display: true }, ...arr])
+        setArchivedPackages((arr) => arr.filter((p) => p.id !== pkg.id));
+        setPackages((arr) => [{ ...pkg, display: true }, ...arr]);
 
         // If currently on Archived, switch to Active so the item is visible there
-        if (prevView === 'archived') {
-          setPkgView('active')
-          setPkgPage(1)
+        if (prevView === "archived") {
+          setPkgView("active");
+          setPkgPage(1);
         }
       } else {
         // move from active -> archived
-        setPackages((arr) => arr.filter((p) => p.id !== pkg.id))
-        setArchivedPackages((arr) => [{ ...pkg, display: false }, ...arr])
+        setPackages((arr) => arr.filter((p) => p.id !== pkg.id));
+        setArchivedPackages((arr) => [{ ...pkg, display: false }, ...arr]);
       }
 
       try {
         const res = await fetch(`${API_BASE}/package/${pkg.id}`, {
-          method: 'PATCH',
+          method: "PATCH",
           headers: {
-            'Content-Type': 'application/json',
+            "Content-Type": "application/json",
             ...getAuthHeaders(),
           },
           body: JSON.stringify({ display: nextDisplay }),
-        })
-        if (!res.ok) throw new Error(await res.text())
+        });
+        if (!res.ok) throw new Error(await res.text());
       } catch (e) {
-        console.error('Toggle package display failed:', e)
+        console.error("Toggle package display failed:", e);
         // rollback lists
         if (nextDisplay) {
-          setPackages((arr) => arr.filter((p) => p.id !== pkg.id))
-          setArchivedPackages((arr) => [{ ...pkg }, ...arr])
+          setPackages((arr) => arr.filter((p) => p.id !== pkg.id));
+          setArchivedPackages((arr) => [{ ...pkg }, ...arr]);
         } else {
-          setArchivedPackages((arr) => arr.filter((p) => p.id !== pkg.id))
-          setPackages((arr) => [{ ...pkg }, ...arr])
+          setArchivedPackages((arr) => arr.filter((p) => p.id !== pkg.id));
+          setPackages((arr) => [{ ...pkg }, ...arr]);
         }
         // rollback view if it was changed
-        setPkgView(prevView)
+        setPkgView(prevView);
       }
-    }
+    };
 
     // Apply search filter by package name (case-insensitive)
-    const normalizedPkgSearch = (searchTerm || '').trim().toLowerCase()
+    const normalizedPkgSearch = (searchTerm || "").trim().toLowerCase();
     const filteredActive = useMemo(() => {
-      if (!normalizedPkgSearch) return packages
+      if (!normalizedPkgSearch) return packages;
       return packages.filter((p) =>
-        (p.name || '').toLowerCase().includes(normalizedPkgSearch)
-      )
-    }, [packages, normalizedPkgSearch])
+        (p.name || "").toLowerCase().includes(normalizedPkgSearch)
+      );
+    }, [packages, normalizedPkgSearch]);
     const filteredArchived = useMemo(() => {
-      if (!normalizedPkgSearch) return archivedPackages
+      if (!normalizedPkgSearch) return archivedPackages;
       return archivedPackages.filter((p) =>
-        (p.name || '').toLowerCase().includes(normalizedPkgSearch)
-      )
-    }, [archivedPackages, normalizedPkgSearch])
-    const activeList = pkgView === 'active' ? filteredActive : filteredArchived
+        (p.name || "").toLowerCase().includes(normalizedPkgSearch)
+      );
+    }, [archivedPackages, normalizedPkgSearch]);
+    const activeList = pkgView === "active" ? filteredActive : filteredArchived;
 
     // NEW: pagination for packages (3 per page)
-    const PKG_PER_PAGE = 3
-    const [pkgPage, setPkgPage] = useState(1)
+    const PKG_PER_PAGE = 3;
+    const [pkgPage, setPkgPage] = useState(1);
     const pkgTotalPages = Math.max(
       1,
       Math.ceil(activeList.length / PKG_PER_PAGE)
-    )
+    );
     useEffect(() => {
-      setPkgPage((p) => Math.min(Math.max(1, p), pkgTotalPages))
-    }, [pkgTotalPages])
+      setPkgPage((p) => Math.min(Math.max(1, p), pkgTotalPages));
+    }, [pkgTotalPages]);
     const paginatedPackages = useMemo(() => {
-      const start = (pkgPage - 1) * PKG_PER_PAGE
-      return activeList.slice(start, start + PKG_PER_PAGE)
-    }, [activeList, pkgPage])
+      const start = (pkgPage - 1) * PKG_PER_PAGE;
+      return activeList.slice(start, start + PKG_PER_PAGE);
+    }, [activeList, pkgPage]);
 
     const openEditPackage = (pkg: PackageItem) => {
       setEditPkgForm({
@@ -2706,63 +2762,63 @@ export default function InventoryManagementPage() {
         imageUrl: pkg.imageUrl,
         features: [...pkg.features],
         durationHours: pkg.durationHours ?? undefined,
-      })
-      setEditSelected({}) // reset
-      setEditPkgOpen(true)
-      void refreshAssignedInventory()
+      });
+      setEditSelected({}); // reset
+      setEditPkgOpen(true);
+      void refreshAssignedInventory();
       // load package's current items
-      ;(async () => {
+      (async () => {
         try {
           const res = await fetch(`${API_BASE}/package/${pkg.id}/items`, {
             headers: {
-              'Content-Type': 'application/json',
+              "Content-Type": "application/json",
               ...getAuthHeaders(),
             },
-          })
-          if (!res.ok) throw new Error(await res.text())
-          const data = await res.json()
-          const map: Record<string, number> = {}
+          });
+          if (!res.ok) throw new Error(await res.text());
+          const data = await res.json();
+          const map: Record<string, number> = {};
           for (const it of data.items || []) {
-            map[String(it.inventory_id)] = Number(it.quantity) || 1
+            map[String(it.inventory_id)] = Number(it.quantity) || 1;
           }
-          setEditSelected(map)
+          setEditSelected(map);
         } catch (e) {
-          console.error('Load package items for edit failed:', e)
+          console.error("Load package items for edit failed:", e);
         }
-      })()
-    }
+      })();
+    };
 
     const handleEditFileChange: React.ChangeEventHandler<
       HTMLInputElement
     > = async (e) => {
-      const file = e.target.files?.[0]
-      if (!file) return
+      const file = e.target.files?.[0];
+      if (!file) return;
       try {
-        const url = await uploadPackageImage(file)
-        setEditPkgForm((p) => ({ ...p, imageUrl: url }))
+        const url = await uploadPackageImage(file);
+        setEditPkgForm((p) => ({ ...p, imageUrl: url }));
       } catch (err) {
-        console.error('Edit package image upload failed:', err)
+        console.error("Edit package image upload failed:", err);
       }
-    }
+    };
 
     const saveEditedPackage = async () => {
-      const id = editPkgForm.id
-      if (!id) return
-      const nextName = editPkgForm.name.trim()
+      const id = editPkgForm.id;
+      if (!id) return;
+      const nextName = editPkgForm.name.trim();
       const duplicate = [...packages, ...archivedPackages].some(
         (pkg) =>
           pkg.id !== id &&
           pkg.name.trim().toLowerCase() === nextName.toLowerCase()
-      )
+      );
       if (duplicate) {
-        toast.error('Package name already exists.')
-        return
+        toast.error("Package name already exists.");
+        return;
       }
       try {
         const res = await fetch(`${API_BASE}/package/${id}`, {
-          method: 'PATCH',
+          method: "PATCH",
           headers: {
-            'Content-Type': 'application/json',
+            "Content-Type": "application/json",
             ...getAuthHeaders(),
           },
           body: JSON.stringify({
@@ -2772,14 +2828,14 @@ export default function InventoryManagementPage() {
             description: editPkgForm.features
               .map((f) => f.trim())
               .filter(Boolean)
-              .join('\n'),
+              .join("\n"),
             duration_hours:
               editPkgForm.durationHours == null
                 ? null
                 : Number(editPkgForm.durationHours) || 0,
           }),
-        })
-        if (!res.ok) throw new Error(await res.text())
+        });
+        if (!res.ok) throw new Error(await res.text());
 
         // sync package items (add/remove/update); backend logs diffs
         const items = Object.entries(editSelected).map(
@@ -2787,18 +2843,18 @@ export default function InventoryManagementPage() {
             inventory_id: Number(inventory_id),
             quantity: Number(quantity) || 1,
           })
-        )
+        );
         const resItems = await fetch(`${API_BASE}/package/${id}/items`, {
-          method: 'PUT',
+          method: "PUT",
           headers: {
-            'Content-Type': 'application/json',
+            "Content-Type": "application/json",
             ...getAuthHeaders(),
           },
           body: JSON.stringify({ items }),
-        })
-        if (!resItems.ok) throw new Error(await resItems.text())
+        });
+        if (!resItems.ok) throw new Error(await resItems.text());
 
-        await refreshAssignedInventory()
+        await refreshAssignedInventory();
 
         // reflect meta changes locally
         setPackages((prev) =>
@@ -2817,16 +2873,16 @@ export default function InventoryManagementPage() {
                 }
               : p
           )
-        )
-        setEditPkgOpen(false)
+        );
+        setEditPkgOpen(false);
       } catch (e) {
-        console.error('Save edited package failed:', e)
+        console.error("Save edited package failed:", e);
       }
-    }
+    };
     const pkgWindowPages = useMemo(
       () => pageWindow(pkgPage, pkgTotalPages, 3),
       [pkgPage, pkgTotalPages]
-    )
+    );
 
     return (
       <div className="flex flex-col h-full min-h-0">
@@ -2836,14 +2892,14 @@ export default function InventoryManagementPage() {
             {/* Active / Archived toggle using shared TabButton for consistent styling */}
             <div className="flex gap-2 mb-2">
               <TabButton
-                active={pkgView === 'active'}
-                onClick={() => setPkgView('active')}
+                active={pkgView === "active"}
+                onClick={() => setPkgView("active")}
               >
                 Active
               </TabButton>
               <TabButton
-                active={pkgView === 'archived'}
-                onClick={() => setPkgView('archived')}
+                active={pkgView === "archived"}
+                onClick={() => setPkgView("archived")}
               >
                 Archived
               </TabButton>
@@ -2880,7 +2936,7 @@ export default function InventoryManagementPage() {
                       className="h-9 rounded-md border px-3 text-sm outline-none"
                       placeholder="e.g. Wedding Package"
                       value={pkgForm.name}
-                      onChange={updateField('name')}
+                      onChange={updateField("name")}
                     />
                   </div>
 
@@ -2891,7 +2947,7 @@ export default function InventoryManagementPage() {
                       min={0}
                       className="h-9 rounded-md border px-3 text-sm outline-none"
                       value={pkgForm.price}
-                      onChange={updateField('price')}
+                      onChange={updateField("price")}
                     />
                   </div>
 
@@ -2904,12 +2960,12 @@ export default function InventoryManagementPage() {
                       min={0}
                       step={1}
                       className="h-9 rounded-md border px-3 text-sm outline-none"
-                      value={pkgForm.durationHours ?? ''}
+                      value={pkgForm.durationHours ?? ""}
                       onChange={(e) =>
                         setPkgForm((p) => ({
                           ...p,
                           durationHours:
-                            e.target.value === ''
+                            e.target.value === ""
                               ? undefined
                               : Number(e.target.value) || 0,
                         }))
@@ -2975,9 +3031,9 @@ export default function InventoryManagementPage() {
                         </div>
                       ) : (
                         inventory.map((it) => {
-                          const checked = it.id in selected
-                          const assigned = assignedInventory[it.id]
-                          const disabled = Boolean(assigned)
+                          const checked = it.id in selected;
+                          const assigned = assignedInventory[it.id];
+                          const disabled = Boolean(assigned);
                           return (
                             <div
                               key={it.id}
@@ -2997,13 +3053,13 @@ export default function InventoryManagementPage() {
                                 </div>
                                 {assigned ? (
                                   <div className="text-xs text-gray-500">
-                                    Assigned to{' '}
-                                    {assigned.packageName ?? 'another package'}
+                                    Assigned to{" "}
+                                    {assigned.packageName ?? "another package"}
                                   </div>
                                 ) : null}
                               </div>
                             </div>
-                          )
+                          );
                         })
                       )}
                     </div>
@@ -3073,7 +3129,7 @@ export default function InventoryManagementPage() {
           <Dialog
             open={editPkgOpen}
             onOpenChange={(o) => {
-              if (!o) setEditPkgOpen(false)
+              if (!o) setEditPkgOpen(false);
             }}
           >
             <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-hidden flex flex-col">
@@ -3117,12 +3173,12 @@ export default function InventoryManagementPage() {
                     type="number"
                     min={0}
                     step={1}
-                    value={editPkgForm.durationHours ?? ''}
+                    value={editPkgForm.durationHours ?? ""}
                     onChange={(e) =>
                       setEditPkgForm((p) => ({
                         ...p,
                         durationHours:
-                          e.target.value === ''
+                          e.target.value === ""
                             ? undefined
                             : Number(e.target.value) || 0,
                       }))
@@ -3163,7 +3219,7 @@ export default function InventoryManagementPage() {
                       onClick={() =>
                         setEditPkgForm((p) => ({
                           ...p,
-                          features: [...p.features, ''],
+                          features: [...p.features, ""],
                         }))
                       }
                     >
@@ -3207,7 +3263,7 @@ export default function InventoryManagementPage() {
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <label className="text-sm font-medium">
-                      Inventory Items{' '}
+                      Inventory Items{" "}
                     </label>
                     <div className="flex gap-2">
                       <Button
@@ -3216,18 +3272,18 @@ export default function InventoryManagementPage() {
                         className="h-8 px-3"
                         onClick={() => {
                           // select all with qty  1 (or keep existing qty)
-                          const map: Record<string, number> = {}
+                          const map: Record<string, number> = {};
                           for (const it of inventory) {
-                            const assigned = assignedInventory[it.id]
+                            const assigned = assignedInventory[it.id];
                             if (
                               assigned &&
                               assigned.packageId !== editPkgForm.id
                             ) {
-                              continue
+                              continue;
                             }
-                            map[it.id] = editSelected[it.id] || 1
+                            map[it.id] = editSelected[it.id] || 1;
                           }
-                          setEditSelected(map)
+                          setEditSelected(map);
                         }}
                       >
                         Select All
@@ -3249,10 +3305,10 @@ export default function InventoryManagementPage() {
                       </div>
                     ) : (
                       inventory.map((it) => {
-                        const checked = editSelected[it.id] != null
-                        const assigned = assignedInventory[it.id]
+                        const checked = editSelected[it.id] != null;
+                        const assigned = assignedInventory[it.id];
                         const disabled =
-                          assigned && assigned.packageId !== editPkgForm.id
+                          assigned && assigned.packageId !== editPkgForm.id;
                         return (
                           <div
                             key={it.id}
@@ -3264,16 +3320,16 @@ export default function InventoryManagementPage() {
                               checked={checked}
                               disabled={Boolean(disabled)}
                               onChange={(e) => {
-                                const on = e.target.checked
+                                const on = e.target.checked;
                                 setEditSelected((prev) => {
-                                  const next = { ...prev }
+                                  const next = { ...prev };
                                   if (on) {
-                                    next[it.id] = next[it.id] || 1
+                                    next[it.id] = next[it.id] || 1;
                                   } else {
-                                    delete next[it.id]
+                                    delete next[it.id];
                                   }
-                                  return next
-                                })
+                                  return next;
+                                });
                               }}
                             />
                             <div className="flex-1">
@@ -3281,16 +3337,16 @@ export default function InventoryManagementPage() {
                               {assigned ? (
                                 <div className="text-xs text-gray-500">
                                   {assigned.packageId === editPkgForm.id
-                                    ? 'Assigned to this package'
+                                    ? "Assigned to this package"
                                     : `Assigned to ${
                                         assigned.packageName ??
-                                        'another package'
+                                        "another package"
                                       }`}
                                 </div>
                               ) : null}
                             </div>
                           </div>
-                        )
+                        );
                       })
                     )}
                   </div>
@@ -3326,9 +3382,9 @@ export default function InventoryManagementPage() {
             ))
           ) : (
             <div className="col-span-full text-center text-sm text-gray-500 py-6">
-              {pkgView === 'active'
-                ? 'No active packages found.'
-                : 'No archived packages.'}
+              {pkgView === "active"
+                ? "No active packages found."
+                : "No archived packages."}
             </div>
           )}
         </div>
@@ -3341,10 +3397,10 @@ export default function InventoryManagementPage() {
                 <PaginationPrevious
                   href="#"
                   className="text-black no-underline hover:no-underline hover:text-black"
-                  style={{ textDecoration: 'none' }}
+                  style={{ textDecoration: "none" }}
                   onClick={(e) => {
-                    e.preventDefault()
-                    setPkgPage((p) => Math.max(1, p - 1))
+                    e.preventDefault();
+                    setPkgPage((p) => Math.max(1, p - 1));
                   }}
                 />
               </PaginationItem>
@@ -3355,10 +3411,10 @@ export default function InventoryManagementPage() {
                     href="#"
                     isActive={n === pkgPage}
                     className="text-black no-underline hover:no-underline hover:text-black"
-                    style={{ textDecoration: 'none' }}
+                    style={{ textDecoration: "none" }}
                     onClick={(e) => {
-                      e.preventDefault()
-                      setPkgPage(n)
+                      e.preventDefault();
+                      setPkgPage(n);
                     }}
                   >
                     {n}
@@ -3370,10 +3426,10 @@ export default function InventoryManagementPage() {
                 <PaginationNext
                   href="#"
                   className="text-black no-underline hover:no-underline hover:text-black"
-                  style={{ textDecoration: 'none' }}
+                  style={{ textDecoration: "none" }}
                   onClick={(e) => {
-                    e.preventDefault()
-                    setPkgPage((p) => Math.min(pkgTotalPages, p + 1))
+                    e.preventDefault();
+                    setPkgPage((p) => Math.min(pkgTotalPages, p + 1));
                   }}
                 />
               </PaginationItem>
@@ -3381,454 +3437,463 @@ export default function InventoryManagementPage() {
           </Pagination>
         </div>
       </div>
-    )
+    );
   }
 
   function ItemLogsPanel({ searchTerm }: { searchTerm?: string }) {
     type LogRow = {
-      inventory_log_id?: number
-      entity_type: string
-      entity_id: number
-      status: string
-      notes: string | null
-      additional_notes?: string | null
-      updated_by: number | null
-      updated_by_name?: string
-      updated_by_username?: string
-      last_updated?: string | null
-      updated_at?: string | null
-      created_at?: string | null
-      log_id?: number // legacy field support
-    }
+      inventory_log_id?: number;
+      entity_type: string;
+      entity_id: number;
+      status: string;
+      notes: string | null;
+      additional_notes?: string | null;
+      updated_by: number | null;
+      updated_by_name?: string;
+      updated_by_username?: string;
+      last_updated?: string | null;
+      updated_at?: string | null;
+      created_at?: string | null;
+      log_id?: number; // legacy field support
+    };
 
-    const [logs, setLogs] = useState<LogRow[]>([])
-    const [editNotesOpen, setEditNotesOpen] = useState(false)
-    const [editingLog, setEditingLog] = useState<LogRow | null>(null)
-    const [editAdditionalNotes, setEditAdditionalNotes] = useState('')
-    const [loading, setLoading] = useState(false)
+    const [logs, setLogs] = useState<LogRow[]>([]);
+    const [editNotesOpen, setEditNotesOpen] = useState(false);
+    const [editingLog, setEditingLog] = useState<LogRow | null>(null);
+    const [editAdditionalNotes, setEditAdditionalNotes] = useState("");
+    const [loading, setLoading] = useState(false);
     const [form, setForm] = useState<{
-      entity_type: 'Equipments' | 'Package'
-      entity_id: string
-      status: string
-      notes: string
+      entity_type: "Equipments" | "Package";
+      entity_id: string;
+      status: string;
+      notes: string;
     }>({
-      entity_type: 'Equipments',
-      entity_id: '',
-      status: 'available',
-      notes: '',
-    })
+      entity_type: "Equipments",
+      entity_id: "",
+      status: "available",
+      notes: "",
+    });
 
     const API_ORIGIN =
-      process.env.NEXT_PUBLIC_API_ORIGIN ?? 'http://localhost:5000'
-    const API_BASE = `${API_ORIGIN}/api/admin`
+      process.env.NEXT_PUBLIC_API_ORIGIN ?? "http://localhost:5000";
+    const API_BASE = `${API_ORIGIN}/api/admin`;
     const getCookie = (name: string) =>
-      typeof document === 'undefined'
-        ? ''
+      typeof document === "undefined"
+        ? ""
         : document.cookie
-            .split('; ')
-            .find((r) => r.startsWith(name + '='))
-            ?.split('=')[1] || ''
+            .split("; ")
+            .find((r) => r.startsWith(name + "="))
+            ?.split("=")[1] || "";
     const getAuthHeaderString = () => {
       const raw =
-        (typeof window !== 'undefined' &&
-          localStorage.getItem('access_token')) ||
-        getCookie('access_token')
-      if (!raw) return ''
-      return raw.startsWith('Bearer ') ? raw : `Bearer ${raw}`
-    }
+        (typeof window !== "undefined" &&
+          localStorage.getItem("access_token")) ||
+        getCookie("access_token");
+      if (!raw) return "";
+      return raw.startsWith("Bearer ") ? raw : `Bearer ${raw}`;
+    };
     const getAuthHeaders = useCallback((): Record<string, string> => {
-      const auth = getAuthHeaderString()
-      return auth ? { Authorization: auth } : {}
-    }, [])
+      const auth = getAuthHeaderString();
+      return auth ? { Authorization: auth } : {};
+    }, []);
 
     // Map of inventory id -> equipment name for displaying names in logs
     const [inventoryNames, setInventoryNames] = useState<
       Record<string, string>
-    >({})
+    >({});
     useEffect(() => {
-      let ignore = false
-      ;(async () => {
+      let ignore = false;
+      (async () => {
         try {
           const res = await fetch(`${API_BASE}/inventory`, {
             headers: {
-              'Content-Type': 'application/json',
+              "Content-Type": "application/json",
               ...getAuthHeaders(),
             },
-          })
-          if (!res.ok) return // non-blocking
-          const data = await res.json()
-          const itemsCandidate = (data as { items?: unknown }).items
+          });
+          if (!res.ok) return; // non-blocking
+          const data = await res.json();
+          const itemsCandidate = (data as { items?: unknown }).items;
           const list = Array.isArray(data)
             ? data
             : Array.isArray(itemsCandidate)
             ? itemsCandidate
-            : []
-          const map: Record<string, string> = {}
+            : [];
+          const map: Record<string, string> = {};
           for (const it of list) {
-            const rec = it as Record<string, unknown>
-            const id = String(rec.id ?? '')
-            if (!id) continue
+            const rec = it as Record<string, unknown>;
+            const id = String(rec.id ?? "");
+            if (!id) continue;
             const name = String(
               (rec as { material_name?: unknown }).material_name ??
                 (rec as { name?: unknown }).name ??
                 `#${id}`
-            )
-            map[id] = name
+            );
+            map[id] = name;
           }
           if (!ignore) {
-            setInventoryNames(map)
+            setInventoryNames(map);
           }
         } catch (e) {
           // best-effort only
-          console.error('Load inventory names failed:', e)
+          console.error("Load inventory names failed:", e);
         }
-      })()
+      })();
       return () => {
-        ignore = true
-      }
-    }, [API_BASE, getAuthHeaders])
+        ignore = true;
+      };
+    }, [API_BASE, getAuthHeaders]);
 
     // Map of package id -> package name
-    const [packageNames, setPackageNames] = useState<Record<string, string>>({})
+    const [packageNames, setPackageNames] = useState<Record<string, string>>(
+      {}
+    );
     useEffect(() => {
-      let ignore = false
-      ;(async () => {
+      let ignore = false;
+      (async () => {
         try {
           const res = await fetch(`${API_BASE}/package`, {
             headers: {
-              'Content-Type': 'application/json',
+              "Content-Type": "application/json",
               ...getAuthHeaders(),
             },
-          })
-          if (!res.ok) return // non-blocking
-          const data = await res.json()
-          const packagesCandidate = (data as { packages?: unknown }).packages
-          const itemsCandidate = (data as { items?: unknown }).items
+          });
+          if (!res.ok) return; // non-blocking
+          const data = await res.json();
+          const packagesCandidate = (data as { packages?: unknown }).packages;
+          const itemsCandidate = (data as { items?: unknown }).items;
           const list = Array.isArray(data)
             ? data
             : Array.isArray(packagesCandidate)
             ? packagesCandidate
             : Array.isArray(itemsCandidate)
             ? itemsCandidate
-            : []
-          const map: Record<string, string> = {}
+            : [];
+          const map: Record<string, string> = {};
           for (const it of list) {
-            const rec = it as Record<string, unknown>
+            const rec = it as Record<string, unknown>;
             const id = String(
               (rec.id as unknown) ??
                 (rec as { package_id?: unknown }).package_id ??
-                ''
-            )
-            if (!id) continue
+                ""
+            );
+            if (!id) continue;
             const name = String(
               (rec as { package_name?: unknown }).package_name ??
                 (rec as { name?: unknown }).name ??
                 `#${id}`
-            )
-            map[id] = name
+            );
+            map[id] = name;
           }
           if (!ignore) {
-            setPackageNames(map)
+            setPackageNames(map);
           }
         } catch (e) {
-          console.error('Load package names failed:', e)
+          console.error("Load package names failed:", e);
         }
-      })()
+      })();
       return () => {
-        ignore = true
-      }
-    }, [API_BASE, getAuthHeaders])
+        ignore = true;
+      };
+    }, [API_BASE, getAuthHeaders]);
 
     // Map of grid id -> grid name
-    const [gridNames, setGridNames] = useState<Record<string, string>>({})
+    const [gridNames, setGridNames] = useState<Record<string, string>>({});
     useEffect(() => {
-      let ignore = false
-      ;(async () => {
+      let ignore = false;
+      (async () => {
         try {
           const [active, archived] = await Promise.all([
             loadActiveGrids().catch(() => []),
             loadArchivedGrids().catch(() => []),
-          ])
-          if (ignore) return
-          const map: Record<string, string> = {}
+          ]);
+          if (ignore) return;
+          const map: Record<string, string> = {};
           for (const row of [...active, ...archived]) {
-            const id = String(row?.id ?? '')
-            if (!id) continue
-            const name = String(row?.grid_name ?? '').trim()
-            map[id] = name || `Grid #${id}`
+            const id = String(row?.id ?? "");
+            if (!id) continue;
+            const name = String(row?.grid_name ?? "").trim();
+            map[id] = name || `Grid #${id}`;
           }
-          setGridNames(map)
+          setGridNames(map);
         } catch (e) {
-          console.error('Load grid names failed:', e)
+          console.error("Load grid names failed:", e);
         }
-      })()
+      })();
       return () => {
-        ignore = true
-      }
-    }, [loadActiveGrids, loadArchivedGrids])
+        ignore = true;
+      };
+    }, [loadActiveGrids, loadArchivedGrids]);
 
     // Fetch archived packages too so names are available even when hidden
     useEffect(() => {
-      let ignore = false
-      ;(async () => {
+      let ignore = false;
+      (async () => {
         try {
           const res = await fetch(`${API_BASE}/package/archived`, {
             headers: {
-              'Content-Type': 'application/json',
+              "Content-Type": "application/json",
               ...getAuthHeaders(),
             },
-          })
-          if (!res.ok) return
-          const data = await res.json()
-          const packagesCandidate = (data as { packages?: unknown }).packages
+          });
+          if (!res.ok) return;
+          const data = await res.json();
+          const packagesCandidate = (data as { packages?: unknown }).packages;
           const list = Array.isArray(data)
             ? data
             : Array.isArray(packagesCandidate)
             ? packagesCandidate
-            : []
-          if (!list.length) return
-          const add: Record<string, string> = {}
+            : [];
+          if (!list.length) return;
+          const add: Record<string, string> = {};
           for (const it of list) {
-            const rec = it as Record<string, unknown>
+            const rec = it as Record<string, unknown>;
             const id = String(
               (rec.id as unknown) ??
                 (rec as { package_id?: unknown }).package_id ??
-                ''
-            )
-            if (!id) continue
+                ""
+            );
+            if (!id) continue;
             const name = String(
               (rec as { package_name?: unknown }).package_name ??
                 (rec as { name?: unknown }).name ??
                 `#${id}`
-            )
-            add[id] = name
+            );
+            add[id] = name;
           }
           if (!ignore && Object.keys(add).length) {
-            setPackageNames((prev) => ({ ...add, ...prev }))
+            setPackageNames((prev) => ({ ...add, ...prev }));
           }
         } catch (e) {
-          console.error('Load archived package names failed:', e)
+          console.error("Load archived package names failed:", e);
         }
-      })()
+      })();
       return () => {
-        ignore = true
-      }
-    }, [API_BASE, getAuthHeaders])
+        ignore = true;
+      };
+    }, [API_BASE, getAuthHeaders]);
 
     const load = useCallback(async () => {
-      setLoading(true)
+      setLoading(true);
       try {
         const res = await fetch(`${API_BASE}/inventory-status-log`, {
-          headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-        })
-        if (!res.ok) throw new Error(await res.text())
-        const data = await res.json()
+          headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+        });
+        if (!res.ok) throw new Error(await res.text());
+        const data = await res.json();
         const list = Array.isArray(data?.inventoryStatusLogs)
           ? data.inventoryStatusLogs
           : Array.isArray(data)
           ? data
-          : []
-        setLogs(list)
+          : [];
+        setLogs(list);
       } catch (e) {
-        console.error('Load logs failed:', e)
+        console.error("Load logs failed:", e);
       } finally {
-        setLoading(false)
+        setLoading(false);
       }
-    }, [API_BASE, getAuthHeaders])
+    }, [API_BASE, getAuthHeaders]);
 
     useEffect(() => {
-      load()
-    }, [load])
+      load();
+    }, [load]);
 
     // removed unused createLog (logs are read-only in this panel)
 
     // NEW: filters (entity, status) — search is unified via top search bar
     const [filterEntity, setFilterEntity] = useState<
-      'all' | 'Equipment' | 'Package' | 'Grid'
-    >('all')
+      "all" | "Equipment" | "Package" | "Grid"
+    >("all");
     const [filterStatus, setFilterStatus] = useState<
-      | 'all'
-      | 'available'
-      | 'unavailable'
-      | 'good'
-      | 'damaged'
-      | 'archived'
-      | 'unarchived'
-    >('all')
+      | "all"
+      | "available"
+      | "unavailable"
+      | "good"
+      | "damaged"
+      | "archived"
+      | "unarchived"
+    >("all");
     // removed local filterSearch; using unified top search
 
     const STATUS_OPTIONS_ALL = useMemo(
       () => [
-        { label: 'All statuses', value: 'all' as const },
-        { label: 'Available', value: 'available' as const },
-        { label: 'Unavailable', value: 'unavailable' as const },
-        { label: 'Archived', value: 'archived' as const },
-        { label: 'Unarchived', value: 'unarchived' as const },
-        { label: 'Good', value: 'good' as const },
-        { label: 'Damaged', value: 'damaged' as const },
+        { label: "All statuses", value: "all" as const },
+        { label: "Available", value: "available" as const },
+        { label: "Unavailable", value: "unavailable" as const },
+        { label: "Archived", value: "archived" as const },
+        { label: "Unarchived", value: "unarchived" as const },
+        { label: "Good", value: "good" as const },
+        { label: "Damaged", value: "damaged" as const },
       ],
       []
-    )
+    );
     const STATUS_OPTIONS_INV = useMemo(
       () =>
         STATUS_OPTIONS_ALL.filter((o) =>
-          ['all', 'available', 'unavailable', 'good', 'damaged'].includes(
+          ["all", "available", "unavailable", "good", "damaged"].includes(
             o.value
           )
         ),
       [STATUS_OPTIONS_ALL]
-    )
+    );
     const STATUS_OPTIONS_PKG = useMemo(
       () =>
         STATUS_OPTIONS_ALL.filter((o) =>
-          ['all', 'archived', 'unarchived'].includes(o.value)
+          ["all", "archived", "unarchived"].includes(o.value)
         ),
       [STATUS_OPTIONS_ALL]
-    )
+    );
     const STATUS_OPTIONS_GRID = useMemo(
       () =>
         STATUS_OPTIONS_ALL.filter((o) =>
-          ['all', 'archived', 'unarchived'].includes(o.value)
+          ["all", "archived", "unarchived"].includes(o.value)
         ),
       [STATUS_OPTIONS_ALL]
-    )
+    );
     const currentStatusOptions = useMemo(() => {
-      if (filterEntity === 'Equipment') return STATUS_OPTIONS_INV
-      if (filterEntity === 'Package') return STATUS_OPTIONS_PKG
-      if (filterEntity === 'Grid') return STATUS_OPTIONS_GRID
-      return STATUS_OPTIONS_ALL
+      if (filterEntity === "Equipment") return STATUS_OPTIONS_INV;
+      if (filterEntity === "Package") return STATUS_OPTIONS_PKG;
+      if (filterEntity === "Grid") return STATUS_OPTIONS_GRID;
+      return STATUS_OPTIONS_ALL;
     }, [
       filterEntity,
       STATUS_OPTIONS_INV,
       STATUS_OPTIONS_PKG,
       STATUS_OPTIONS_GRID,
       STATUS_OPTIONS_ALL,
-    ])
+    ]);
 
     type EnrichedLog = LogRow & {
-      _changes: Record<string, [unknown, unknown]> | null
-      _logType: string
-      _statusDisplay: string
-      _conditionDisplay: string | null
-    }
+      _changes: Record<string, [unknown, unknown]> | null;
+      _logType: string;
+      _statusDisplay: string;
+      _conditionDisplay: string | null;
+    };
     const enrichedLogs = useMemo<EnrichedLog[]>(() => {
       return logs
         .map((l) => {
-          let changes: Record<string, [unknown, unknown]> | null = null
+          let changes: Record<string, [unknown, unknown]> | null = null;
           if (l.notes) {
             try {
-              const parsed: unknown = JSON.parse(l.notes)
+              const parsed: unknown = JSON.parse(l.notes);
               if (
                 parsed &&
-                typeof parsed === 'object' &&
+                typeof parsed === "object" &&
                 (parsed as { changes?: unknown }).changes
               ) {
-                const ch = (parsed as { changes?: unknown }).changes
-                if (ch && typeof ch === 'object') {
-                  changes = ch as Record<string, [unknown, unknown]>
+                const ch = (parsed as { changes?: unknown }).changes;
+                if (ch && typeof ch === "object") {
+                  changes = ch as Record<string, [unknown, unknown]>;
                 }
               }
             } catch {}
           }
           // Determine log type and display status/condition based on entity type and changes
-          let logType = 'Updated'
-          if (l.status === 'created') logType = 'Created'
-          else if (l.status === 'unarchived') logType = 'Unarchived'
-          else if (l.status === 'archived') logType = 'Archived'
-          let statusDisplay = ''
-          let conditionDisplay: string | null = null
+          let logType = "Updated";
+          if (l.status === "created") logType = "Created";
+          else if (l.status === "unarchived") logType = "Unarchived";
+          else if (l.status === "archived") logType = "Archived";
+          let statusDisplay = "";
+          let conditionDisplay: string | null = null;
           const toKey = (value: unknown) =>
-            String(value ?? '')
+            String(value ?? "")
               .trim()
-              .toLowerCase()
+              .toLowerCase();
           const normalizeAvailability = (value: unknown) => {
-            const key = toKey(value)
-            if (['available', 'true', '1'].includes(key)) return 'available'
-            if (['unavailable', 'false', '0'].includes(key))
-              return 'unavailable'
-            if (key === 'archived' || key === 'unarchived') return key
-            return key
-          }
-          const entityDisplayType = displayEntityType(l.entity_type)
-          if (entityDisplayType === 'Equipment') {
+            const key = toKey(value);
+            if (["available", "true", "1"].includes(key)) return "available";
+            if (["unavailable", "false", "0"].includes(key))
+              return "unavailable";
+            if (key === "archived" || key === "unarchived") return key;
+            return key;
+          };
+          const entityDisplayType = displayEntityType(l.entity_type);
+          if (entityDisplayType === "Equipment") {
             // For equipment, "Status" should only ever be available/unavailable
             if (changes?.status) {
               // Direct availability change
-              statusDisplay = normalizeAvailability(changes.status[1])
+              statusDisplay = normalizeAvailability(changes.status[1]);
             } else if (changes?.is_archived) {
-              const target = toKey(changes.is_archived[1])
-              const archivedTargets = ['true', '1', 't', 'yes', 'y', 'archived']
-              const nextArchived = archivedTargets.includes(target)
-              statusDisplay = 'unavailable'
-              conditionDisplay = nextArchived ? 'Archived' : 'Unarchived'
+              const target = toKey(changes.is_archived[1]);
+              const archivedTargets = [
+                "true",
+                "1",
+                "t",
+                "yes",
+                "y",
+                "archived",
+              ];
+              const nextArchived = archivedTargets.includes(target);
+              statusDisplay = "unavailable";
+              conditionDisplay = nextArchived ? "Archived" : "Unarchived";
             } else if (changes?.condition) {
               // Condition change: keep condition in separate column; status remains availability only
-              const fromCond = toKey(changes.condition[0])
-              const toCondKey = toKey(changes.condition[1])
+              const fromCond = toKey(changes.condition[0]);
+              const toCondKey = toKey(changes.condition[1]);
               // Archive/unarchive flows should appear as unavailable in Status
-              if (toCondKey === 'archived' || fromCond === 'archived') {
-                statusDisplay = 'unavailable'
+              if (toCondKey === "archived" || fromCond === "archived") {
+                statusDisplay = "unavailable";
               }
-              conditionDisplay = String(changes.condition[1] ?? '')
-            } else if (l.status === 'archived' || l.status === 'unarchived') {
+              conditionDisplay = String(changes.condition[1] ?? "");
+            } else if (l.status === "archived" || l.status === "unarchived") {
               // Treat archive/unarchive events as unavailable for equipment
-              statusDisplay = 'unavailable'
+              statusDisplay = "unavailable";
             } else {
               // Default when unspecified
-              statusDisplay = 'available'
+              statusDisplay = "available";
             }
-          } else if (entityDisplayType === 'Package') {
+          } else if (entityDisplayType === "Package") {
             if (changes?.display) {
-              const target = toKey(changes.display[1])
-              if (['visible', 'true', '1', 'unarchived'].includes(target))
-                statusDisplay = 'unarchived'
-              else if (['hidden', 'false', '0', 'archived'].includes(target))
-                statusDisplay = 'archived'
-              else statusDisplay = target || 'unarchived'
-            } else if (l.status === 'archived' || l.status === 'unarchived') {
-              statusDisplay = l.status
+              const target = toKey(changes.display[1]);
+              if (["visible", "true", "1", "unarchived"].includes(target))
+                statusDisplay = "unarchived";
+              else if (["hidden", "false", "0", "archived"].includes(target))
+                statusDisplay = "archived";
+              else statusDisplay = target || "unarchived";
+            } else if (l.status === "archived" || l.status === "unarchived") {
+              statusDisplay = l.status;
             } else {
-              statusDisplay = 'unarchived'
+              statusDisplay = "unarchived";
             }
-            conditionDisplay = null
-          } else if (entityDisplayType === 'Grid') {
+            conditionDisplay = null;
+          } else if (entityDisplayType === "Grid") {
             if (changes?.display) {
-              const target = toKey(changes.display[1])
-              if (['visible', 'true', '1', 'unarchived'].includes(target))
-                statusDisplay = 'unarchived'
-              else if (['hidden', 'false', '0', 'archived'].includes(target))
-                statusDisplay = 'archived'
-              else statusDisplay = target || 'unarchived'
+              const target = toKey(changes.display[1]);
+              if (["visible", "true", "1", "unarchived"].includes(target))
+                statusDisplay = "unarchived";
+              else if (["hidden", "false", "0", "archived"].includes(target))
+                statusDisplay = "archived";
+              else statusDisplay = target || "unarchived";
             } else if (changes?.status) {
-              statusDisplay = normalizeAvailability(changes.status[1])
-            } else if (l.status === 'archived' || l.status === 'unarchived') {
-              statusDisplay = l.status
+              statusDisplay = normalizeAvailability(changes.status[1]);
+            } else if (l.status === "archived" || l.status === "unarchived") {
+              statusDisplay = l.status;
             } else {
-              statusDisplay = 'unarchived'
+              statusDisplay = "unarchived";
             }
           } else {
-            statusDisplay = toKey(l.status)
+            statusDisplay = toKey(l.status);
           }
           // Global fallback, but keep equipment limited to available/unavailable
           if (!statusDisplay) {
-            const fallback = toKey(l.status)
-            if (entityDisplayType === 'Equipment') {
-              statusDisplay = ['available', 'unavailable'].includes(fallback)
+            const fallback = toKey(l.status);
+            if (entityDisplayType === "Equipment") {
+              statusDisplay = ["available", "unavailable"].includes(fallback)
                 ? fallback
-                : 'available'
+                : "available";
             } else if (fallback) {
-              statusDisplay = fallback
+              statusDisplay = fallback;
             }
           }
 
           // Final guard: enforce equipment status values
           if (
-            entityDisplayType === 'Equipment' &&
-            !['available', 'unavailable'].includes(statusDisplay)
+            entityDisplayType === "Equipment" &&
+            !["available", "unavailable"].includes(statusDisplay)
           ) {
             // Map any other value (good/damaged/archived/unarchived/etc.) appropriately
             statusDisplay =
-              statusDisplay === 'available' ? 'available' : 'unavailable'
+              statusDisplay === "available" ? "available" : "unavailable";
           }
           return {
             ...l,
@@ -3836,99 +3901,99 @@ export default function InventoryManagementPage() {
             _logType: logType,
             _statusDisplay: statusDisplay,
             _conditionDisplay: conditionDisplay,
-          } as EnrichedLog
+          } as EnrichedLog;
         })
         .sort((a, b) => {
           // Sort by last_updated (fallback to legacy timestamps) in descending order
           const dateA = new Date(
             a.last_updated ?? a.updated_at ?? a.created_at ?? 0
-          ).getTime()
+          ).getTime();
           const dateB = new Date(
             b.last_updated ?? b.updated_at ?? b.created_at ?? 0
-          ).getTime()
-          return dateB - dateA
-        })
-    }, [logs])
+          ).getTime();
+          return dateB - dateA;
+        });
+    }, [logs]);
 
     const resolvedEquipmentNames = useMemo(() => {
-      const map: Record<string, string> = { ...inventoryNames }
+      const map: Record<string, string> = { ...inventoryNames };
       for (const log of enrichedLogs) {
-        if (!isEquipmentEntity(log.entity_type)) continue
+        if (!isEquipmentEntity(log.entity_type)) continue;
         const entry = log._changes?.material_name as
           | [unknown, unknown]
-          | undefined
-        if (!entry) continue
-        const [, to] = entry
-        const name = String(to ?? '').trim()
-        if (name) map[String(log.entity_id)] = name
+          | undefined;
+        if (!entry) continue;
+        const [, to] = entry;
+        const name = String(to ?? "").trim();
+        if (name) map[String(log.entity_id)] = name;
       }
-      return map
-    }, [inventoryNames, enrichedLogs])
+      return map;
+    }, [inventoryNames, enrichedLogs]);
 
     const resolvedPackageNames = useMemo(() => {
-      const map: Record<string, string> = { ...packageNames }
+      const map: Record<string, string> = { ...packageNames };
       for (const log of enrichedLogs) {
-        if (displayEntityType(log.entity_type) !== 'Package') continue
+        if (displayEntityType(log.entity_type) !== "Package") continue;
         const entry = log._changes?.package_name as
           | [unknown, unknown]
-          | undefined
-        if (!entry) continue
-        const [, to] = entry
-        const name = String(to ?? '').trim()
-        if (name) map[String(log.entity_id)] = name
+          | undefined;
+        if (!entry) continue;
+        const [, to] = entry;
+        const name = String(to ?? "").trim();
+        if (name) map[String(log.entity_id)] = name;
       }
-      return map
-    }, [packageNames, enrichedLogs])
+      return map;
+    }, [packageNames, enrichedLogs]);
 
     const resolvedGridNames = useMemo(() => {
-      const map: Record<string, string> = { ...gridNames }
+      const map: Record<string, string> = { ...gridNames };
       for (const log of enrichedLogs) {
-        if (log.entity_type !== 'Grid') continue
-        const entry = log._changes?.grid_name as [unknown, unknown] | undefined
-        if (!entry) continue
-        const [, to] = entry
-        const name = String(to ?? '').trim()
-        if (name) map[String(log.entity_id)] = name
+        if (log.entity_type !== "Grid") continue;
+        const entry = log._changes?.grid_name as [unknown, unknown] | undefined;
+        if (!entry) continue;
+        const [, to] = entry;
+        const name = String(to ?? "").trim();
+        if (name) map[String(log.entity_id)] = name;
       }
-      return map
-    }, [gridNames, enrichedLogs])
+      return map;
+    }, [gridNames, enrichedLogs]);
 
     // NEW: apply filters and unified search (by resolved entity name)
     const filteredLogs = useMemo(() => {
-      const q = (searchTerm || '').trim().toLowerCase()
+      const q = (searchTerm || "").trim().toLowerCase();
       return enrichedLogs.filter((l) => {
-        const entityTypeNormalized = displayEntityType(l.entity_type)
-        if (filterEntity !== 'all' && entityTypeNormalized !== filterEntity)
-          return false
-        if (filterStatus !== 'all') {
-          const wanted = filterStatus.toLowerCase()
+        const entityTypeNormalized = displayEntityType(l.entity_type);
+        if (filterEntity !== "all" && entityTypeNormalized !== filterEntity)
+          return false;
+        if (filterStatus !== "all") {
+          const wanted = filterStatus.toLowerCase();
           if (
             isEquipmentEntity(l.entity_type) &&
-            (wanted === 'good' || wanted === 'damaged')
+            (wanted === "good" || wanted === "damaged")
           ) {
-            const cond = (l._conditionDisplay || '').toLowerCase()
-            if (cond !== wanted) return false
+            const cond = (l._conditionDisplay || "").toLowerCase();
+            if (cond !== wanted) return false;
           } else {
-            if ((l._statusDisplay || '').toLowerCase() !== wanted) return false
+            if ((l._statusDisplay || "").toLowerCase() !== wanted) return false;
           }
         }
         if (q) {
           const name = isEquipmentEntity(l.entity_type)
-            ? resolvedEquipmentNames[String(l.entity_id)] ?? ''
-            : displayEntityType(l.entity_type) === 'Package'
-            ? resolvedPackageNames[String(l.entity_id)] ?? ''
-            : l.entity_type === 'Grid'
-            ? resolvedGridNames[String(l.entity_id)] ?? ''
-            : ''
+            ? resolvedEquipmentNames[String(l.entity_id)] ?? ""
+            : displayEntityType(l.entity_type) === "Package"
+            ? resolvedPackageNames[String(l.entity_id)] ?? ""
+            : l.entity_type === "Grid"
+            ? resolvedGridNames[String(l.entity_id)] ?? ""
+            : "";
           const fallbackLabel =
-            l.entity_type === 'Grid'
+            l.entity_type === "Grid"
               ? `Grid #${l.entity_id}`
-              : `#${l.entity_id}`
-          const hay = (name || fallbackLabel).toLowerCase()
-          if (!hay.includes(q)) return false
+              : `#${l.entity_id}`;
+          const hay = (name || fallbackLabel).toLowerCase();
+          if (!hay.includes(q)) return false;
         }
-        return true
-      })
+        return true;
+      });
     }, [
       enrichedLogs,
       filterEntity,
@@ -3938,26 +4003,26 @@ export default function InventoryManagementPage() {
       resolvedEquipmentNames,
       resolvedPackageNames,
       resolvedGridNames,
-    ])
+    ]);
 
     // UPDATED: pagination for filtered logs (5 per page)
-    const LOGS_PER_PAGE = 5
-    const [logsPage, setLogsPage] = useState(1)
+    const LOGS_PER_PAGE = 5;
+    const [logsPage, setLogsPage] = useState(1);
     const logsTotalPages = Math.max(
       1,
       Math.ceil(filteredLogs.length / LOGS_PER_PAGE)
-    )
+    );
     useEffect(() => {
-      setLogsPage((p) => Math.min(Math.max(1, p), logsTotalPages))
-    }, [logsTotalPages, filteredLogs.length])
+      setLogsPage((p) => Math.min(Math.max(1, p), logsTotalPages));
+    }, [logsTotalPages, filteredLogs.length]);
     const paginatedLogs = useMemo(() => {
-      const start = (logsPage - 1) * LOGS_PER_PAGE
-      return filteredLogs.slice(start, start + LOGS_PER_PAGE)
-    }, [filteredLogs, logsPage])
+      const start = (logsPage - 1) * LOGS_PER_PAGE;
+      return filteredLogs.slice(start, start + LOGS_PER_PAGE);
+    }, [filteredLogs, logsPage]);
     const logsWindowPages = useMemo(
       () => pageWindow(logsPage, logsTotalPages, 3),
       [logsPage, logsTotalPages]
-    )
+    );
 
     return (
       <>
@@ -3968,13 +4033,13 @@ export default function InventoryManagementPage() {
               <label className="text-sm font-medium">Filter: Entity</label>
               <Select
                 value={
-                  filterEntity === 'Equipment' ? 'Equipment' : filterEntity
+                  filterEntity === "Equipment" ? "Equipment" : filterEntity
                 }
                 onValueChange={(v) => {
                   setFilterEntity(
-                    (v as 'all' | 'Equipment' | 'Package' | 'Grid') ?? 'all'
-                  )
-                  setFilterStatus('all')
+                    (v as "all" | "Equipment" | "Package" | "Grid") ?? "all"
+                  );
+                  setFilterStatus("all");
                 }}
               >
                 <SelectTrigger className="h-9 text-sm rounded">
@@ -3996,13 +4061,13 @@ export default function InventoryManagementPage() {
                 onValueChange={(v) =>
                   setFilterStatus(
                     v as
-                      | 'all'
-                      | 'available'
-                      | 'unavailable'
-                      | 'good'
-                      | 'damaged'
-                      | 'archived'
-                      | 'unarchived'
+                      | "all"
+                      | "available"
+                      | "unavailable"
+                      | "good"
+                      | "damaged"
+                      | "archived"
+                      | "unarchived"
                   )
                 }
               >
@@ -4063,7 +4128,7 @@ export default function InventoryManagementPage() {
                               l.last_updated ??
                               l.updated_at ??
                               l.created_at ??
-                              'unknown'
+                              "unknown"
                             }-${idx}`
                       }
                       className="even:bg-gray-50"
@@ -4075,10 +4140,10 @@ export default function InventoryManagementPage() {
                         {isEquipmentEntity(l.entity_type)
                           ? resolvedEquipmentNames[String(l.entity_id)] ??
                             `#${l.entity_id}`
-                          : displayEntityType(l.entity_type) === 'Package'
+                          : displayEntityType(l.entity_type) === "Package"
                           ? resolvedPackageNames[String(l.entity_id)] ??
                             `#${l.entity_id}`
-                          : l.entity_type === 'Grid'
+                          : l.entity_type === "Grid"
                           ? resolvedGridNames[String(l.entity_id)] ??
                             `Grid #${l.entity_id}`
                           : `#${l.entity_id}`}
@@ -4089,9 +4154,9 @@ export default function InventoryManagementPage() {
                       </TableCell>
                       <TableCell className="px-4 py-2 capitalize">
                         {l._conditionDisplay ??
-                          (displayEntityType(l.entity_type) === 'Package'
-                            ? ''
-                            : '—')}
+                          (displayEntityType(l.entity_type) === "Package"
+                            ? ""
+                            : "—")}
                       </TableCell>
                       <TableCell className="px-4 py-2">
                         <Popover>
@@ -4118,35 +4183,35 @@ export default function InventoryManagementPage() {
                                         [unknown, unknown]
                                       >
                                     ).map(([field, pair]) => {
-                                      if (field === 'image_url') {
+                                      if (field === "image_url") {
                                         return (
                                           <li key={field}>
                                             <span className="font-medium">
                                               Image:
-                                            </span>{' '}
+                                            </span>{" "}
                                             changed
                                           </li>
-                                        )
+                                        );
                                       }
-                                      const [oldV, newV] = pair
+                                      const [oldV, newV] = pair;
                                       return (
                                         <li key={field}>
                                           <span className="font-medium capitalize">
-                                            {field.replace(/_/g, ' ')}:
-                                          </span>{' '}
+                                            {field.replace(/_/g, " ")}:
+                                          </span>{" "}
                                           {oldV === null ||
                                           oldV === undefined ||
-                                          oldV === ''
-                                            ? '—'
-                                            : String(oldV)}{' '}
-                                          {'->'}{' '}
+                                          oldV === ""
+                                            ? "—"
+                                            : String(oldV)}{" "}
+                                          {"->"}{" "}
                                           {newV === null ||
                                           newV === undefined ||
-                                          newV === ''
-                                            ? '—'
+                                          newV === ""
+                                            ? "—"
                                             : String(newV)}
                                         </li>
-                                      )
+                                      );
                                     })}
                                   </ul>
                                   {/* Additional Notes display */}
@@ -4156,7 +4221,7 @@ export default function InventoryManagementPage() {
                                     </div>
                                     <div className="whitespace-pre-wrap break-words text-gray-700 text-[11px] leading-snug min-h-[0.75rem]">
                                       {l.additional_notes &&
-                                      l.additional_notes.trim() !== '' ? (
+                                      l.additional_notes.trim() !== "" ? (
                                         l.additional_notes
                                       ) : (
                                         <span className="text-gray-400">
@@ -4179,9 +4244,11 @@ export default function InventoryManagementPage() {
                         {(() => {
                           const name =
                             (l.updated_by_name && l.updated_by_name.trim()) ||
-                            l.updated_by_username
-                          if (name) return name
-                          return l.updated_by != null ? `#${l.updated_by}` : '—'
+                            l.updated_by_username;
+                          if (name) return name;
+                          return l.updated_by != null
+                            ? `#${l.updated_by}`
+                            : "—";
                         })()}
                       </TableCell>
                       <TableCell className="px-4 py-2">
@@ -4194,9 +4261,9 @@ export default function InventoryManagementPage() {
                           type="button"
                           title="Edit additional notes"
                           onClick={() => {
-                            setEditingLog(l)
-                            setEditAdditionalNotes(l.additional_notes || '')
-                            setEditNotesOpen(true)
+                            setEditingLog(l);
+                            setEditAdditionalNotes(l.additional_notes || "");
+                            setEditNotesOpen(true);
                           }}
                           className="inline-flex items-center justify-center rounded-full hover:text-black text-litratoblack"
                         >
@@ -4218,10 +4285,10 @@ export default function InventoryManagementPage() {
                   <PaginationPrevious
                     href="#"
                     className="text-black no-underline hover:no-underline hover:text-black"
-                    style={{ textDecoration: 'none' }}
+                    style={{ textDecoration: "none" }}
                     onClick={(e) => {
-                      e.preventDefault()
-                      setLogsPage((p) => Math.max(1, p - 1))
+                      e.preventDefault();
+                      setLogsPage((p) => Math.max(1, p - 1));
                     }}
                   />
                 </PaginationItem>
@@ -4232,10 +4299,10 @@ export default function InventoryManagementPage() {
                       href="#"
                       isActive={n === logsPage}
                       className="text-black no-underline hover:no-underline hover:text-black"
-                      style={{ textDecoration: 'none' }}
+                      style={{ textDecoration: "none" }}
                       onClick={(e) => {
-                        e.preventDefault()
-                        setLogsPage(n)
+                        e.preventDefault();
+                        setLogsPage(n);
                       }}
                     >
                       {n}
@@ -4247,10 +4314,10 @@ export default function InventoryManagementPage() {
                   <PaginationNext
                     href="#"
                     className="text-black no-underline hover:no-underline hover:text-black"
-                    style={{ textDecoration: 'none' }}
+                    style={{ textDecoration: "none" }}
                     onClick={(e) => {
-                      e.preventDefault()
-                      setLogsPage((p) => Math.min(logsTotalPages, p + 1))
+                      e.preventDefault();
+                      setLogsPage((p) => Math.min(logsTotalPages, p + 1));
                     }}
                   />
                 </PaginationItem>
@@ -4263,8 +4330,8 @@ export default function InventoryManagementPage() {
           open={editNotesOpen}
           onOpenChange={(o) => {
             if (!o) {
-              setEditNotesOpen(false)
-              setEditingLog(null)
+              setEditNotesOpen(false);
+              setEditingLog(null);
             }
           }}
         >
@@ -4277,10 +4344,10 @@ export default function InventoryManagementPage() {
             </DialogHeader>
             <div className="space-y-3 py-2">
               <div className="text-xs text-gray-500">
-                Log ID:{' '}
+                Log ID:{" "}
                 {editingLog
-                  ? editingLog.inventory_log_id ?? editingLog.log_id ?? '—'
-                  : '—'}
+                  ? editingLog.inventory_log_id ?? editingLog.log_id ?? "—"
+                  : "—"}
               </div>
               <Textarea
                 rows={5}
@@ -4300,17 +4367,17 @@ export default function InventoryManagementPage() {
                 type="button"
                 className="bg-litratoblack text-white"
                 onClick={async () => {
-                  if (!editingLog) return
+                  if (!editingLog) return;
                   const targetId =
-                    editingLog.inventory_log_id ?? editingLog.log_id
-                  if (targetId == null) return
+                    editingLog.inventory_log_id ?? editingLog.log_id;
+                  if (targetId == null) return;
                   try {
                     const res = await fetch(
                       `${API_BASE}/inventory-status-log/${targetId}`,
                       {
-                        method: 'PATCH',
+                        method: "PATCH",
                         headers: {
-                          'Content-Type': 'application/json',
+                          "Content-Type": "application/json",
                           ...getAuthHeaders(),
                         },
                         body: JSON.stringify({
@@ -4321,8 +4388,8 @@ export default function InventoryManagementPage() {
                           additional_notes: editAdditionalNotes || null,
                         }),
                       }
-                    )
-                    if (!res.ok) throw new Error(await res.text())
+                    );
+                    if (!res.ok) throw new Error(await res.text());
                     // optimistic local update
                     setLogs((prev) =>
                       prev.map((log) =>
@@ -4333,11 +4400,11 @@ export default function InventoryManagementPage() {
                             }
                           : log
                       )
-                    )
-                    setEditNotesOpen(false)
-                    setEditingLog(null)
+                    );
+                    setEditNotesOpen(false);
+                    setEditingLog(null);
                   } catch (e) {
-                    console.error('Update additional notes failed:', e)
+                    console.error("Update additional notes failed:", e);
                   }
                 }}
               >
@@ -4347,7 +4414,7 @@ export default function InventoryManagementPage() {
           </DialogContent>
         </Dialog>
       </>
-    )
+    );
   }
 
   // Helper components
@@ -4356,9 +4423,9 @@ export default function InventoryManagementPage() {
     onClick,
     children,
   }: {
-    active: boolean
-    onClick: () => void
-    children: React.ReactNode
+    active: boolean;
+    onClick: () => void;
+    children: React.ReactNode;
   }) {
     return (
       <div
@@ -4366,12 +4433,12 @@ export default function InventoryManagementPage() {
         className={`px-4 py-2 rounded-full cursor-pointer border font-semibold transition
         ${
           active
-            ? 'bg-litratoblack text-white border-litratoblack'
-            : 'bg-white text-litratoblack border-gray-300 hover:bg-gray-100'
+            ? "bg-litratoblack text-white border-litratoblack"
+            : "bg-white text-litratoblack border-gray-300 hover:bg-gray-100"
         }`}
       >
         {children}
       </div>
-    )
+    );
   }
 }

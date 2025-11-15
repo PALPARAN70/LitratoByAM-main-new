@@ -1,43 +1,43 @@
-'use client'
-import Image from 'next/image'
-import LitratoBranding from '../../../Litratocomponents/Branding'
-import LitratoFooter from '../../../Litratocomponents/Footer'
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { toast } from 'sonner'
-import { Eye, EyeOff } from 'lucide-react'
-import MotionDiv from '../../../Litratocomponents/MotionDiv'
-import { makeRegistrationSchema } from '../../../schemas/schema/uservalidation'
+"use client";
+import Image from "next/image";
+import LitratoBranding from "../../../Litratocomponents/Branding";
+import LitratoFooter from "../../../Litratocomponents/Footer";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
+import { Eye, EyeOff } from "lucide-react";
+import MotionDiv from "../../../Litratocomponents/MotionDiv";
+import { makeRegistrationSchema } from "../../../schemas/schema/uservalidation";
 
 export default function RegistrationPage() {
-  const router = useRouter()
+  const router = useRouter();
   const [form, setForm] = useState({
-    firstname: '',
-    lastname: '',
-    birthdate: '',
-    sex: '',
-    username: '',
-    password: '',
-    confirmPassword: '',
-    region: '',
-    province: '',
-    city: '',
-    barangay: '',
-    postalCode: '',
-    contact: '',
-  })
+    firstname: "",
+    lastname: "",
+    birthdate: "",
+    sex: "",
+    username: "",
+    password: "",
+    confirmPassword: "",
+    region: "",
+    province: "",
+    city: "",
+    barangay: "",
+    postalCode: "",
+    contact: "",
+  });
 
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null);
   const [passwordVisibility, setPasswordVisibility] = useState({
     password: false,
     confirmPassword: false,
-  })
+  });
 
-  const todayISO = new Date().toISOString().slice(0, 10)
+  const todayISO = new Date().toISOString().slice(0, 10);
 
-  const togglePasswordVisibility = (field: 'password' | 'confirmPassword') => {
-    setPasswordVisibility((prev) => ({ ...prev, [field]: !prev[field] }))
-  }
+  const togglePasswordVisibility = (field: "password" | "confirmPassword") => {
+    setPasswordVisibility((prev) => ({ ...prev, [field]: !prev[field] }));
+  };
 
   // Async uniqueness check against your API. Adjust URL/response shape if needed.
   const checkUsernameUnique = async (email: string) => {
@@ -46,40 +46,40 @@ export default function RegistrationPage() {
         `http://localhost:5000/api/auth/check-username?username=${encodeURIComponent(
           email
         )}`
-      )
-      if (!res.ok) return true // fall back to allowing; server will validate again
-      const data = await res.json()
-      return !data.exists // expects { exists: boolean }
+      );
+      if (!res.ok) return true; // fall back to allowing; server will validate again
+      const data = await res.json();
+      return !data.exists; // expects { exists: boolean }
     } catch {
-      return true // network failure -> let server enforce uniqueness
+      return true; // network failure -> let server enforce uniqueness
     }
-  }
+  };
 
   const handleBack = () => {
-    router.push('/home')
-  }
+    router.push("/home");
+  };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target
-    setForm((prev) => ({ ...prev, [name]: value }))
-  }
+    const { name, value } = e.target;
+    setForm((prev) => ({ ...prev, [name]: value }));
+  };
 
   const handleRegistered = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setError(null)
+    e.preventDefault();
+    setError(null);
 
     // Zod validation with async duplicate email check
-    const schema = makeRegistrationSchema(checkUsernameUnique)
-    const parsed = await schema.safeParseAsync(form)
+    const schema = makeRegistrationSchema(checkUsernameUnique);
+    const parsed = await schema.safeParseAsync(form);
     if (!parsed.success) {
-      setError(parsed.error.issues[0]?.message || 'Invalid input')
-      return
+      setError(parsed.error.issues[0]?.message || "Invalid input");
+      return;
     }
 
     try {
-      const res = await fetch('http://localhost:5000/api/auth/register', {
-        method: 'POST',
-        headers: { 'Content-type': 'application/json' },
+      const res = await fetch("http://localhost:5000/api/auth/register", {
+        method: "POST",
+        headers: { "Content-type": "application/json" },
         body: JSON.stringify({
           // use normalized data from Zod
           username: parsed.data.username,
@@ -95,140 +95,143 @@ export default function RegistrationPage() {
           postal_code: parsed.data.postalCode,
           contact: parsed.data.contact,
         }),
-      })
-      const data = await res.json()
+      });
+      const data = await res.json();
       if (res.ok) {
-        router.push('/login')
-        toast.success('Registration successful! Please verify your email.')
-        setPasswordVisibility({ password: false, confirmPassword: false })
+        router.push("/login");
+        toast.success("Registration successful! Please verify your email.");
+        setPasswordVisibility({ password: false, confirmPassword: false });
       } else {
-        setError(data.message || 'Registration failed')
+        setError(data.message || "Registration failed");
       }
     } catch {
-      setError('An error occurred')
+      setError("An error occurred");
     }
-  }
+  };
 
   const fieldRows = [
     [
       {
-        name: 'firstname',
-        label: 'Firstname:',
-        placeholder: 'Juan',
-        type: 'text',
-        className: 'w-70 px-2 text-xl border-none outline-none bg-transparent',
-        containerClass: 'bg-[#D9D9D9] p-2 rounded-lg shadow-md w-96',
+        name: "firstname",
+        label: "Firstname:",
+        placeholder: "Juan",
+        type: "text",
+        className: "w-70 px-2 text-xl border-none outline-none bg-transparent",
+        containerClass: "bg-[#D9D9D9] p-2 rounded-lg shadow-md w-96",
       },
       {
-        name: 'lastname',
-        label: 'Lastname:',
-        placeholder: 'Dela Cruz',
-        type: 'text',
-        className: 'w-70 px-2 text-xl border-none outline-none bg-transparent',
-        containerClass: 'bg-[#D9D9D9] p-2 rounded-lg shadow-md w-96',
+        name: "lastname",
+        label: "Lastname:",
+        placeholder: "Dela Cruz",
+        type: "text",
+        className: "w-70 px-2 text-xl border-none outline-none bg-transparent",
+        containerClass: "bg-[#D9D9D9] p-2 rounded-lg shadow-md w-96",
       },
     ],
     [
       {
-        name: 'birthdate',
-        label: 'Birthdate:',
-        placeholder: 'MM/DD/YYYY',
-        type: 'date',
-        className: 'w-70 px-2 text-xl border-none outline-none bg-transparent',
-        containerClass: 'bg-[#D9D9D9] p-2 rounded-lg shadow-md w-96',
+        name: "birthdate",
+        label: "Birthdate:",
+        placeholder: "MM/DD/YYYY",
+        type: "date",
+        className: "w-70 px-2 text-xl border-none outline-none bg-transparent",
+        containerClass: "bg-[#D9D9D9] p-2 rounded-lg shadow-md w-96",
       },
       {
-        name: 'sex',
-        label: 'Sex:',
-        placeholder: 'Male/Female',
-        type: 'text',
-        className: 'w-70 px-2 text-xl border-none outline-none bg-transparent',
-        containerClass: 'bg-[#D9D9D9] p-2 rounded-lg shadow-md w-96',
+        name: "sex",
+        label: "Sex:",
+        placeholder: "Male/Female",
+        type: "text",
+        className: "w-70 px-2 text-xl border-none outline-none bg-transparent",
+        containerClass: "bg-[#D9D9D9] p-2 rounded-lg shadow-md w-96",
       },
     ],
-  ]
+  ];
 
   const singleFields = [
     {
-      name: 'username',
-      label: 'Username:',
-      placeholder: 'example@gmail.com',
-      type: 'text',
-      className: 'w-170 px-2 text-xl border-none outline-none bg-transparent',
-      containerClass: 'bg-[#D9D9D9] p-2 rounded-lg shadow-md w-200',
+      name: "username",
+      label: "Username:",
+      placeholder: "example@gmail.com",
+      type: "text",
+      className:
+        "w-full px-2 py-1 text-xl border-none outline-none bg-transparent",
+      containerClass: "bg-[#D9D9D9] p-2 rounded-lg shadow-md w-200",
     },
     {
-      name: 'password',
-      label: 'Password:',
-      placeholder: 'Example1234',
-      type: 'password',
-      className: 'w-170 px-2 text-xl border-none outline-none bg-transparent',
-      containerClass: 'bg-[#D9D9D9] p-2 rounded-lg shadow-md w-200',
+      name: "password",
+      label: "Password:",
+      placeholder: "Example1234",
+      type: "password",
+      className:
+        "w-full px-2 py-1 text-xl border-none outline-none bg-transparent",
+      containerClass: "bg-[#D9D9D9] p-2 rounded-lg shadow-md w-200",
     },
     {
-      name: 'confirmPassword',
-      label: 'Confirm Password:',
-      placeholder: 'Example1234',
-      type: 'password',
-      className: 'w-160 px-2 text-xl border-none outline-none bg-transparent',
-      containerClass: 'bg-[#D9D9D9] p-2 rounded-lg shadow-md w-200',
+      name: "confirmPassword",
+      label: "Confirm Password:",
+      placeholder: "Example1234",
+      type: "password",
+      className:
+        "w-full px-2 py-1 text-xl border-none outline-none bg-transparent",
+      containerClass: "bg-[#D9D9D9] p-2 rounded-lg shadow-md w-200",
     },
-  ]
+  ];
 
   const regionProvinceFields = [
     {
-      name: 'region',
-      label: 'Region:',
-      placeholder: 'Region XI',
-      type: 'text',
-      className: 'w-60 px-2 text-xl border-none outline-none bg-transparent',
-      containerClass: 'bg-[#D9D9D9] p-2 rounded-lg shadow-md w-94',
+      name: "region",
+      label: "Region:",
+      placeholder: "Region XI",
+      type: "text",
+      className: "w-60 px-2 text-xl border-none outline-none bg-transparent",
+      containerClass: "bg-[#D9D9D9] p-2 rounded-lg shadow-md w-94",
     },
     {
-      name: 'province',
-      label: 'Province:',
-      placeholder: 'Davao del Sur',
-      type: 'text',
-      className: 'w-60 px-2 text-xl border-none outline-none bg-transparent',
-      containerClass: 'bg-[#D9D9D9] p-2 rounded-lg shadow-md w-94',
+      name: "province",
+      label: "Province:",
+      placeholder: "Davao del Sur",
+      type: "text",
+      className: "w-60 px-2 text-xl border-none outline-none bg-transparent",
+      containerClass: "bg-[#D9D9D9] p-2 rounded-lg shadow-md w-94",
     },
-  ]
+  ];
 
   const cityFields = [
     {
-      name: 'city',
-      label: 'City/Town:',
-      placeholder: 'Davao City',
-      type: 'text',
-      className: 'w-30 px-2 text-xl border-none outline-none bg-transparent',
-      containerClass: 'bg-[#D9D9D9] p-2 rounded-lg shadow-md w-60',
+      name: "city",
+      label: "City/Town:",
+      placeholder: "Davao City",
+      type: "text",
+      className: "w-30 px-2 text-xl border-none outline-none bg-transparent",
+      containerClass: "bg-[#D9D9D9] p-2 rounded-lg shadow-md w-60",
     },
     {
-      name: 'barangay',
-      label: 'Barangay:',
-      placeholder: '33-D',
-      type: 'text',
-      className: 'w-30 px-2 text-xl border-none outline-none bg-transparent',
-      containerClass: 'bg-[#D9D9D9] p-2 rounded-lg shadow-md w-60',
+      name: "barangay",
+      label: "Barangay:",
+      placeholder: "33-D",
+      type: "text",
+      className: "w-30 px-2 text-xl border-none outline-none bg-transparent",
+      containerClass: "bg-[#D9D9D9] p-2 rounded-lg shadow-md w-60",
     },
     {
-      name: 'postalCode',
-      label: 'Postal Code:',
-      placeholder: '8000',
-      type: 'text',
-      className: 'w-30 px-2 text-xl border-none outline-none bg-transparent',
-      containerClass: 'bg-[#D9D9D9] p-2 rounded-lg shadow-md w-60',
+      name: "postalCode",
+      label: "Postal Code:",
+      placeholder: "8000",
+      type: "text",
+      className: "w-30 px-2 text-xl border-none outline-none bg-transparent",
+      containerClass: "bg-[#D9D9D9] p-2 rounded-lg shadow-md w-60",
     },
-  ]
+  ];
 
   const contactField = {
-    name: 'contact',
-    label: 'Contact Number:',
-    placeholder: '09******123',
-    type: 'tel',
-    className: 'w-150 px-2 text-xl border-none outline-none bg-transparent',
-    containerClass: 'bg-[#D9D9D9] p-2 rounded-lg shadow-md w-200',
-  }
+    name: "contact",
+    label: "Contact Number:",
+    placeholder: "09******123",
+    type: "tel",
+    className: "w-150 px-2 text-xl border-none outline-none bg-transparent",
+    containerClass: "bg-[#D9D9D9] p-2 rounded-lg shadow-md w-200",
+  };
 
   return (
     <MotionDiv>
@@ -253,7 +256,7 @@ export default function RegistrationPage() {
                 <div key={field.name} className={field.containerClass}>
                   <label>
                     {field.label}
-                    {field.name === 'sex' ? (
+                    {field.name === "sex" ? (
                       <select
                         name="sex"
                         value={form.sex}
@@ -275,7 +278,7 @@ export default function RegistrationPage() {
                         onChange={handleChange}
                         placeholder={field.placeholder}
                         type={field.type}
-                        max={field.name === 'birthdate' ? todayISO : undefined}
+                        max={field.name === "birthdate" ? todayISO : undefined}
                         className={field.className}
                       />
                     )}
@@ -290,49 +293,49 @@ export default function RegistrationPage() {
               <div key={field.name} className={field.containerClass}>
                 <label>
                   {field.label}
-                  <div className="relative flex items-center">
+                  <span className="relative inline-block align-middle w-full">
                     <input
                       name={field.name}
                       value={form[field.name as keyof typeof form]}
                       onChange={handleChange}
                       placeholder={field.placeholder}
                       type={
-                        field.name === 'password' ||
-                        field.name === 'confirmPassword'
+                        field.name === "password" ||
+                        field.name === "confirmPassword"
                           ? passwordVisibility[
-                              field.name as 'password' | 'confirmPassword'
+                              field.name as "password" | "confirmPassword"
                             ]
-                            ? 'text'
-                            : 'password'
+                            ? "text"
+                            : "password"
                           : field.type
                       }
                       className={`${field.className} ${
                         {
-                          password: 'pr-10',
-                          confirmPassword: 'pr-10',
-                        }[field.name as 'password' | 'confirmPassword'] || ''
+                          password: "pr-10",
+                          confirmPassword: "pr-10",
+                        }[field.name as "password" | "confirmPassword"] || ""
                       }`}
                     />
-                    {(field.name === 'password' ||
-                      field.name === 'confirmPassword') && (
+                    {(field.name === "password" ||
+                      field.name === "confirmPassword") && (
                       <button
                         type="button"
                         onClick={() =>
                           togglePasswordVisibility(
-                            field.name as 'password' | 'confirmPassword'
+                            field.name as "password" | "confirmPassword"
                           )
                         }
-                        className="absolute right-2 text-gray-600"
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-600"
                         aria-label={
                           passwordVisibility[
-                            field.name as 'password' | 'confirmPassword'
+                            field.name as "password" | "confirmPassword"
                           ]
-                            ? 'Hide password'
-                            : 'Show password'
+                            ? "Hide password"
+                            : "Show password"
                         }
                       >
                         {passwordVisibility[
-                          field.name as 'password' | 'confirmPassword'
+                          field.name as "password" | "confirmPassword"
                         ] ? (
                           <EyeOff className="h-5 w-5" />
                         ) : (
@@ -340,7 +343,7 @@ export default function RegistrationPage() {
                         )}
                       </button>
                     )}
-                  </div>
+                  </span>
                 </label>
               </div>
             ))}
@@ -414,5 +417,5 @@ export default function RegistrationPage() {
         <LitratoFooter />
       </div>
     </MotionDiv>
-  )
+  );
 }
