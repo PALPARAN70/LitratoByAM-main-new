@@ -14,7 +14,6 @@ const {
   getConfirmedBookingById,
   updatePaymentStatus: updateBookingPaymentStatus,
   recalcAndPersistPaymentStatus,
-  listConfirmedBookings,
   getPaymentSummary,
 } = require('../../Model/confirmedBookingRequestModel')
 const {
@@ -281,67 +280,6 @@ async function generateSalesReportHandler(req, res) {
       return { ...p, refunded_amount: refunded }
     })
 
-    // Fetch confirmed bookings to compute total due for the selected period
-    const confirmedBookings = await listConfirmedBookings()
-    const parseDateOnly = (value) => {
-      if (!value) return null
-      if (value instanceof Date) return value
-      if (typeof value === 'string') {
-        const isoMatch = value.match(/^(\d{4})-(\d{2})-(\d{2})/)
-        if (isoMatch) {
-          const [, y, m, d] = isoMatch
-          return new Date(Number(y), Number(m) - 1, Number(d))
-        }
-        const parsed = new Date(value)
-        if (!Number.isNaN(parsed.getTime())) return parsed
-      }
-      return null
-    }
-    const bookingsInRange = confirmedBookings.filter((booking) => {
-      if (!startDate && !endDate) return true
-      const eventDateRaw =
-        booking.event_date ||
-        booking.eventDate ||
-        booking.eventdate ||
-        booking.event_date_time ||
-        booking.eventDateTime
-      const eventDate = parseDateOnly(eventDateRaw)
-      if (!eventDate) return false
-      if (startDate && eventDate < startDate) return false
-      if (endDate && eventDate > endDate) return false
-      return true
-    })
-
-    const dueResults = await Promise.allSettled(
-      bookingsInRange.map(async (booking) => {
-        const bookingId = Number(booking.id)
-        if (!Number.isFinite(bookingId)) return 0
-        try {
-          const summary = await getPaymentSummary(bookingId)
-          const amt = Number(summary?.amountDue)
-          if (Number.isFinite(amt)) return amt
-        } catch (err) {
-          // ignore and fall back to derived amount
-        }
-        const base = Number(
-          booking.total_booking_price ?? booking.package_price ?? 0
-        )
-        const extHours = Number(booking.extension_duration ?? 0)
-        const hourlyRate = 2000
-        const fallback =
-          (Number.isFinite(base) ? base : 0) +
-          (Number.isFinite(extHours) ? extHours : 0) * hourlyRate
-        return fallback
-      })
-    )
-    const bookingsTotalDue = dueResults.reduce((sum, result) => {
-      if (result.status === 'fulfilled') {
-        const val = Number(result.value)
-        if (Number.isFinite(val)) return sum + val
-      }
-      return sum
-    }, 0)
-
     const fs = require('fs')
     const path = require('path')
     const doc = new PDFDocument({ size: 'A4', margin: 36 })
@@ -552,7 +490,6 @@ async function generateSalesReportHandler(req, res) {
       0
     )
     const totalPaid = Math.max(0, totalPaidGross - totalRefunded)
-    const totalDue = bookingsTotalDue
     // Period label
     const periodLabel = (() => {
       if (!startDate && !endDate) return 'All Time'
@@ -592,19 +529,6 @@ async function generateSalesReportHandler(req, res) {
       .text(
         `Total Refunded: ${usePesoSymbol ? '₱' : 'PHP'} ${fmtMoney(
           totalRefunded
-        )}`,
-        startX,
-        doc.y,
-        { width: totalWidth, align: 'right' }
-      )
-
-    doc.moveDown(0.4)
-    doc
-      .font(bodyFont)
-      .fontSize(9)
-      .text(
-        `Bookings Total Due: ${usePesoSymbol ? '₱' : 'PHP'} ${fmtMoney(
-          totalDue
         )}`,
         startX,
         doc.y,
