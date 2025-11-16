@@ -48,7 +48,9 @@ export async function setAssignedExtensionDuration(
   extensionHours: number,
   bufferHours = 2
 ): Promise<{ booking: any; paymentSummary?: any }> {
-  const sanitizedHours = Math.max(0, Math.min(2, Number(extensionHours) || 0))
+  const parsed = Number(extensionHours) || 0
+  const bounded = Math.max(0, Math.min(2, parsed))
+  const sanitizedHours = Math.round(bounded)
   const url = `${apiBase()}/api/employee/assigned-confirmed-bookings/${encodeURIComponent(
     String(bookingId)
   )}/extension?bufferHours=${encodeURIComponent(String(bufferHours))}`
@@ -60,11 +62,16 @@ export async function setAssignedExtensionDuration(
   const text = await res.text()
   if (!res.ok) {
     let message = 'Failed to update extension duration'
+    const trimmed = text.trim()
     try {
-      const parsed = JSON.parse(text)
-      message = parsed?.message || message
+      const parsedBody = JSON.parse(trimmed || '{}')
+      if (parsedBody && typeof parsedBody.message === 'string') {
+        message = parsedBody.message
+      } else if (typeof parsedBody === 'string' && parsedBody.trim()) {
+        message = parsedBody.trim()
+      }
     } catch (_) {
-      if (text) message = text
+      if (trimmed) message = trimmed
     }
     throw new Error(message)
   }

@@ -94,7 +94,21 @@ export async function setAdminExtensionDuration(
   })
   if (!res.ok) {
     const text = await res.text().catch(() => '')
-    throw new Error(`Update extension failed: ${res.status} ${text}`)
+    let message = 'Failed to update extension duration'
+    if (text) {
+      const trimmed = text.trim()
+      try {
+        const parsed = JSON.parse(trimmed || '{}')
+        if (parsed && typeof parsed.message === 'string') {
+          message = parsed.message
+        } else if (typeof parsed === 'string' && parsed.trim()) {
+          message = parsed.trim()
+        }
+      } catch (_) {
+        if (trimmed) message = trimmed
+      }
+    }
+    throw new Error(message)
   }
   const data = await res.json().catch(() => ({}))
   return { booking: data?.booking, paymentSummary: data?.paymentSummary }

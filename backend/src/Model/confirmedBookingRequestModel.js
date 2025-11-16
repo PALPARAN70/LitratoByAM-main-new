@@ -1,5 +1,8 @@
 const { pool } = require('../Config/db')
 
+const MINUTES_PER_HOUR = 60
+const MINUTES_PER_DAY = 24 * MINUTES_PER_HOUR
+
 // Create confirmed_bookings table (one per accepted booking_request)
 async function initConfirmedBookingTable() {
   await pool.query(`
@@ -365,9 +368,67 @@ async function recalcAndPersistPaymentStatus(bookingid) {
   return sum
 }
 
+function parseDbTimeToMinutes(value) {
+  if (!value && value !== 0) return null
+  const str = String(value)
+  const parts = str.split(':')
+  if (parts.length < 2) return null
+  const hours = Number(parts[0])
+  const minutes = Number(parts[1])
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return null
+  return hours * MINUTES_PER_HOUR + minutes
+}
+
+function minutesToDbTime(value) {
+  if (!Number.isFinite(value)) return null
+  const normalized =
+    ((Math.round(value) % MINUTES_PER_DAY) + MINUTES_PER_DAY) % MINUTES_PER_DAY
+  const hours = Math.floor(normalized / MINUTES_PER_HOUR)
+  const minutes = normalized % MINUTES_PER_HOUR
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(
+    2,
+    '0'
+  )}:00`
+}
+
+function derivePackageDurationMinutes(rawDurationHours) {
+  const hours = Number(rawDurationHours)
+  if (Number.isFinite(hours) && hours > 0) {
+    return Math.max(30, Math.round(hours * MINUTES_PER_HOUR))
+  }
+  return 2 * MINUTES_PER_HOUR
+}
+
+function computeExtendedEndTime(
+  { event_time, event_end_time, extension_duration, duration_hours },
+  nextExtensionHours
+) {
+  const startMinutes = parseDbTimeToMinutes(event_time)
+  if (startMinutes == null) return null
+
+  const currentRequestEnd = parseDbTimeToMinutes(event_end_time)
+  const prevExtensionMinutes =
+    Math.max(0, Number(extension_duration) || 0) * MINUTES_PER_HOUR
+  let baseDurationMinutes = derivePackageDurationMinutes(duration_hours)
+
+  if (currentRequestEnd != null) {
+    let diff = currentRequestEnd - startMinutes
+    if (diff <= 0) diff += MINUTES_PER_DAY
+    const candidate = diff - prevExtensionMinutes
+    if (candidate > 0) {
+      baseDurationMinutes = candidate
+    }
+  }
+
+  const nextExtensionMinutes =
+    Math.max(0, Number(nextExtensionHours) || 0) * MINUTES_PER_HOUR
+  const totalMinutes = startMinutes + baseDurationMinutes + nextExtensionMinutes
+  return minutesToDbTime(totalMinutes)
+}
+
 // Update extension_duration on confirmed_bookings and recalc payment_status
 async function updateExtensionDuration(bookingid, hours) {
-  const ext = Math.max(0, Number(hours) || 0)
+  const ext = Math.max(0, Math.round(Number(hours) || 0))
   const { rows } = await pool.query(
     `UPDATE confirmed_bookings
      SET extension_duration = $2, last_updated = CURRENT_TIMESTAMP
@@ -376,14 +437,47 @@ async function updateExtensionDuration(bookingid, hours) {
     [bookingid, ext]
   )
   const requestid = rows?.[0]?.requestid
+  let computedEndTime = null
+
   if (requestid) {
+    const metaResult = await pool.query(
+      `SELECT br.event_time, br.event_end_time, br.extension_duration, p.duration_hours
+       FROM booking_requests br
+       JOIN packages p ON p.id = br.packageid
+       WHERE br.requestid = $1`,
+      [requestid]
+    )
+    const meta = metaResult.rows?.[0]
+    if (meta) {
+      computedEndTime = computeExtendedEndTime(meta, ext)
+    }
+
+    if (computedEndTime) {
+      await pool.query(
+        `UPDATE booking_requests
+         SET extension_duration = $2, event_end_time = $3, last_updated = CURRENT_TIMESTAMP
+         WHERE requestid = $1`,
+        [requestid, ext, computedEndTime]
+      )
+    } else {
+      await pool.query(
+        `UPDATE booking_requests
+         SET extension_duration = $2, last_updated = CURRENT_TIMESTAMP
+         WHERE requestid = $1`,
+        [requestid, ext]
+      )
+    }
+  }
+
+  if (computedEndTime) {
     await pool.query(
-      `UPDATE booking_requests
-       SET extension_duration = $2, last_updated = CURRENT_TIMESTAMP
-       WHERE requestid = $1`,
-      [requestid, ext]
+      `UPDATE confirmed_bookings
+       SET event_end_time = $2, last_updated = CURRENT_TIMESTAMP
+       WHERE id = $1`,
+      [bookingid, computedEndTime]
     )
   }
+
   return recalcAndPersistPaymentStatus(bookingid)
 }
 

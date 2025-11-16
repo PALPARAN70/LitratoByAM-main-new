@@ -5,6 +5,7 @@ const { pool } = require('../../Config/db')
 const {
   getBookingRequestById,
   getAllBookingRequests,
+  checkBookingConflicts,
 } = require('../../Model/bookingRequestModel')
 const {
   initConfirmedBookingTable,
@@ -46,6 +47,34 @@ async function acceptBookingRequest(req, res) {
       return res.status(400).json({
         message: `Only pending requests can be accepted (current: ${existing.status})`,
       })
+    }
+
+    // Prevent accepting if buffers + extensions make this slot collide with an existing booking
+    try {
+      const conflicts = await checkBookingConflicts({
+        event_date: existing.event_date,
+        event_time: existing.event_time,
+        event_end_time: existing.event_end_time,
+        extension_duration:
+          typeof existing.extension_duration === 'number'
+            ? existing.extension_duration
+            : Number(existing.extension_duration) || 0,
+        packageid: existing.packageid,
+        excludeRequestId: requestid,
+      })
+
+      if (Array.isArray(conflicts) && conflicts.length) {
+        return res.status(409).json({
+          message:
+            'Cannot accept: buffers around another booking now overlap this schedule.',
+          conflict: conflicts[0],
+        })
+      }
+    } catch (conflictErr) {
+      console.warn(
+        'acceptBookingRequest: conflict check failed (continuing with fallback):',
+        conflictErr?.message
+      )
     }
 
     // Atomic status update: only if currently pending AND no accepted booking exists for same timeslot
@@ -300,6 +329,21 @@ module.exports = {
         booth_placement,
       } = req.body || {}
 
+      const nextPackageId =
+        typeof packageid !== 'undefined' ? packageid : existing.packageid
+      const nextEventDate =
+        typeof event_date !== 'undefined' ? event_date : existing.event_date
+      const nextEventTime =
+        typeof event_time !== 'undefined' ? event_time : existing.event_time
+      const nextEventEnd =
+        typeof event_end_time !== 'undefined'
+          ? event_end_time
+          : existing.event_end_time
+      const nextExtension =
+        typeof extension_duration !== 'undefined'
+          ? extension_duration
+          : existing.extension_duration
+
       // Build SET clause allowing same fields as customer edit
       const allowed = {
         packageid: true,
@@ -344,6 +388,64 @@ module.exports = {
       if (!sets.length) {
         return res.status(400).json({ message: 'Nothing to update' })
       }
+
+      const scheduleFieldsChanged =
+        typeof packageid !== 'undefined' ||
+        typeof event_date !== 'undefined' ||
+        typeof event_time !== 'undefined' ||
+        typeof event_end_time !== 'undefined' ||
+        typeof extension_duration !== 'undefined'
+
+      let enforceBufferConflicts = false
+      if (existing.status === 'accepted') {
+        enforceBufferConflicts = true
+      } else {
+        try {
+          const linkedConfirmed = await getConfirmedBookingByRequestId(
+            requestid
+          )
+          if (
+            linkedConfirmed &&
+            linkedConfirmed.booking_status &&
+            linkedConfirmed.booking_status !== 'cancelled'
+          ) {
+            enforceBufferConflicts = true
+          }
+        } catch (e) {
+          console.warn(
+            'admin update booking: confirmed lookup failed (proceeding):',
+            e?.message
+          )
+        }
+      }
+
+      if (scheduleFieldsChanged && enforceBufferConflicts) {
+        try {
+          const bufferHours = Number(req.query?.bufferHours ?? 2)
+          const conflicts = await checkBookingConflicts({
+            event_date: nextEventDate,
+            event_time: nextEventTime,
+            event_end_time: nextEventEnd,
+            extension_duration: nextExtension,
+            packageid: nextPackageId,
+            bufferHours,
+            excludeRequestId: requestid,
+          })
+          if (Array.isArray(conflicts) && conflicts.length) {
+            return res.status(409).json({
+              message:
+                'Cannot update schedule: another booking (with buffer) already occupies this slot.',
+              conflict: conflicts[0],
+            })
+          }
+        } catch (e) {
+          console.warn(
+            'admin update booking: conflict check failed (continuing):',
+            e?.message
+          )
+        }
+      }
+
       sets.push(`last_updated = CURRENT_TIMESTAMP`)
       await pool.query(
         `UPDATE booking_requests SET ${sets.join(', ')} WHERE requestid = $${

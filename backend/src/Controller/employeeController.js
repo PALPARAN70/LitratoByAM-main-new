@@ -148,7 +148,7 @@ exports.setAssignedExtensionDuration = async (req, res) => {
         .status(400)
         .json({ message: 'extension_duration must be numeric' })
     }
-    const desired = Math.max(0, Math.min(2, desiredRaw))
+    const desired = Math.round(Math.max(0, Math.min(2, desiredRaw)))
 
     // Ensure staff is assigned to this booking
     const { rows } = await pool.query(

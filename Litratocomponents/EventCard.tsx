@@ -131,7 +131,8 @@ export default function EventCard({
   const clampExtensionHours = (value: unknown): number => {
     const parsed = Number(value ?? 0)
     if (!Number.isFinite(parsed)) return 0
-    return Math.max(0, Math.min(2, Math.round(parsed * 100) / 100))
+    const bounded = Math.max(0, Math.min(2, parsed))
+    return Math.round(bounded)
   }
   type ItemEntry = {
     id: string
@@ -953,12 +954,12 @@ export default function EventCard({
                         </div>
                         <div className="mt-2 flex flex-wrap items-end gap-3">
                           <label className="flex flex-col text-xs text-gray-600">
-                            Hours (0-2)
+                            Hours (0, 1, or 2)
                             <input
                               type="number"
                               min={0}
                               max={2}
-                              step={0.5}
+                              step={1}
                               value={extensionDraft}
                               onChange={(e) => {
                                 setExtensionError(null)
