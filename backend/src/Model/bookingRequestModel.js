@@ -2,7 +2,8 @@ const { pool } = require('../Config/db')
 const { getAllPackages } = require('./packageModel')
 
 const MINUTES_PER_HOUR = 60
-const BUFFER_MINUTES = 2 * MINUTES_PER_HOUR
+const BEFORE_BUFFER_MINUTES = 2 * MINUTES_PER_HOUR
+const AFTER_BUFFER_MINUTES = 2 * MINUTES_PER_HOUR
 const MAX_POSSIBLE_EXTENSION_HOURS = 2 // assume customers may extend up to 2 hours
 const DAY_TOTAL_MINUTES = 24 * MINUTES_PER_HOUR
 const EARLIEST_ALLOWED_START_MINUTES = 8 * MINUTES_PER_HOUR // 8:00 AM
@@ -347,53 +348,206 @@ async function getBookingRequestsByDateRange(startDate, endDate) {
 
 // Check if a date/time slot conflicts with accepted bookings, including setup/cleanup buffers
 // Adds a -/+ buffer (hours) around both the new request and existing accepted bookings.
-// Defaults to 2 hours before and after.
+// Defaults to 2 hours before and 2 hours after.
 // Note: If a package id is provided, conflicts are checked only against bookings with the SAME package (photobooth).
 async function checkBookingConflicts(params) {
   const event_date =
     params.event_date ?? params.eventdate ?? params.eventDate ?? null
-  const event_time =
+  const rawEventTime =
     params.event_time ?? params.eventtime ?? params.eventTime ?? null
-  const event_end_time = params.event_end_time ?? params.eventEndTime ?? null
-  const bufferHours = Number(params.bufferHours ?? 2)
-  // Optional: limit conflicts to the same package if provided
+  const rawEventEnd = params.event_end_time ?? params.eventEndTime ?? null
+  const rawBufferHours = params.bufferHours ?? params.buffer_hours
+  const rawBeforeBufferHours =
+    params.beforeBufferHours ?? params.before_buffer_hours ?? null
+  const rawAfterBufferHours =
+    params.afterBufferHours ?? params.after_buffer_hours ?? null
+  const extensionRaw =
+    params.extension_duration ?? params.extensionDuration ?? null
+  const excludeRaw =
+    params.excludeRequestId ??
+    params.exclude_requestid ??
+    params.exclude_request_id ??
+    null
+
+  const normalizeHours = (value) => {
+    const num = Number(value)
+    return Number.isFinite(num) && num >= 0 ? num : null
+  }
+
+  let beforeBufferHours = normalizeHours(rawBeforeBufferHours)
+  if (beforeBufferHours == null) {
+    beforeBufferHours = normalizeHours(rawBufferHours)
+  }
+  if (beforeBufferHours == null) {
+    beforeBufferHours = BEFORE_BUFFER_MINUTES / MINUTES_PER_HOUR
+  }
+
+  let afterBufferHours = normalizeHours(rawAfterBufferHours)
+  if (afterBufferHours == null) {
+    afterBufferHours = normalizeHours(rawBufferHours)
+  }
+  if (afterBufferHours == null) {
+    afterBufferHours = AFTER_BUFFER_MINUTES / MINUTES_PER_HOUR
+  }
+
+  const beforeBufferMinutes = Math.max(
+    0,
+    Math.round(beforeBufferHours * MINUTES_PER_HOUR)
+  )
+  const afterBufferMinutes = Math.max(
+    0,
+    Math.round(afterBufferHours * MINUTES_PER_HOUR)
+  )
+
   let newPackageId =
     params.packageid ?? params.packageId ?? params.package_id ?? null
   newPackageId = Number(newPackageId)
   if (!Number.isFinite(newPackageId) || newPackageId <= 0) newPackageId = null
 
-  if (!event_date || !event_time) return []
+  const excludeRequestId = Number(excludeRaw)
+  const skipRequestId =
+    Number.isFinite(excludeRequestId) && excludeRequestId > 0
+      ? excludeRequestId
+      : null
 
-  // Overlap if NOT (existing_end_with_buffer <= new_start_with_buffer OR existing_start_with_buffer >= new_end_with_buffer)
-  // For rows missing event_end_time, assume a minimum 2-hour duration from start.
-  const q = `
-    WITH new_window AS (
-      SELECT
-        ($1::date + $2::time) - make_interval(hours => $4) AS new_start,
-        ($1::date + COALESCE($3::time, ($2::time + interval '2 hours'))) + make_interval(hours => $4) AS new_end
-    )
-    SELECT br.requestid
-    FROM booking_requests br
-    CROSS JOIN new_window nw
-    WHERE br.status IN ('accepted')
-      AND br.packageid = COALESCE($5::int, br.packageid)
-      AND NOT (
-        -- existing end (with +buffer) is before or equal new start
-        ((br.event_date::timestamp + COALESCE(br.event_end_time, (br.event_time + interval '2 hours'))) + make_interval(hours => $4)) <= nw.new_start
-        OR
-        -- existing start (with -buffer) is after or equal new end
-        ((br.event_date::timestamp + br.event_time) - make_interval(hours => $4)) >= nw.new_end
+  let proposedExtensionHours = Number(extensionRaw)
+  if (!Number.isFinite(proposedExtensionHours) || proposedExtensionHours < 0) {
+    proposedExtensionHours = 0
+  }
+  proposedExtensionHours = Math.min(
+    proposedExtensionHours,
+    MAX_POSSIBLE_EXTENSION_HOURS
+  )
+  const proposedExtensionMinutes = Math.round(
+    proposedExtensionHours * MINUTES_PER_HOUR
+  )
+  const proposedRemainingExtensionMinutes =
+    Math.max(0, MAX_POSSIBLE_EXTENSION_HOURS - proposedExtensionHours) *
+    MINUTES_PER_HOUR
+
+  if (!event_date || !rawEventTime) return []
+
+  const event_time = String(rawEventTime).trim()
+  if (!event_time) return []
+
+  const startMinutes = parseTimeToMinutes(event_time)
+  if (startMinutes == null) return []
+
+  // Determine fallback duration (in minutes) using package duration when available
+  let fallbackDurationMinutes = 2 * MINUTES_PER_HOUR
+  if (newPackageId) {
+    try {
+      const pkg = await pool.query(
+        'SELECT duration_hours FROM packages WHERE id = $1 LIMIT 1',
+        [newPackageId]
       )
-    LIMIT 1
-  `
-  const { rows } = await pool.query(q, [
-    event_date,
-    event_time,
-    event_end_time,
-    bufferHours,
-    newPackageId,
-  ])
-  return rows // empty = no conflict
+      const rawDur = Number(pkg.rows?.[0]?.duration_hours)
+      if (Number.isFinite(rawDur) && rawDur > 0) {
+        fallbackDurationMinutes = Math.max(
+          30,
+          Math.round(rawDur * MINUTES_PER_HOUR)
+        )
+      }
+    } catch (e) {
+      console.warn(
+        'checkBookingConflicts: package duration lookup failed:',
+        e?.message
+      )
+    }
+  }
+
+  const endMinutes = rawEventEnd
+    ? parseTimeToMinutes(String(rawEventEnd).trim())
+    : null
+  let proposedCoreEnd = endMinutes
+  if (proposedCoreEnd == null || proposedCoreEnd <= startMinutes) {
+    proposedCoreEnd =
+      startMinutes + fallbackDurationMinutes + proposedExtensionMinutes
+  }
+
+  const newWindowStart = clampMinutes(startMinutes - beforeBufferMinutes)
+  const newWindowEnd = clampMinutes(
+    proposedCoreEnd + proposedRemainingExtensionMinutes + afterBufferMinutes
+  )
+
+  const { rows } = await pool.query(
+    `
+      SELECT 
+        br.requestid,
+        br.event_time,
+        br.event_end_time,
+        br.extension_duration,
+        COALESCE(cb.event_end_time, NULL) AS confirmed_event_end_time,
+        COALESCE(cb.extension_duration, NULL) AS confirmed_extension_duration,
+        COALESCE(cb.booking_status, NULL) AS confirmed_status,
+        br.status AS request_status,
+        p.duration_hours
+      FROM booking_requests br
+      JOIN packages p ON p.id = br.packageid
+      LEFT JOIN confirmed_bookings cb ON cb.requestid = br.requestid
+      WHERE br.event_date = $1
+        AND br.packageid = COALESCE($2::int, br.packageid)
+        AND (
+          br.status = 'accepted' OR
+          (cb.booking_status IS NOT NULL AND cb.booking_status <> 'cancelled')
+        )
+    `,
+    [event_date, newPackageId]
+  )
+
+  const conflicts = []
+  for (const row of rows) {
+    const existingId = Number(row.requestid)
+    if (skipRequestId && existingId === skipRequestId) continue
+
+    const existingStart = parseTimeToMinutes(row.event_time)
+    if (existingStart == null) continue
+
+    const rawDuration = Number(row.duration_hours)
+    const durationMinutes = Math.max(
+      30,
+      Math.round(
+        Number.isFinite(rawDuration) && rawDuration > 0
+          ? rawDuration * MINUTES_PER_HOUR
+          : fallbackDurationMinutes
+      )
+    )
+
+    let bookedExtHours = Number(
+      row.confirmed_extension_duration ?? row.extension_duration ?? 0
+    )
+    if (!Number.isFinite(bookedExtHours) || bookedExtHours < 0) {
+      bookedExtHours = 0
+    }
+    bookedExtHours = Math.min(bookedExtHours, MAX_POSSIBLE_EXTENSION_HOURS)
+    const bookedExtMinutes = Math.round(bookedExtHours * MINUTES_PER_HOUR)
+    const remainingExtMinutes =
+      Math.max(0, MAX_POSSIBLE_EXTENSION_HOURS - bookedExtHours) *
+      MINUTES_PER_HOUR
+
+    const confirmedEnd = parseTimeToMinutes(row.confirmed_event_end_time)
+    const requestEnd = parseTimeToMinutes(row.event_end_time)
+    let existingCoreEnd = confirmedEnd ?? requestEnd
+    if (existingCoreEnd == null || existingCoreEnd <= existingStart) {
+      existingCoreEnd = existingStart + durationMinutes + bookedExtMinutes
+    }
+
+    const existingWindowStart = clampMinutes(
+      existingStart - beforeBufferMinutes
+    )
+    const existingWindowEnd = clampMinutes(
+      existingCoreEnd + remainingExtMinutes + afterBufferMinutes
+    )
+
+    const noOverlap =
+      existingWindowEnd <= newWindowStart || existingWindowStart >= newWindowEnd
+    if (!noOverlap) {
+      conflicts.push({ requestid: existingId })
+      break
+    }
+  }
+
+  return conflicts
 }
 
 // Check if extending a confirmed booking to a specific total extension hours would conflict
@@ -568,11 +722,13 @@ function buildPackageAvailability(entry) {
   }
 
   const requiredAfterStart =
-    eventDurationMinutes + potentialExtensionMinutes + BUFFER_MINUTES
+    eventDurationMinutes + potentialExtensionMinutes + AFTER_BUFFER_MINUTES
   const startWindows = []
   for (const interval of freeIntervals) {
-    let windowStart = interval.start + BUFFER_MINUTES
-    const postGap = interval.endsAtDay ? BUFFER_MINUTES : requiredAfterStart
+    let windowStart = interval.start + BEFORE_BUFFER_MINUTES
+    const postGap = interval.endsAtDay
+      ? AFTER_BUFFER_MINUTES
+      : requiredAfterStart
     let windowEnd = interval.end - postGap
     windowStart = Math.max(windowStart, EARLIEST_ALLOWED_START_MINUTES)
     windowEnd = Math.min(windowEnd, LATEST_ALLOWED_START_MINUTES)
@@ -713,9 +869,9 @@ async function getDailyAvailabilitySummary(dateInput) {
       coreEnd = baseStart + durationMinutes + extensionMinutes
     }
 
-    const bufferStartMinutes = clampMinutes(baseStart - BUFFER_MINUTES)
+    const bufferStartMinutes = clampMinutes(baseStart - BEFORE_BUFFER_MINUTES)
     const bufferEndMinutes = clampMinutes(
-      coreEnd + remainingExtensionMinutes + BUFFER_MINUTES
+      coreEnd + remainingExtensionMinutes + AFTER_BUFFER_MINUTES
     )
 
     entry.bookings.push({
@@ -741,7 +897,8 @@ async function getDailyAvailabilitySummary(dateInput) {
     date: isoDate,
     generatedAt: new Date().toISOString(),
     constraints: {
-      bufferHours: BUFFER_MINUTES / MINUTES_PER_HOUR,
+      bufferHours: BEFORE_BUFFER_MINUTES / MINUTES_PER_HOUR,
+      bufferHoursAfter: AFTER_BUFFER_MINUTES / MINUTES_PER_HOUR,
       potentialExtensionHours: MAX_POSSIBLE_EXTENSION_HOURS,
     },
     packages: availability,

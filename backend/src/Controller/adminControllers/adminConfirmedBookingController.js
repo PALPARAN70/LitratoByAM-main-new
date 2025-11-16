@@ -197,12 +197,30 @@ async function setExtensionDuration(req, res) {
     const full = await getConfirmedBookingById(id)
     if (!full) return res.status(404).json({ message: 'Not found' })
 
-    const currentExt = Math.max(0, Number(full.extension_duration || 0))
+    const sanitizeHours = (raw) => {
+      const num = Number(raw)
+      if (!Number.isFinite(num)) return null
+      return Math.round(Math.max(0, Math.min(2, num)))
+    }
+
+    const currentExt = sanitizeHours(full.extension_duration) ?? 0
     let nextExt = currentExt
     if (extension_duration != null) {
-      nextExt = Math.max(0, Number(extension_duration) || 0)
+      const sanitized = sanitizeHours(extension_duration)
+      if (sanitized === null) {
+        return res.status(400).json({
+          message: 'extension_duration must be a number between 0 and 2',
+        })
+      }
+      nextExt = sanitized
     } else if (add_hours != null) {
-      nextExt = Math.max(0, currentExt + (Number(add_hours) || 0))
+      const increment = Number(add_hours)
+      if (!Number.isFinite(increment)) {
+        return res
+          .status(400)
+          .json({ message: 'add_hours must be numeric when provided' })
+      }
+      nextExt = sanitizeHours(currentExt + increment)
     } else {
       return res
         .status(400)

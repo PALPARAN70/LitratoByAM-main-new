@@ -197,6 +197,17 @@ async function editBookingRequest(req, res) {
       notes,
       booth_placement,
     } = req.body || {}
+
+    const parsePackageId = (value) => {
+      const num = Number(value)
+      return Number.isFinite(num) && num > 0 ? num : null
+    }
+
+    const requestedPackageId =
+      typeof packageid !== 'undefined' ? parsePackageId(packageid) : null
+    if (typeof packageid !== 'undefined' && requestedPackageId === null) {
+      return res.status(400).json({ message: 'Invalid package id' })
+    }
     const { sets, values } = buildCustomerBookingUpdate({
       packageid,
       event_date,
@@ -217,7 +228,7 @@ async function editBookingRequest(req, res) {
       return res.status(400).json({ message: 'Nothing to update' })
     }
 
-    // If booking is already accepted and user is changing date/time, revert to pending for re-approval
+    // If booking is already accepted and the user changes schedule/package, revert to pending for re-approval
     let revertToPending = false
     if (existing.status === 'accepted') {
       const currentDate = String(
@@ -232,6 +243,11 @@ async function editBookingRequest(req, res) {
       const newTime = typeof event_time === 'string' ? event_time : undefined
       const newEnd =
         typeof event_end_time === 'string' ? event_end_time : undefined
+      const currentPackageId = Number(existing.packageid)
+      const packageChanged =
+        typeof packageid !== 'undefined' &&
+        requestedPackageId !== null &&
+        requestedPackageId !== currentPackageId
 
       const dateChanged = !!(newDate && newDate !== currentDate)
       const timeChanged = !!(
@@ -240,26 +256,28 @@ async function editBookingRequest(req, res) {
       const endChanged = !!(
         newEnd && normalizeTime(newEnd) !== normalizeTime(currentEnd)
       )
-      if (dateChanged || timeChanged || endChanged) {
+      if (packageChanged || dateChanged || timeChanged || endChanged) {
         revertToPending = true
         // Optional: conflict check against accepted bookings for proposed slot
         try {
           const proposedDate = newDate || currentDate
           const proposedTime = normalizeTime(newTime || currentTime)
           const proposedEnd = normalizeTime(newEnd || currentEnd)
-          const proposedPackageId =
-            typeof packageid === 'number' && packageid > 0
-              ? packageid
-              : existing.packageid
+          const proposedPackageId = packageChanged
+            ? requestedPackageId
+            : currentPackageId
           if (proposedDate && proposedTime) {
             const conflicts = await checkBookingConflictsModel({
               event_date: proposedDate,
               event_time: proposedTime,
               event_end_time: proposedEnd || null,
               packageid: proposedPackageId,
+              exclude_requestid: existing.requestid,
             })
             if (conflicts.length) {
-              return res.status(409).json({ message: 'Timeslot not available' })
+              return res.status(409).json({
+                message: 'Timeslot not available for selected package',
+              })
             }
           }
         } catch (e) {
