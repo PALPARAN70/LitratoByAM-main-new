@@ -33,7 +33,6 @@ type NavItem = { label: string; Icon: IconType; path: string }
 const NAV_ITEMS: NavItem[] = [
   { label: 'Dashboard', Icon: FiGrid, path: '/staff/staffdashboard' },
   { label: 'Event Logs', Icon: FiCalendar, path: '/staff/eventlogs' },
-  { label: 'Staff Logs', Icon: FiClipboard, path: '/staff/stafflogs' },
 ]
 
 export default function LitratoSidebar({
