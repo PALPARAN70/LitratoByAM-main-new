@@ -11,6 +11,7 @@ const {
   initConfirmedBookingTable,
   createConfirmedBooking,
   getConfirmedBookingByRequestId,
+  reactivateConfirmedBookingByRequestId,
 } = require('../../Model/confirmedBookingRequestModel')
 const { sendEmail } = require('../../Util/sendEmail')
 
@@ -134,9 +135,28 @@ async function acceptBookingRequest(req, res) {
         .json({ message: 'Request status changed; cannot accept' })
     }
 
-    // Ensure confirmed_bookings table exists and create a record
+    // Ensure confirmed_bookings table exists and attach/restore a record
     await initConfirmedBookingTable()
-    const confirmed = await createConfirmedBooking(requestid)
+    const existingConfirmed = await getConfirmedBookingByRequestId(requestid)
+    let confirmed
+    if (existingConfirmed) {
+      const status = (existingConfirmed.booking_status || '').toLowerCase()
+      if (status === 'cancelled') {
+        const parsedExt = Number(existing.extension_duration)
+        confirmed = await reactivateConfirmedBookingByRequestId(requestid, {
+          bookingStatus: 'scheduled',
+          eventEndTime: existing.event_end_time || null,
+          extensionDuration:
+            existing.extension_duration != null && Number.isFinite(parsedExt)
+              ? parsedExt
+              : null,
+        })
+      } else {
+        confirmed = existingConfirmed
+      }
+    } else {
+      confirmed = await createConfirmedBooking(requestid)
+    }
 
     // Notify customer (assumes username is an email address)
     await safeEmail(

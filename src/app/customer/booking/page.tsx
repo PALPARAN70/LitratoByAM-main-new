@@ -65,6 +65,12 @@ export default function BookingPage() {
     'Approved' | 'Declined' | 'Pending' | 'Cancelled' | null
   >(null)
   const [showScheduleConfirm, setShowScheduleConfirm] = useState(false)
+  const [scheduleConfirmIntent, setScheduleConfirmIntent] = useState<
+    'change' | 'submit' | null
+  >(null)
+  const [pendingSchedulePatch, setPendingSchedulePatch] = useState<Partial<
+    Pick<BookingForm, 'eventDate'>
+  > | null>(null)
   const [initialSchedule, setInitialSchedule] = useState<{
     date: Date
     time: string
@@ -418,6 +424,8 @@ export default function BookingPage() {
     }
 
     if (!skipScheduleGuard && currentStatus === 'Approved' && scheduleChanged) {
+      setPendingSchedulePatch(null)
+      setScheduleConfirmIntent('submit')
       setShowScheduleConfirm(true)
       return
     }
@@ -429,18 +437,58 @@ export default function BookingPage() {
     void attemptSubmit()
   }
 
-  const confirmScheduleSubmit = () => {
+  const confirmScheduleAction = () => {
+    if (scheduleConfirmIntent === 'change') {
+      if (pendingSchedulePatch?.eventDate) {
+        setField('eventDate', pendingSchedulePatch.eventDate)
+      }
+      setPendingSchedulePatch(null)
+      setScheduleConfirmIntent(null)
+      setShowScheduleConfirm(false)
+      return
+    }
     setShowScheduleConfirm(false)
+    setScheduleConfirmIntent(null)
     void attemptSubmit(true)
   }
 
-  const cancelScheduleSubmit = () => {
+  const cancelScheduleAction = () => {
+    if (scheduleConfirmIntent === 'change') {
+      setPendingSchedulePatch(null)
+      setScheduleConfirmIntent(null)
+      setShowScheduleConfirm(false)
+      return
+    }
     if (initialSchedule) {
       setField('eventDate', new Date(initialSchedule.date))
       setField('eventTime', initialSchedule.time)
       setField('eventEndTime', initialSchedule.endTime)
     }
+    setScheduleConfirmIntent(null)
     setShowScheduleConfirm(false)
+  }
+
+  const isSameDay = (a: Date, b: Date) => {
+    return (
+      a.getFullYear() === b.getFullYear() &&
+      a.getMonth() === b.getMonth() &&
+      a.getDate() === b.getDate()
+    )
+  }
+
+  const handleEventDateChange = (nextDate: Date | null) => {
+    if (!nextDate) return
+    if (
+      currentStatus === 'Approved' &&
+      initialSchedule &&
+      !isSameDay(nextDate, initialSchedule.date)
+    ) {
+      setPendingSchedulePatch({ eventDate: nextDate })
+      setScheduleConfirmIntent('change')
+      setShowScheduleConfirm(true)
+      return
+    }
+    setField('eventDate', nextDate)
   }
 
   const handleClear = () => {
@@ -811,7 +859,7 @@ export default function BookingPage() {
                 </label>
                 <Calendar
                   value={form.eventDate}
-                  onDateChangeAction={(d) => setField('eventDate', d as Date)}
+                  onDateChangeAction={(d) => handleEventDateChange(d as Date)}
                 />
                 {errors.eventDate && (
                   <p className="text-red-600 text-xs mt-1">
@@ -915,29 +963,38 @@ export default function BookingPage() {
         >
           <div
             className="absolute inset-0 bg-black/40"
-            onClick={cancelScheduleSubmit}
+            onClick={cancelScheduleAction}
           />
           <div className="relative z-10 w-[95%] max-w-md rounded-lg bg-white p-4 shadow-lg">
-            <h3 className="text-lg font-semibold mb-2">Change schedule?</h3>
+            <h3 className="text-lg font-semibold mb-2">
+              {scheduleConfirmIntent === 'change'
+                ? 'Change schedule?'
+                : 'Submit schedule change?'}
+            </h3>
             <p className="text-sm text-gray-700 mb-4">
               This booking is currently approved. Changing the date or time will
               send it back for approval and may cancel any existing
-              confirmation. Do you want to proceed?
+              confirmation.
+              {scheduleConfirmIntent === 'change'
+                ? ' Do you want to update the date now?'
+                : ' Do you want to submit these updates?'}
             </p>
             <div className="flex justify-end gap-2">
               <button
                 type="button"
                 className="px-4 py-2 rounded border border-gray-300 hover:bg-gray-100"
-                onClick={cancelScheduleSubmit}
+                onClick={cancelScheduleAction}
               >
                 Keep current schedule
               </button>
               <button
                 type="button"
                 className="px-4 py-2 rounded bg-litratoblack text-white hover:bg-black"
-                onClick={confirmScheduleSubmit}
+                onClick={confirmScheduleAction}
               >
-                Submit changes
+                {scheduleConfirmIntent === 'change'
+                  ? 'Yes, change it'
+                  : 'Submit changes'}
               </button>
             </div>
           </div>

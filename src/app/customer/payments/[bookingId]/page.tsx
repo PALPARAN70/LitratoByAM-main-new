@@ -9,6 +9,7 @@ import {
   getMyBookingBalance,
 } from '../../../../../schemas/functions/Payment/createPayment'
 import { toast } from 'sonner'
+import { z } from 'zod'
 
 export default function CustomerPaymentPage() {
   const params = useParams()
@@ -16,6 +17,7 @@ export default function CustomerPaymentPage() {
   const [qrUrl, setQrUrl] = useState<string>('')
   const [amountPaid, setAmountPaid] = useState<string>('')
   const [referenceNo, setReferenceNo] = useState<string>('')
+  const [referenceError, setReferenceError] = useState<string | null>(null)
   const [proofUrl, setProofUrl] = useState<string>('')
   const [submitting, setSubmitting] = useState(false)
   const [balance, setBalance] = useState<{
@@ -52,6 +54,11 @@ export default function CustomerPaymentPage() {
     }
   }, [bookingId])
 
+  const referenceSchema = useMemo(
+    () => z.string().trim().min(1, 'Reference number is required'),
+    []
+  )
+
   const handleUploadProof: React.ChangeEventHandler<HTMLInputElement> = async (
     e
   ) => {
@@ -66,7 +73,15 @@ export default function CustomerPaymentPage() {
   }
 
   const handleSubmit = async () => {
-    if (!bookingId || !amountPaid || !referenceNo) return
+    if (!bookingId || !amountPaid) return
+    const validatedRef = referenceSchema.safeParse(referenceNo)
+    if (!validatedRef.success) {
+      const message = validatedRef.error.issues[0]?.message
+      setReferenceError(message || 'Reference number is required')
+      toast.error(message || 'Reference number is required')
+      return
+    }
+    setReferenceError(null)
     setSubmitting(true)
     try {
       if (balance && Number(amountPaid) > balance.balance) {
@@ -78,7 +93,7 @@ export default function CustomerPaymentPage() {
       await createCustomerPayment({
         bookingId,
         amountPaid: Number(amountPaid),
-        referenceNo,
+        referenceNo: validatedRef.data,
         proofImageUrl: proofUrl || null,
         paymentMethod: 'gcash',
       })
@@ -145,8 +160,23 @@ export default function CustomerPaymentPage() {
         <input
           className="w-full rounded border px-3 py-2"
           value={referenceNo}
-          onChange={(e) => setReferenceNo(e.target.value)}
+          onChange={(e) => {
+            const value = e.target.value
+            setReferenceNo(value)
+            if (referenceError) {
+              const check = referenceSchema.safeParse(value)
+              setReferenceError(
+                check.success
+                  ? null
+                  : check.error.issues[0]?.message || referenceError
+              )
+            }
+          }}
+          aria-invalid={referenceError ? 'true' : undefined}
         />
+        {referenceError && (
+          <p className="text-xs text-red-600">{referenceError}</p>
+        )}
       </div>
 
       <div className="space-y-2">
