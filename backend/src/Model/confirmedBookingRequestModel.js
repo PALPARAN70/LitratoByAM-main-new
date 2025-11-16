@@ -265,6 +265,38 @@ async function updateBookingStatus(bookingid, status) {
   return rows[0]
 }
 
+async function reactivateConfirmedBookingByRequestId(
+  requestid,
+  {
+    bookingStatus = 'scheduled',
+    eventEndTime = null,
+    extensionDuration = null,
+  } = {}
+) {
+  const allowed = new Set([
+    'scheduled',
+    'in_progress',
+    'completed',
+    'cancelled',
+  ])
+  if (!allowed.has(bookingStatus)) {
+    throw new Error('Invalid booking status')
+  }
+  const { rows } = await pool.query(
+    `
+    UPDATE confirmed_bookings
+    SET booking_status = $2,
+        event_end_time = $3,
+        extension_duration = $4,
+        last_updated = CURRENT_TIMESTAMP
+    WHERE requestid = $1
+    RETURNING *
+    `,
+    [requestid, bookingStatus, eventEndTime, extensionDuration]
+  )
+  return rows[0] || null
+}
+
 async function updateTotalPrice(bookingid, total) {
   const { rows } = await pool.query(
     `
@@ -494,5 +526,6 @@ module.exports = {
   getPaymentSummary,
   recalcAndPersistPaymentStatus,
   updateExtensionDuration,
+  reactivateConfirmedBookingByRequestId,
   getDailyConfirmedCounts,
 }

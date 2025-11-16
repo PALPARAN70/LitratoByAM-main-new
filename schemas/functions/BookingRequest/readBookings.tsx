@@ -174,6 +174,13 @@ export async function readBookings(
   // Then overwrite with confirmed if present (preferred)
   for (const c of confRows) {
     const k = keyOf(c)
+    const existing = map.get(k)
+    const isCancelledConfirmed =
+      (c.booking_status || '').toLowerCase() === 'cancelled'
+    const existingStatus = (existing?.status || '').toLowerCase()
+    const shouldPreferRequest =
+      !!existing && isCancelledConfirmed && existingStatus === 'pending'
+    if (shouldPreferRequest) continue
     map.set(k, c)
   }
   const merged = Array.from(map.values())
